@@ -15,16 +15,17 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Sphere* spheres, f
     sphere.pos.x += sin(time);
 
 
-    vec3 color(0,0,0);
+    float3 color = make_float3(0,0,0);
 
     float dis;
-    vec3 normal;
-    if (raySphereIntersect(sphere, ray, &dis, &normal))
+    float3 pos;
+    float3 normal;
+    if (raySphereIntersect(sphere, ray, &dis, &pos, &normal))
     {
-        color = vec3(1) * max(0.0, -dot(normal, vec3(0,0,-1)));
+        color = make_float3(1) * max(0.0, -dot(normal, make_float3(0,0,-1)));
     }
 
-    surf2Dwrite(make_float4(color.x, color.y, color.z, 1), texRef, x*sizeof(float4), y);
+    surf2Dwrite(make_float4(color, 1), texRef, x*sizeof(float4), y);
 }
 
 #endif

@@ -102,13 +102,13 @@ int main(int argc, char** argv) {
     Sphere* sphereBuf;
     cudaSafe (cudaMalloc(&sphereBuf, 1*sizeof(Sphere)));
     Sphere sphere1 {
-        vec3(0,1.5,0),
+        make_float3(0,1.5,0),
         1,
     };
     cudaMemcpy(sphereBuf, &sphere1, 1*sizeof(Sphere), cudaMemcpyHostToDevice);
 
-    vec3 test(1,1,1);
-    vec3 ntest = normalized(test);
+    float3 test = make_float3(1,1,1);
+    float3 ntest = normalize(test);
     printf("test vec: %f, %f, %f\n", ntest.x, ntest.y, ntest.z);
 
     while (!glfwWindowShouldClose(window))

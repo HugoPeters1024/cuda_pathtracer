@@ -11,7 +11,7 @@
 #include <cuda_runtime_api.h>
 #include <driver_types.h>
 #include <texture_types.h>
-#include <vector_types.h>
+#include "cutil_math.h"
 
 #define cudaSafe(ans) { cudaAssert((ans), __FILE__, __LINE__); }
 inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true)
