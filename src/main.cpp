@@ -99,16 +99,17 @@ int main(int argc, char** argv) {
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard) );
     cudaArray *arrayPtr;
 
-    // Create Ray buffer on the gpu
-    Ray* rayBuf;
-    cudaMalloc(&rayBuf, WINDOW_WIDTH*WINDOW_HEIGHT*sizeof(Ray));
     Sphere* sphereBuf;
-    cudaMalloc(&sphereBuf, 1*sizeof(Sphere));
+    cudaSafe (cudaMalloc(&sphereBuf, 1*sizeof(Sphere)));
     Sphere sphere1 {
-        Vector3f(0,1.5,0),
+        vec3(0,1.5,0),
         1,
     };
     cudaMemcpy(sphereBuf, &sphere1, 1*sizeof(Sphere), cudaMemcpyHostToDevice);
+
+    vec3 test(1,1,1);
+    vec3 ntest = normalized(test);
+    printf("test vec: %f, %f, %f\n", ntest.x, ntest.y, ntest.z);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -136,8 +137,7 @@ int main(int argc, char** argv) {
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
 
-        kernel_create_rays<<<dimGrid, dimBlock>>>(rayBuf);
-        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, rayBuf, sphereBuf, glfwGetTime());
+        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, sphereBuf, glfwGetTime());
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
+//        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
         while (glfwGetTime() - start < 1.0 / 60.0) {}
     }
 
