@@ -328,6 +328,10 @@ inline __host__ __device__ float3 operator*(float s, float3 a)
 {
     return make_float3(a.x * s, a.y * s, a.z * s);
 }
+inline __host__ __device__ void operator*=(float3 &a, float3 &b)
+{
+    a.x *= b.x; a.y *= b.y; a.z *= b.z;
+}
 inline __host__ __device__ void operator*=(float3 &a, float s)
 {
     a.x *= s; a.y *= s; a.z *= s;

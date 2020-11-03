@@ -100,12 +100,18 @@ int main(int argc, char** argv) {
     cudaArray *arrayPtr;
 
     Sphere* sphereBuf;
-    cudaSafe (cudaMalloc(&sphereBuf, 1*sizeof(Sphere)));
-    Sphere sphere1 {
-        make_float3(0,1.5,0),
-        1,
+    cudaSafe (cudaMalloc(&sphereBuf, 2*sizeof(Sphere)));
+    Sphere spheres[2] {
+        Sphere {
+            make_float3(-0.4,1.0,0.5),
+            0.34 
+        },
+        Sphere {
+            make_float3(0.3,1.5,0),
+            0.7
+        }
     };
-    cudaMemcpy(sphereBuf, &sphere1, 1*sizeof(Sphere), cudaMemcpyHostToDevice);
+    cudaMemcpy(sphereBuf, spheres, sizeof(spheres), cudaMemcpyHostToDevice);
 
     float3 test = make_float3(1,1,1);
     float3 ntest = normalize(test);
@@ -137,7 +143,7 @@ int main(int argc, char** argv) {
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
 
-        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, sphereBuf, glfwGetTime());
+        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, sphereBuf, 2, glfwGetTime());
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
