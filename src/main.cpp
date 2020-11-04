@@ -13,6 +13,7 @@
 
 #include "use_cuda.h"
 #include "types.h"
+#include "globals.h"
 #include "kernels.h"
 
 
@@ -134,7 +135,11 @@ int main(int argc, char** argv) {
 
     Triangle* triangleBuf;
     cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
-    cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], scene.triangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
+
+    BVH_Seq* bvhBuf;
+    cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVH_Seq)) );
+    cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVH_Seq), cudaMemcpyHostToDevice) );
 
     
 
@@ -164,6 +169,7 @@ int main(int argc, char** argv) {
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
 
+        cudaSafe( cudaMemcpyToSymbol(BVH_Data, &bvhBuf, sizeof(bvhBuf)) );
         kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, triangleBuf, (int)(150*glfwGetTime()), glfwGetTime());
         cudaSafe ( cudaDeviceSynchronize() );
 

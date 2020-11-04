@@ -3,6 +3,9 @@
 
 #include "use_cuda.h"
 #include "types.h"
+#include "globals.h"
+
+
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
@@ -21,6 +24,32 @@ __device__ Ray makeRay(float3 origin, float3 direction)
     return ray;
 }
 
+__device__ bool firstIsNear(const BVH_Seq& node, const Ray& ray)
+{
+    switch(node.split_plane)
+    {
+        case 0: return ray.direction.x > 0;
+        case 1: return ray.direction.y > 0;
+        case 2: return ray.direction.z > 0;
+    }
+    return false;
+}
+
+__device__ inline uint nearChild(const BVH_Seq& node, const Ray& ray)
+{
+    return firstIsNear(node, ray) ? node.child1 : node.child2;
+}
+
+__device__ inline uint farChild(const BVH_Seq& node, const Ray& ray)
+{
+    return firstIsNear(node, ray) ? node.child2 : node.child1;
+}
+
+__device__ inline uint sibling(const BVH_Seq& node)
+{
+    //return node.parent.child1 == node_id ? parentNode.child2 : parentNode.child1;
+    return 0;
+}
 
 __device__ Ray getRayForPixel(unsigned int x, unsigned int y)
 {
@@ -194,11 +223,15 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Triangle* triangle
 
     for(int i=n; i<n+200; i++)
     {
-        Triangle triangle = triangles[i];
-        if (rayTriangleIntersect(ray, triangle))
+        BVH_Seq node = BVH_Data[i];
+        for(int t=node.t_start; t<node.t_start+node.t_count; t++)
         {
-            surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
-            return;
+            Triangle triangle = triangles[t];
+            if (rayTriangleIntersect(ray, triangle))
+            {
+                surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
+                return;
+            }
         }
 
     }
