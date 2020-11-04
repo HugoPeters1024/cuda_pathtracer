@@ -51,7 +51,8 @@ struct Ray
 
 struct HitInfo
 {
-    const Box* collider;
+    bool intersected;
+    uint triangle_id;
     float t;
     float3 normal;
     float3 pos;

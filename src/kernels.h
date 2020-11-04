@@ -5,6 +5,22 @@
 #include "types.h"
 #include "globals.h"
 
+// All forward decleration, so we don't have to care about use order.
+__device__ inline float lambert(const float3 &v1, const float3 &v2);
+__device__ Ray makeRay(float3 origin, float3 direction);
+__device__ bool firstIsNear(uint node_id, const Ray& ray);
+__device__ inline uint nearChild(uint node_id, const Ray& ray);
+__device__ inline uint farChild(uint node_id, const Ray& ray);
+__device__ inline uint parent(uint node_id);
+__device__ inline uint sibling(uint node_id);
+__device__ inline bool isLeaf(uint node_id);
+__device__ inline bool boxtest(uint node_id, const Ray& ray);
+__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo);
+__device__ Ray getRayForPixel(unsigned int x, unsigned int y);
+__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis);
+__device__ bool rayBoxIntersect(const Ray& r, const Box& box);
+__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t);
+__device__ float3 radiance(Ray ray, const Box* spheres, int n);
 
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
@@ -24,8 +40,9 @@ __device__ Ray makeRay(float3 origin, float3 direction)
     return ray;
 }
 
-__device__ bool firstIsNear(const BVHNode& node, const Ray& ray)
+__device__ bool firstIsNear(uint node_id, const Ray& ray)
 {
+    BVHNode node = GBVH[node_id];
     switch(node.split_plane)
     {
         case 0: return ray.direction.x > 0;
@@ -35,20 +52,60 @@ __device__ bool firstIsNear(const BVHNode& node, const Ray& ray)
     return false;
 }
 
-__device__ inline uint nearChild(const BVHNode& node, const Ray& ray)
+__device__ inline uint nearChild(uint node_id, const Ray& ray)
 {
-    return firstIsNear(node, ray) ? node.child1 : node.child2;
+    BVHNode node = GBVH[node_id];
+    return firstIsNear(node_id, ray) ? node.child1 : node.child2;
 }
 
-__device__ inline uint farChild(const BVHNode& node, const Ray& ray)
+__device__ inline uint farChild(uint node_id, const Ray& ray)
 {
-    return firstIsNear(node, ray) ? node.child2 : node.child1;
+    BVHNode node = GBVH[node_id];
+    return firstIsNear(node_id, ray) ? node.child2 : node.child1;
 }
 
-__device__ inline uint sibling(const BVHNode& node)
+__device__ inline uint sibling(uint node_id)
 {
-    //return node.parent.child1 == node_id ? parentNode.child2 : parentNode.child1;
-    return 0;
+    BVHNode node = GBVH[node_id];
+    BVHNode parentNode = GBVH[node.parent];
+    return GBVH[node.parent].child1 == node_id ? parentNode.child2 : parentNode.child1;
+}
+
+__device__ inline uint parent(uint node_id)
+{
+    return GBVH[node_id].parent;
+}
+
+__device__ inline bool isLeaf(uint node_id)
+{
+    BVHNode node = GBVH[node_id];
+    return node.child1 == 0 && node.child2 == 0;
+}
+
+__device__ inline bool boxtest(uint node_id, const Ray& ray)
+{
+    BVHNode node = GBVH[node_id];
+    return rayBoxIntersect(ray, node.boundingBox);
+}
+
+// Performs intersection against a leaf node's triangles
+__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
+{
+    BVHNode node = GBVH[node_id];
+    uint start = node.t_start;
+    uint end = start + node.t_count;
+    for(uint i=start; i<end; i++)
+    {
+        float t;
+        if (rayTriangleIntersect(ray ,GTriangles[i], &t) && t < hitInfo->t)
+        {
+            hitInfo->intersected = true;
+            hitInfo->triangle_id = i;
+            hitInfo->t = t;
+            hitInfo->normal = GTriangles[i].n0;
+            if (dot(hitInfo->normal, ray.direction) >= 0) hitInfo->normal = -hitInfo->normal;
+        }
+    }
 }
 
 __device__ Ray getRayForPixel(unsigned int x, unsigned int y)
@@ -75,7 +132,7 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
     return t > 0;
 }
 
-__device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* dis)
+__device__ bool rayBoxIntersect(const Ray& r, const Box& box)
 {
     float3 bounds[2] { box.vmin, box.vmax };
     float tmin, tmax, tymin, tymax, tzmin, tzmax; 
@@ -102,11 +159,10 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* dis)
     if (tzmax < tmax) 
         tmax = tzmax; 
 
-    *dis = tmax;
     return tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle)
+__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t)
 {
         // compute plane's normal
     float3 v0v1 = triangle.v1 - triangle.v0;
@@ -126,12 +182,12 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle)
     float d = dot(N,triangle.v0);
 
     // compute t (equation 3)
-    float t = (dot(-N,ray.origin) + d) / NdotRayDirection;
+    *t = (dot(-N,ray.origin) + d) / NdotRayDirection;
     // check if the triangle is in behind the ray
-    if (t < 0) return false; // the triangle is behind
+    if (*t < 0) return false; // the triangle is behind
 
     // compute the intersection point using equation 1
-    float3 P = ray.origin + t * ray.direction;
+    float3 P = ray.origin + *t * ray.direction;
 
     // Step 2: inside-outside test
     float3 C; // vector perpendicular to triangle's plane
@@ -159,58 +215,55 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle)
 
 }
 
-__device__ bool raySceneIntersect(const Ray& ray, const Box* spheres, int n, HitInfo* isectData)
+// Stackless BVH traversal states
+#define FROM_PARENT 0
+#define FROM_SIBLING 1
+#define FROM_CHILD 2
+
+
+__device__ HitInfo traverseBVH(const Ray& ray)
 {
-    float dis = 1000;
-    bool ret = false;
-    int sphere_id = -1;
+    HitInfo hitInfo;
+    hitInfo.intersected = false;
+    hitInfo.t = 999999;
 
-    for(int i=0; i<n; i++)
-    {
-        float newt;
-        if (rayBoxIntersect(ray, spheres[i], &newt) && newt < dis)
+    uint root = 0;
+    uint current = nearChild(root, ray);
+    uint state = FROM_PARENT;
+    int zz=0;
+    while(zz++ < 100) {
+        switch(state)
         {
-            dis = newt;
-            ret = true;
-            sphere_id = i;
+            case FROM_CHILD:
+                if (current == 0) return hitInfo; // finished;
+                if (current == nearChild(parent(current), ray)) {
+                    current=sibling(current); state=FROM_SIBLING;
+                } else {
+                    current = parent(current); state=FROM_CHILD;
+                }
+                break;
+
+            case FROM_SIBLING:
+            case FROM_PARENT:
+                if (!boxtest(current,ray)){
+                    current = state == FROM_SIBLING ? parent(current) : sibling(current);
+                    state = state == FROM_SIBLING ? FROM_CHILD : FROM_SIBLING;
+                } else if (isLeaf(current)) {
+                    processLeaf(current, ray, &hitInfo);
+                    current = state == FROM_SIBLING ? parent(current) : sibling(current);
+                    state = state == FROM_SIBLING ? FROM_CHILD : FROM_SIBLING;
+                } else {
+                    current = nearChild(current, ray); state=FROM_PARENT;
+                }
+                break;
         }
-
     }
-
-    if (!ret) return false;
-
-    float3 pos = ray.origin + (dis-0.001) * ray.direction;
-    if (isectData != nullptr)
-    {
-        *isectData = HitInfo {
-            spheres + sphere_id,
-            dis,
-            normalize(pos - spheres[sphere_id].centroid()),
-            pos
-        };
-    }
-    return true;
-
+    return hitInfo;
 }
 
 __device__ float3 radiance(Ray ray, const Box* spheres, int n) 
 {
-    float3 lightPos = make_float3(0,0,3);
-    float3 sphereColor = make_float3(1,0,1);
-
-    HitInfo isectData;
-    if (!raySceneIntersect(ray, spheres, n, &isectData)) return make_float3(0);
-
-    // Cast a shadow ray
-    float3 toLight = lightPos - isectData.pos;
-    Ray shadowRay = makeRay(isectData.pos, normalize(toLight));
-    float distToLight2 = dot(toLight, toLight);
-
-    // ray doens't reach light source
-    HitInfo shadowData;
-    if (raySceneIntersect(shadowRay, spheres, n, &shadowData) && shadowData.t * shadowData.t < distToLight2) return make_float3(0);
-
-    return sphereColor * lambert(isectData.normal, shadowRay.direction);
+    return make_float3(0);
 }
 
 
@@ -221,13 +274,21 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Triangle* triangle
 
     Ray ray = getRayForPixel(x,y);
 
+    HitInfo hitInfo = traverseBVH(ray);
+    if (hitInfo.intersected)
+        surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
+    else
+        surf2Dwrite(make_float4(0,0,0,1), texRef, x*sizeof(float4), y);
+
+    /*
     for(int i=n; i<n+200; i++)
     {
         BVHNode node = GBVH[i];
         for(int t=node.t_start; t<node.t_start+node.t_count; t++)
         {
+            float d;
             Triangle triangle = triangles[t];
-            if (rayTriangleIntersect(ray, triangle))
+            if (rayTriangleIntersect(ray, triangle, &d))
             {
                 surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
                 return;
@@ -235,6 +296,7 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Triangle* triangle
         }
 
     }
+    */
 }
 
 #endif

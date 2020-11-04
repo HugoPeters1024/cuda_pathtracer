@@ -137,10 +137,14 @@ int main(int argc, char** argv) {
     BVHNode* bvhBuf;
     cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
     cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+
     // Set the global bvh buffer pointer
     // We set this globally instead of kernel parameter, otherwise we would have
     // to pass the whole array constantly to small functions like sibling.
     cudaSafe( cudaMemcpyToSymbol(GBVH, &bvhBuf, sizeof(bvhBuf)) );
+
+    // Do the same for the triangle buffer
+    cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
     
 
