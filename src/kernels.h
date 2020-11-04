@@ -24,7 +24,7 @@ __device__ Ray makeRay(float3 origin, float3 direction)
     return ray;
 }
 
-__device__ bool firstIsNear(const BVH_Seq& node, const Ray& ray)
+__device__ bool firstIsNear(const BVHNode& node, const Ray& ray)
 {
     switch(node.split_plane)
     {
@@ -35,17 +35,17 @@ __device__ bool firstIsNear(const BVH_Seq& node, const Ray& ray)
     return false;
 }
 
-__device__ inline uint nearChild(const BVH_Seq& node, const Ray& ray)
+__device__ inline uint nearChild(const BVHNode& node, const Ray& ray)
 {
     return firstIsNear(node, ray) ? node.child1 : node.child2;
 }
 
-__device__ inline uint farChild(const BVH_Seq& node, const Ray& ray)
+__device__ inline uint farChild(const BVHNode& node, const Ray& ray)
 {
     return firstIsNear(node, ray) ? node.child2 : node.child1;
 }
 
-__device__ inline uint sibling(const BVH_Seq& node)
+__device__ inline uint sibling(const BVHNode& node)
 {
     //return node.parent.child1 == node_id ? parentNode.child2 : parentNode.child1;
     return 0;
@@ -223,7 +223,7 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Triangle* triangle
 
     for(int i=n; i<n+200; i++)
     {
-        BVH_Seq node = BVH_Data[i];
+        BVHNode node = GBVH[i];
         for(int t=node.t_start; t<node.t_start+node.t_count; t++)
         {
             Triangle triangle = triangles[t];

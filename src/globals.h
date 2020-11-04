@@ -4,6 +4,10 @@
 #include "use_cuda.h"
 #include "types.h"
 
-__device__ BVH_Seq* BVH_Data;
+// global pointer to the bvh buffer
+__device__ BVHNode* GBVH;
+
+#define WINDOW_WIDTH 640
+#define WINDOW_HEIGHT 480
 
 #endif

@@ -89,10 +89,10 @@ static bool __compare_triangles_z (Triangle a, Triangle b) {
     return (a.centroid().z < b.centroid().z);
 }
 
-struct BVH
+struct BVHTree
 {
-    BVH* child1;
-    BVH* child2;
+    BVHTree* child1;
+    BVHTree* child2;
     bool isLeaf;
     std::vector<Triangle> triangles;
     Box boundingBox;
@@ -106,7 +106,7 @@ struct BVH
     }
 };
 
-struct BVH_Seq
+struct BVHNode
 {
     Box boundingBox;
     uint parent;
@@ -139,9 +139,9 @@ Box buildTriangleBox(const std::vector<Triangle> triangles)
     };
 }
 
-BVH* createBVH(std::vector<Triangle> triangles)
+BVHTree* createBVH(std::vector<Triangle> triangles)
 {
-    BVH* ret = new BVH();
+    BVHTree* ret = new BVHTree();
     ret->isLeaf = false;
     ret->child1 = nullptr;
     ret->child2 = nullptr;
@@ -153,7 +153,6 @@ BVH* createBVH(std::vector<Triangle> triangles)
         ret->isLeaf = true;
         return ret;
     }
-
 
     float min_cost = std::numeric_limits<float>::max();
     int min_level;
@@ -209,21 +208,21 @@ BVH* createBVH(std::vector<Triangle> triangles)
     return ret;
 }
 
-void sequentializeBvh(const BVH* root, std::vector<Triangle>& newTriangles, std::vector<BVH_Seq>& seqBvh)
+void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, std::vector<BVHNode>& seqBvh)
 {
     // Keep track of a parent id and subtree.
-    std::stack<std::pair<uint, const BVH*>> work;
-    work.push(std::pair<uint, const BVH*>(0, root));
+    std::stack<std::pair<uint, const BVHTree*>> work;
+    work.push(std::pair<uint, const BVHTree*>(0, root));
 
     while(!work.empty())
     {
-        std::pair<uint, const BVH*> tmp = work.top();
+        std::pair<uint, const BVHTree*> tmp = work.top();
         work.pop();
 
-        const BVH* currentNode = tmp.second;
+        const BVHTree* currentNode = tmp.second;
         uint discoveredBy = tmp.first;
 
-        BVH_Seq node;
+        BVHNode node;
         node.boundingBox = currentNode->boundingBox;
         node.parent = discoveredBy;
         node.split_plane = currentNode->used_level;
@@ -288,7 +287,7 @@ public:
         }
     }
 
-    BVH* finalize() const { return createBVH(triangles); }
+    BVHTree* finalize() const { return createBVH(triangles); }
 };
 
 #endif

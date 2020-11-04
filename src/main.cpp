@@ -8,9 +8,6 @@
 #include <GLFW/glfw3.h>
 #include "gl_shader_utils.h"
 
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
-
 #include "use_cuda.h"
 #include "types.h"
 #include "globals.h"
@@ -127,19 +124,23 @@ int main(int argc, char** argv) {
 
     Scene scene;
     scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0,5,0));
-    BVH* bvh = scene.finalize();
+    BVHTree* bvh = scene.finalize();
 
     std::vector<Triangle> newTriangles;
-    std::vector<BVH_Seq> newBvh;
+    std::vector<BVHNode> newBvh;
     sequentializeBvh(bvh, newTriangles, newBvh);
 
     Triangle* triangleBuf;
     cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
     cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
 
-    BVH_Seq* bvhBuf;
-    cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVH_Seq)) );
-    cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVH_Seq), cudaMemcpyHostToDevice) );
+    BVHNode* bvhBuf;
+    cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
+    cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+    // Set the global bvh buffer pointer
+    // We set this globally instead of kernel parameter, otherwise we would have
+    // to pass the whole array constantly to small functions like sibling.
+    cudaSafe( cudaMemcpyToSymbol(GBVH, &bvhBuf, sizeof(bvhBuf)) );
 
     
 
@@ -169,8 +170,7 @@ int main(int argc, char** argv) {
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
 
-        cudaSafe( cudaMemcpyToSymbol(BVH_Data, &bvhBuf, sizeof(bvhBuf)) );
-        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, triangleBuf, (int)(150*glfwGetTime()), glfwGetTime());
+        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, triangleBuf, (int)(200*glfwGetTime()), glfwGetTime());
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
