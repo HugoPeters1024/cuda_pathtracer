@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
 
         // Calculate the thread size and warp size
-        dim3 dimBlock(32,32);
+        dim3 dimBlock(8,4);
         dim3 dimGrid((WINDOW_WIDTH  + dimBlock.x - 1) / dimBlock.x,
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-        //printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
+        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
         while (glfwGetTime() - start < 1.0 / 60.0) {}
     }
 

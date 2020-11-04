@@ -82,9 +82,24 @@ __device__ inline bool isLeaf(uint node_id)
     return node.t_count > 0;
 }
 
-__device__ inline bool boxtest(uint node_id, const Ray& ray)
+// Test if a given bvh node intersects with the ray. This function does not update the
+// hit info distance because intersecting the boundingBox does not guarantee intersection
+// any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
+// does use HitInfo for an early exit.
+__device__ inline bool boxtest(uint node_id, const Ray& ray, HitInfo* hitInfo)
 {
     BVHNode node = GBVH[node_id];
+    float3 boxCenter = node.boundingBox.centroid();
+    float toCenter = length(boxCenter - ray.origin);
+
+    // worst case distance error is the diagonal, so we correct to
+    // get a sound method of early exit
+    toCenter -= node.boundingBox.diagonal() / 2;
+
+    // We will never hit the box (and thus never it's contents, so we can stop)
+    if (toCenter > hitInfo->t) return false;
+
+    // normal case, crunch numbers
     return rayBoxIntersect(ray, node.boundingBox);
 }
 
@@ -157,7 +172,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box)
     if (tzmin > tmin) 
         tmin = tzmin; 
     if (tzmax < tmax) 
-        tmax = tzmax; 
+        tmax = tzmax;
 
     return tmax > 0;
 }
@@ -245,7 +260,7 @@ __device__ HitInfo traverseBVH(const Ray& ray)
 
             case FROM_SIBLING:
             case FROM_PARENT:
-                if (!boxtest(current,ray)){
+                if (!boxtest(current,ray, &hitInfo)){
                     current = state == FROM_SIBLING ? parent(current) : sibling(current);
                     state = state == FROM_SIBLING ? FROM_CHILD : FROM_SIBLING;
                 } else if (isLeaf(current)) {

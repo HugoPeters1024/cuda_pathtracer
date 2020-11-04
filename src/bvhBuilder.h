@@ -53,8 +53,15 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         }
 
         int m = triangles.size() / 2;
+
         std::vector<Triangle> lows(triangles.begin(), triangles.begin() + m);
         std::vector<Triangle> highs(triangles.begin() + m, triangles.end());
+
+        assert( lows.size() + highs.size() == triangles.size() );
+
+        // duplicate triangles that now intersect both cases (increasing the cost heuristic as well)
+        std::vector<Triangle> overflowToHigh;
+        std::vector<Triangle> overflowToLow;
 
         float cost1 = buildTriangleBox(lows).volume() * lows.size();
         float cost2 = buildTriangleBox(highs).volume() * highs.size();
