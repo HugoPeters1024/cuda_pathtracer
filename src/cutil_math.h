@@ -53,6 +53,11 @@ inline int min(int a, int b)
 // float functions
 ////////////////////////////////////////////////////////////////////////////////
 
+inline __device__ __host__ int sign(float x)
+{
+    return x < 0 ? 1 : 0;
+}
+
 // lerp
 inline __device__ __host__ float lerp(float a, float b, float t)
 {
@@ -349,8 +354,7 @@ inline __host__ __device__ float3 operator/(float3 a, float s)
 }
 inline __host__ __device__ float3 operator/(float s, float3 a)
 {
-    float inv = 1.0f / s;
-    return a * inv;
+    return make_float3(s/a.x,s/a.y,s/a.z);
 }
 inline __host__ __device__ void operator/=(float3 &a, float s)
 {

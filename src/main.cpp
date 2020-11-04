@@ -1,3 +1,4 @@
+#include <driver_types.h>
 #include <stdio.h>
 #include <iostream>
 #include <chrono>
@@ -99,8 +100,6 @@ int main(int argc, char** argv) {
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard) );
     cudaArray *arrayPtr;
 
-    Sphere* sphereBuf;
-    cudaSafe (cudaMalloc(&sphereBuf, 2*sizeof(Sphere)));
     Sphere spheres[2] {
         Sphere {
             make_float3(-0.4,1.0,0.5),
@@ -111,11 +110,33 @@ int main(int argc, char** argv) {
             0.7
         }
     };
-    cudaMemcpy(sphereBuf, spheres, sizeof(spheres), cudaMemcpyHostToDevice);
+    Sphere* sphereBuf;
+    cudaSafe( cudaMalloc(&sphereBuf, sizeof(spheres)) );
+    cudaSafe( cudaMemcpy(sphereBuf, spheres, sizeof(spheres), cudaMemcpyHostToDevice) );
 
-    float3 test = make_float3(1,1,1);
-    float3 ntest = normalize(test);
-    printf("test vec: %f, %f, %f\n", ntest.x, ntest.y, ntest.z);
+    Box boxes[1] {
+        Box {
+            make_float3(-0.5, 2, -0.5),
+            make_float3(0.5, 3, 0.5),
+        }
+    };
+    Box* boxBuf;
+    cudaSafe( cudaMalloc(&boxBuf, sizeof(boxes)) );
+    cudaSafe( cudaMemcpy(boxBuf, boxes, sizeof(boxes), cudaMemcpyHostToDevice) );
+
+    Scene scene;
+    scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0,5,0));
+    BVH* bvh = scene.finalize();
+
+    std::vector<Triangle> newTriangles;
+    std::vector<BVH_Seq> newBvh;
+    sequentializeBvh(bvh, newTriangles, newBvh);
+
+    Triangle* triangleBuf;
+    cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
+    cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], scene.triangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
+
+    
 
     while (!glfwWindowShouldClose(window))
     {
@@ -143,7 +164,7 @@ int main(int argc, char** argv) {
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
 
-        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, sphereBuf, 2, glfwGetTime());
+        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, triangleBuf, (int)(150*glfwGetTime()), glfwGetTime());
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
@@ -163,7 +184,7 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-//        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
+        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
         while (glfwGetTime() - start < 1.0 / 60.0) {}
     }
 
