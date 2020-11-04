@@ -79,7 +79,7 @@ __device__ inline uint parent(uint node_id)
 __device__ inline bool isLeaf(uint node_id)
 {
     BVHNode node = GBVH[node_id];
-    return node.child1 == 0 && node.child2 == 0;
+    return node.t_count > 0;
 }
 
 __device__ inline bool boxtest(uint node_id, const Ray& ray)
@@ -230,8 +230,8 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     uint root = 0;
     uint current = nearChild(root, ray);
     uint state = FROM_PARENT;
-    int zz=0;
-    while(zz++ < 100) {
+    int zz = 0;
+    while(zz++ < 400) {
         switch(state)
         {
             case FROM_CHILD:

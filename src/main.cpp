@@ -10,6 +10,7 @@
 
 #include "use_cuda.h"
 #include "types.h"
+#include "bvhBuilder.h"
 #include "globals.h"
 #include "kernels.h"
 
@@ -125,6 +126,7 @@ int main(int argc, char** argv) {
     Scene scene;
     scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0,5,0));
     BVHTree* bvh = scene.finalize();
+    assert( verifyBVHTree(bvh) );
 
     std::vector<Triangle> newTriangles;
     std::vector<BVHNode> newBvh;
@@ -135,6 +137,7 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
 
     BVHNode* bvhBuf;
+    printf("BVH Size: %ul\n", newBvh.size());
     cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
     cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
@@ -194,7 +197,7 @@ int main(int argc, char** argv) {
         glfwSwapBuffers(window);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
+        //printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
         while (glfwGetTime() - start < 1.0 / 60.0) {}
     }
 
