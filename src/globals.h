@@ -10,7 +10,4 @@ __device__ BVHNode* GBVH;
 // global pointer to triangle buffer
 __device__ Triangle* GTriangles;
 
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
-
 #endif

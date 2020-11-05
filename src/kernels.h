@@ -5,39 +5,9 @@
 #include "types.h"
 #include "globals.h"
 
-// All forward decleration, so we don't have to care about use order.
-__device__ inline float lambert(const float3 &v1, const float3 &v2);
-__device__ Ray makeRay(float3 origin, float3 direction);
-__device__ bool firstIsNear(uint node_id, const Ray& ray);
-__device__ inline uint nearChild(uint node_id, const Ray& ray);
-__device__ inline uint farChild(uint node_id, const Ray& ray);
-__device__ inline uint parent(uint node_id);
-__device__ inline uint sibling(uint node_id);
-__device__ inline bool isLeaf(uint node_id);
-__device__ inline bool boxtest(uint node_id, const Ray& ray);
-__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo);
-__device__ Ray getRayForPixel(unsigned int x, unsigned int y);
-__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis);
-__device__ bool rayBoxIntersect(const Ray& r, const Box& box);
-__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t);
-__device__ float3 radiance(Ray ray, const Box* spheres, int n);
-
-
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
     return max(dot(v1,v2),0.0f);
-}
-
-__device__ Ray makeRay(float3 origin, float3 direction)
-{
-    Ray ray;
-    ray.origin = origin;
-    ray.direction = direction;
-    ray.invdir = 1.0 / ray.direction;
-    ray.signs[0] = (int)(ray.invdir.x < 0);
-    ray.signs[1] = (int)(ray.invdir.y < 0);
-    ray.signs[2] = (int)(ray.invdir.z < 0);
-    return ray;
 }
 
 __device__ bool firstIsNear(uint node_id, const Ray& ray)
@@ -50,6 +20,11 @@ __device__ bool firstIsNear(uint node_id, const Ray& ray)
         case 2: return ray.direction.z > 0;
     }
     return false;
+}
+
+__device__ inline uint parent(uint node_id)
+{
+    return GBVH[node_id].parent;
 }
 
 __device__ inline uint nearChild(uint node_id, const Ray& ray)
@@ -66,15 +41,10 @@ __device__ inline uint farChild(uint node_id, const Ray& ray)
 
 __device__ inline uint sibling(uint node_id)
 {
-    BVHNode node = GBVH[node_id];
-    BVHNode parentNode = GBVH[node.parent];
-    return GBVH[node.parent].child1 == node_id ? parentNode.child2 : parentNode.child1;
+    BVHNode parentNode = GBVH[parent(node_id)];
+    return parentNode.child1 == node_id ? parentNode.child2 : parentNode.child1;
 }
 
-__device__ inline uint parent(uint node_id)
-{
-    return GBVH[node_id].parent;
-}
 
 __device__ inline bool isLeaf(uint node_id)
 {
@@ -82,58 +52,6 @@ __device__ inline bool isLeaf(uint node_id)
     return node.t_count > 0;
 }
 
-// Test if a given bvh node intersects with the ray. This function does not update the
-// hit info distance because intersecting the boundingBox does not guarantee intersection
-// any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
-// does use HitInfo for an early exit.
-__device__ inline bool boxtest(uint node_id, const Ray& ray, HitInfo* hitInfo)
-{
-    BVHNode node = GBVH[node_id];
-    float3 boxCenter = node.boundingBox.centroid();
-    float toCenter = length(boxCenter - ray.origin);
-
-    // worst case distance error is the diagonal, so we correct to
-    // get a sound method of early exit
-    toCenter -= node.boundingBox.diagonal() / 2;
-
-    // We will never hit the box (and thus never it's contents, so we can stop)
-    if (toCenter > hitInfo->t) return false;
-
-    // normal case, crunch numbers
-    return rayBoxIntersect(ray, node.boundingBox);
-}
-
-// Performs intersection against a leaf node's triangles
-__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
-{
-    BVHNode node = GBVH[node_id];
-    uint start = node.t_start;
-    uint end = start + node.t_count;
-    for(uint i=start; i<end; i++)
-    {
-        float t;
-        if (rayTriangleIntersect(ray ,GTriangles[i], &t) && t < hitInfo->t)
-        {
-            hitInfo->intersected = true;
-            hitInfo->triangle_id = i;
-            hitInfo->t = t;
-            hitInfo->normal = GTriangles[i].n0;
-            if (dot(hitInfo->normal, ray.direction) >= 0) hitInfo->normal = -hitInfo->normal;
-        }
-    }
-}
-
-__device__ Ray getRayForPixel(unsigned int x, unsigned int y)
-{
-    float xf = 2 * (x / (float)WINDOW_WIDTH) - 1;
-    float yf = 2 * (y / (float)WINDOW_HEIGHT) - 1;
-    float ar = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
-
-    float camDis = 1.0;
-    float3 pixel = make_float3(xf * ar, camDis, yf);
-    float3 eye = make_float3(0);
-    return makeRay(eye, normalize(pixel - eye));
-}
 
 __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis)
 {
@@ -147,7 +65,7 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
     return t > 0;
 }
 
-__device__ bool rayBoxIntersect(const Ray& r, const Box& box)
+__device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float* maxt)
 {
     float3 bounds[2] { box.vmin, box.vmax };
     float tmin, tmax, tymin, tymax, tzmin, tzmax; 
@@ -174,6 +92,8 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box)
     if (tzmax < tmax) 
         tmax = tzmax;
 
+    *mint = tmin;
+    *maxt = tmax;
     return tmax > 0;
 }
 
@@ -227,7 +147,39 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
 
     // we hit the triangle.
     return true;
+}
 
+// Test if a given bvh node intersects with the ray. This function does not update the
+// hit info distance because intersecting the boundingBox does not guarantee intersection
+// any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
+// does use HitInfo for an early exit.
+__device__ inline bool boxtest(uint node_id, const Ray& ray, const HitInfo* hitInfo)
+{
+    BVHNode node = GBVH[node_id];
+    float tmin, tmax;
+    // Constrain that the closest point of the box must be closer than a known intersection
+    return rayBoxIntersect(ray, node.boundingBox, &tmin, &tmax) && tmin < hitInfo->t;
+}
+
+
+// Performs intersection against a leaf node's triangles
+__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
+{
+    BVHNode node = GBVH[node_id];
+    uint start = node.t_start;
+    uint end = start + node.t_count;
+    for(uint i=start; i<end; i++)
+    {
+        float t;
+        if (rayTriangleIntersect(ray ,GTriangles[i], &t) && t < hitInfo->t)
+        {
+            hitInfo->intersected = true;
+            hitInfo->triangle_id = i;
+            hitInfo->t = t;
+            hitInfo->normal = GTriangles[i].n0;
+        }
+    }
+    if (dot(hitInfo->normal, ray.direction) >= 0) hitInfo->normal = -hitInfo->normal;
 }
 
 // Stackless BVH traversal states
@@ -244,7 +196,10 @@ __device__ HitInfo traverseBVH(const Ray& ray)
 
     uint root = 0;
     uint current = nearChild(root, ray);
-    uint state = FROM_PARENT;
+    char state = FROM_PARENT;
+
+    // BUG 400 iterations should be enough for the teapot
+    // Handy fact: process leaf accounts for almost no computation.
     int zz = 0;
     while(zz++ < 400) {
         switch(state)
@@ -273,45 +228,27 @@ __device__ HitInfo traverseBVH(const Ray& ray)
                 break;
         }
     }
+    assert (zz < 400);
     return hitInfo;
 }
 
-__device__ float3 radiance(Ray ray, const Box* spheres, int n) 
+__device__ float3 radiance(Ray ray, const Box* spheres, int n)
 {
     return make_float3(0);
 }
 
 
-__global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, Triangle* triangles, int n, float time) {
+__global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, float time, Camera camera) {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
 
-    Ray ray = getRayForPixel(x,y);
-
+    Ray ray = camera.getRay(x,y);
     HitInfo hitInfo = traverseBVH(ray);
     if (hitInfo.intersected)
         surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
     else
         surf2Dwrite(make_float4(0,0,0,1), texRef, x*sizeof(float4), y);
-
-    /*
-    for(int i=n; i<n+200; i++)
-    {
-        BVHNode node = GBVH[i];
-        for(int t=node.t_start; t<node.t_start+node.t_count; t++)
-        {
-            float d;
-            Triangle triangle = triangles[t];
-            if (rayTriangleIntersect(ray, triangle, &d))
-            {
-                surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
-                return;
-            }
-        }
-
-    }
-    */
 }
 
 #endif

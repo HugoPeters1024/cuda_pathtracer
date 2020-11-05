@@ -2,6 +2,7 @@
 #define H_BVH_BUILDER
 
 #include "types.h"
+#include "constants.h"
 
 Box buildTriangleBox(const std::vector<Triangle> triangles)
 {
@@ -20,8 +21,8 @@ Box buildTriangleBox(const std::vector<Triangle> triangles)
     }
 
     return Box {
-        make_float3(min_x, min_y, min_z), 
-        make_float3(max_x, max_y, max_z)
+        make_float3(min_x - EPS, min_y - EPS, min_z - EPS), 
+        make_float3(max_x + EPS, max_y + EPS, max_z + EPS)
     };
 }
 
@@ -31,9 +32,10 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     ret->isLeaf = false;
     ret->child1 = nullptr;
     ret->child2 = nullptr;
+    ret->triangles = std::vector<Triangle>();
     ret->boundingBox = buildTriangleBox(triangles);
 
-    if (triangles.size() < 8)
+    if (triangles.size() < 16)
     {
         ret->triangles = triangles;
         ret->isLeaf = true;
@@ -58,10 +60,6 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         std::vector<Triangle> highs(triangles.begin() + m, triangles.end());
 
         assert( lows.size() + highs.size() == triangles.size() );
-
-        // duplicate triangles that now intersect both cases (increasing the cost heuristic as well)
-        std::vector<Triangle> overflowToHigh;
-        std::vector<Triangle> overflowToLow;
 
         float cost1 = buildTriangleBox(lows).volume() * lows.size();
         float cost2 = buildTriangleBox(highs).volume() * highs.size();
@@ -96,8 +94,11 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     int m = triangles.size() / 2;
     std::vector<Triangle> lows(triangles.begin(), triangles.begin() + m);
     std::vector<Triangle> highs(triangles.begin() + m, triangles.end());
-    if (lows.size() > 0) ret->child1 = createBVH(lows);
-    if (highs.size() > 0) ret->child2 = createBVH(highs);
+
+    // child1 must be the near child
+    assert (lows.size() > 0 && highs.size() > 0);
+    ret->child1 = createBVH(lows);
+    ret->child2 = createBVH(highs);
     return ret;
 }
 
@@ -116,6 +117,8 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         uint discoveredBy = tmp.first;
 
         BVHNode node;
+        node.child1 = 0;
+        node.child2 = 0;
         node.boundingBox = currentNode->boundingBox;
         node.parent = discoveredBy;
         node.split_plane = currentNode->used_level;
@@ -130,13 +133,16 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
 
         // Calculate the indices of the children before hand
         uint myId = seqBvh.size();
-        node.child1 = currentNode->child1 == nullptr ? 0 : myId + 1;
-        node.child2 = currentNode->child2 == nullptr ? 0 : myId + 1 + currentNode->child1->treeSize();
+        if (node.t_count == 0) // aka not a leaf
+        {
+            node.child1 = myId + 1;
+            node.child2 = myId + 1 + currentNode->child1->treeSize();
 
+            // child 1 should be on the top of the stack so we push it last
+            work.push(std::make_pair(myId, currentNode->child2));
+            work.push(std::make_pair(myId, currentNode->child1));
+        }
         seqBvh.push_back(node);
-
-        if (currentNode->child1 != nullptr) work.push(std::make_pair(myId, currentNode->child1));
-        if (currentNode->child2 != nullptr) work.push(std::make_pair(myId, currentNode->child2));
     }
 }
 

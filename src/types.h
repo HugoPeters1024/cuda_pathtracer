@@ -11,6 +11,8 @@
 #include <limits>
 #include <vector_functions.h>
 
+#include "constants.h"
+
 #define inf 99999999
 
 #ifdef __CUDACC__
@@ -55,6 +57,18 @@ struct Ray
     float3 invdir;
     int signs[3];
 };
+
+HYBRID Ray makeRay(float3 origin, float3 direction)
+{
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    ray.invdir = 1.0 / ray.direction;
+    ray.signs[0] = (int)(ray.invdir.x < 0);
+    ray.signs[1] = (int)(ray.invdir.y < 0);
+    ray.signs[2] = (int)(ray.invdir.z < 0);
+    return ray;
+}
 
 struct HitInfo
 {
@@ -140,6 +154,41 @@ struct BVHNode
     uint t_start;
     uint t_count;
 };
+
+struct Camera
+{
+    float3 eye;
+    float3 direction;
+    float3 leftTop;
+    float3 u;
+    float3 v;
+
+    HYBRID Ray getRay(unsigned int x, unsigned int y) const {
+        float xf = x / (float)WINDOW_WIDTH;
+        float yf = y / (float)WINDOW_HEIGHT;
+        float3 point = leftTop + xf * u + yf * v;
+
+        float3 direction = normalize(point - eye);
+        return makeRay(eye, direction);
+    }
+};
+
+Camera makeCamera(float3 eye, float d, float3 direction)
+{
+    float3 center = eye + d * direction;
+    float3 u = normalize(cross(direction, make_float3(0,1,0)));
+    float3 v = normalize(cross(make_float3(1,0,0), direction));
+
+    float ar = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
+    float3 leftTop = center - u * ar - v;
+    return Camera {
+        eye,
+        direction,
+        leftTop,
+        2*ar*u,
+        2*v,
+    };
+}
 
 
 

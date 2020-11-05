@@ -46,6 +46,9 @@ void main() {
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
+float3 eye;
+float3 camDir;
+
 
 int main(int argc, char** argv) {
     if (!glfwInit()) return 2;
@@ -132,6 +135,24 @@ int main(int argc, char** argv) {
     std::vector<BVHNode> newBvh;
     sequentializeBvh(bvh, newTriangles, newBvh);
 
+    assert(newBvh.size() == bvh->treeSize());
+
+    for(int i =0; i<newBvh.size(); i++)
+    {
+        // check if parent child is two way
+        BVHNode node = newBvh[i];
+        if (node.child1 != 0) assert (newBvh[node.child1].parent == i);
+        if (node.child1 != 0) assert (newBvh[node.child2].parent == i);
+
+        // check if we get nicely get to the root for every node
+        int current = i;
+        while(true)
+        {
+            if (current == 0) break;
+            current = newBvh[current].parent;
+        }
+    }
+
     Triangle* triangleBuf;
     cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
     cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
@@ -149,6 +170,9 @@ int main(int argc, char** argv) {
     // Do the same for the triangle buffer
     cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
+    // Set the initial camera values;
+    eye = make_float3(0, 1, 1);
+    camDir = make_float3(0, 0, 1);
     
 
     while (!glfwWindowShouldClose(window))
@@ -172,12 +196,16 @@ int main(int argc, char** argv) {
         cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
 
         // Calculate the thread size and warp size
-        dim3 dimBlock(8,4);
+        dim3 dimBlock(8,8);
         dim3 dimGrid((WINDOW_WIDTH  + dimBlock.x - 1) / dimBlock.x,
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
+        float tm = glfwGetTime() / 5;
 
-        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, triangleBuf, (int)(200*glfwGetTime()), glfwGetTime());
+        Camera camera = makeCamera(make_float3(0, 8, 8-tm), 1, normalize(make_float3(0,0,-1)));
+        Ray r = camera.getRay(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
+
+        kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, glfwGetTime(), camera);
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
