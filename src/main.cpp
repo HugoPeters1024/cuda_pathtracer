@@ -173,10 +173,12 @@ int main(int argc, char** argv) {
     // Set the initial camera values;
     eye = make_float3(0, 1, 1);
     camDir = make_float3(0, 0, 1);
-    
+    double runningAverageFps = 0;
+    int tick = 0;
 
     while (!glfwWindowShouldClose(window))
     {
+        tick++;
         double start = glfwGetTime();
 
         // Unbind the texture from OpenGL
@@ -196,13 +198,13 @@ int main(int argc, char** argv) {
         cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
 
         // Calculate the thread size and warp size
-        dim3 dimBlock(8,8);
+        dim3 dimBlock(4,8);
         dim3 dimGrid((WINDOW_WIDTH  + dimBlock.x - 1) / dimBlock.x,
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
         float tm = glfwGetTime() / 5;
 
-        Camera camera = makeCamera(make_float3(0, 8, 8-tm), 1, normalize(make_float3(0,0,-1)));
+        Camera camera = makeCamera(make_float3(0, 8, 8), 1, normalize(make_float3(0,0,-1)));
         Ray r = camera.getRay(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
 
         kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, glfwGetTime(), camera);
@@ -224,8 +226,11 @@ int main(int argc, char** argv) {
         glfwPollEvents();
         glfwSwapBuffers(window);
 
+        double fps = 1.0f / (glfwGetTime() - start);
+        runningAverageFps = runningAverageFps * 0.95 + 0.05 * fps;
+        if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
+
         // Vsync is broken in GLFW for my card, so just hack it in.
-        printf("theoretical fps: %f\n", 1.0f / (glfwGetTime() - start));
         while (glfwGetTime() - start < 1.0 / 60.0) {}
     }
 

@@ -232,8 +232,13 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     return hitInfo;
 }
 
-__device__ float3 radiance(Ray ray, const Box* spheres, int n)
+__device__ float3 radiance(const Ray& ray)
 {
+    HitInfo hitInfo = traverseBVH(ray);
+    if (hitInfo.intersected)
+    {
+        return make_float3(1);
+    }
     return make_float3(0);
 }
 
@@ -244,11 +249,8 @@ __global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, float time, Camera
     CUDA_LIMIT(x,y);
 
     Ray ray = camera.getRay(x,y);
-    HitInfo hitInfo = traverseBVH(ray);
-    if (hitInfo.intersected)
-        surf2Dwrite(make_float4(1,1,1,1), texRef, x*sizeof(float4), y);
-    else
-        surf2Dwrite(make_float4(0,0,0,1), texRef, x*sizeof(float4), y);
+    float3 color = radiance(ray);
+    surf2Dwrite(make_float4(color,1), texRef, x*sizeof(float4), y);
 }
 
 #endif
