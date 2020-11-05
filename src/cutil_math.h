@@ -362,6 +362,17 @@ inline __host__ __device__ void operator/=(float3 &a, float s)
     a *= inv;
 }
 
+// equality
+inline __host__ __device__ bool operator==(float3 a, float3 b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+inline __host__ __device__ bool operator!=(float3 a, float3 b)
+{
+    return !(a == b);
+}
+
 // lerp
 inline __device__ __host__ float3 lerp(float3 a, float3 b, float t)
 {

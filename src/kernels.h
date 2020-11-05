@@ -157,7 +157,9 @@ __device__ inline bool boxtest(uint node_id, const Ray& ray, const HitInfo* hitI
 {
     BVHNode node = GBVH[node_id];
     float tmin, tmax;
-    // Constrain that the closest point of the box must be closer than a known intersection
+    // Constrain that the closest point of the box must be closer than a known intersection.
+    // Otherwise not triangle inside this box or it's children will ever change the intersection point
+    // and can thus be discarded
     return rayBoxIntersect(ray, node.boundingBox, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
@@ -176,10 +178,8 @@ __device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
             hitInfo->intersected = true;
             hitInfo->triangle_id = i;
             hitInfo->t = t;
-            hitInfo->normal = GTriangles[i].n0;
         }
     }
-    if (dot(hitInfo->normal, ray.direction) >= 0) hitInfo->normal = -hitInfo->normal;
 }
 
 // Stackless BVH traversal states
@@ -198,14 +198,15 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     uint current = nearChild(root, ray);
     char state = FROM_PARENT;
 
-    // BUG 400 iterations should be enough for the teapot
-    // Handy fact: process leaf accounts for almost no computation.
+    bool searching = true;
     int zz = 0;
-    while(zz++ < 400) {
+    // set a limit so we don't crash the pc if something goes wrong.
+    const int max_iterations = 500;
+    while(zz++ < max_iterations && searching) {
         switch(state)
         {
             case FROM_CHILD:
-                if (current == 0) return hitInfo; // finished;
+                if (current == 0) searching=false; // finished;
                 if (current == nearChild(parent(current), ray)) {
                     current=sibling(current); state=FROM_SIBLING;
                 } else {
@@ -228,7 +229,15 @@ __device__ HitInfo traverseBVH(const Ray& ray)
                 break;
         }
     }
-    assert (zz < 400);
+
+    // If the loop terminates because of the max_iterations something went wrong, perhaps the
+    // scene is too large and max_iterations needs to be increased
+    // but be weary of crashing your system if you go too high.
+    assert (zz < max_iterations);
+    if (hitInfo.intersected) {
+        hitInfo.normal = GTriangles[hitInfo.triangle_id].n0;
+        if (dot(hitInfo.normal, ray.direction) >= 0) hitInfo.normal = -hitInfo.normal;
+    }
     return hitInfo;
 }
 
@@ -237,7 +246,25 @@ __device__ float3 radiance(const Ray& ray)
     HitInfo hitInfo = traverseBVH(ray);
     if (hitInfo.intersected)
     {
-        return make_float3(1);
+        Triangle& t = GTriangles[hitInfo.triangle_id];
+
+        float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+        float3 lightPos = make_float3(3*sin(GTime),2,3*cos(GTime));
+        float3 toLight = lightPos - intersectionPos;
+        float lightDis = sqrt(dot(toLight, toLight));
+        toLight = normalize(toLight);
+        float falloff = 1.0f / (lightDis * lightDis);
+        float lightIntensity = 20;
+
+
+        Ray shadowRay = makeRay(intersectionPos, toLight);
+        HitInfo shadowInfo = traverseBVH(shadowRay);
+        float shadow = 1;
+        if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
+
+        float ambient = 0.2;
+
+        return (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
     }
     return make_float3(0);
 }

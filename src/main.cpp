@@ -46,8 +46,6 @@ void main() {
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
-float3 eye;
-float3 camDir;
 
 
 int main(int argc, char** argv) {
@@ -127,7 +125,8 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpy(boxBuf, boxes, sizeof(boxes), cudaMemcpyHostToDevice) );
 
     Scene scene;
-    scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0,5,0));
+    scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0));
+    scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 4, make_float3(0));
     BVHTree* bvh = scene.finalize();
     assert( verifyBVHTree(bvh) );
 
@@ -136,6 +135,7 @@ int main(int argc, char** argv) {
     sequentializeBvh(bvh, newTriangles, newBvh);
 
     assert(newBvh.size() == bvh->treeSize());
+    printf("Cost of the entire scene: %f\n", bvh->boundingBox.volume() * scene.triangles.size());
 
     for(int i =0; i<newBvh.size(); i++)
     {
@@ -171,10 +171,12 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
     // Set the initial camera values;
-    eye = make_float3(0, 1, 1);
-    camDir = make_float3(0, 0, 1);
+    Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1);
     double runningAverageFps = 0;
     int tick = 0;
+
+    printf("BVHNode is %i bytes\n", sizeof(BVHNode));
+    printf("Triangle is %i bytes\n", sizeof(BVHNode));
 
     while (!glfwWindowShouldClose(window))
     {
@@ -202,11 +204,8 @@ int main(int argc, char** argv) {
         dim3 dimGrid((WINDOW_WIDTH  + dimBlock.x - 1) / dimBlock.x,
                      (WINDOW_HEIGHT + dimBlock.y - 1) / dimBlock.y);
 
-        float tm = glfwGetTime() / 5;
-
-        Camera camera = makeCamera(make_float3(0, 8, 8), 1, normalize(make_float3(0,0,-1)));
-        Ray r = camera.getRay(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
-
+        float time = glfwGetTime();
+        cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
         kernel_pathtracer<<<dimGrid, dimBlock>>>(inputSurfObj, glfwGetTime(), camera);
         cudaSafe ( cudaDeviceSynchronize() );
 
@@ -223,6 +222,7 @@ int main(int argc, char** argv) {
         glBindTexture(GL_TEXTURE_2D, 0);
 
         // Handle IO and swap the backbuffer
+        camera.update(window);
         glfwPollEvents();
         glfwSwapBuffers(window);
 

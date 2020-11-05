@@ -35,6 +35,7 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     ret->triangles = std::vector<Triangle>();
     ret->boundingBox = buildTriangleBox(triangles);
 
+    // Splitting with less than 16 triangles causes too much overhead
     if (triangles.size() < 16)
     {
         ret->triangles = triangles;

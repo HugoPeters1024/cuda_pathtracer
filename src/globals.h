@@ -10,4 +10,7 @@ __device__ BVHNode* GBVH;
 // global pointer to triangle buffer
 __device__ Triangle* GTriangles;
 
+// the global application time
+__device__ float GTime;
+
 #endif

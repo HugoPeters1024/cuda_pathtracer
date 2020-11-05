@@ -76,7 +76,6 @@ struct HitInfo
     uint triangle_id;
     float t;
     float3 normal;
-    float3 pos;
 };
 
 struct Triangle
@@ -155,41 +154,63 @@ struct BVHNode
     uint t_count;
 };
 
-struct Camera
+class Camera
 {
-    float3 eye;
-    float3 direction;
-    float3 leftTop;
-    float3 u;
-    float3 v;
+private:
+    bool has_moved;
+    void recalculate() {
+        float3 center = eye + d * viewDir;
+        u = normalize(cross(make_float3(0,1,0), viewDir));
+        v = normalize(cross(viewDir, u));
 
-    HYBRID Ray getRay(unsigned int x, unsigned int y) const {
+        float ar = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
+        lt = center - u * ar - v;
+
+        u = 2 * ar * u;
+        v = 2 * v;
+    }
+
+public:
+    float3 eye, viewDir;
+    float3 lt, u, v;
+    float d;
+
+    Camera(float3 eye, float3 viewDir, float d) : eye(eye), viewDir(viewDir), d(d) {}
+
+    void update(GLFWwindow* window) {
+        has_moved = false;
+        float3 oldEye = eye;
+        float3 oldViewDir = viewDir;
+
+        float speed = 0.03f;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) eye += speed * viewDir;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) eye -= speed * viewDir;
+        float3 side = normalize(cross(make_float3(0,1,0), viewDir));
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) eye -= speed * side;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) eye += speed * side;
+
+        // Look changes
+        float look_speed = 0.02;
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) viewDir.y += look_speed;
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) viewDir.y -= look_speed;
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) viewDir -= look_speed * side;
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) viewDir += look_speed * side;
+        viewDir = normalize(viewDir);
+        recalculate();
+        has_moved = (oldEye != eye || oldViewDir != viewDir);
+    }
+
+    inline bool hasMoved() const { return has_moved; }
+
+    HYBRID inline Ray getRay(unsigned int x, unsigned int y) const {
         float xf = x / (float)WINDOW_WIDTH;
         float yf = y / (float)WINDOW_HEIGHT;
-        float3 point = leftTop + xf * u + yf * v;
+        float3 point = lt + xf * u + yf * v;
 
         float3 direction = normalize(point - eye);
         return makeRay(eye, direction);
     }
 };
-
-Camera makeCamera(float3 eye, float d, float3 direction)
-{
-    float3 center = eye + d * direction;
-    float3 u = normalize(cross(direction, make_float3(0,1,0)));
-    float3 v = normalize(cross(make_float3(1,0,0), direction));
-
-    float ar = (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT;
-    float3 leftTop = center - u * ar - v;
-    return Camera {
-        eye,
-        direction,
-        leftTop,
-        2*ar*u,
-        2*v,
-    };
-}
-
 
 
 #endif
