@@ -126,6 +126,13 @@ static bool __compare_triangles_z (Triangle a, Triangle b) {
     return (a.centroid().z < b.centroid().z);
 }
 
+struct BVHSplittingTree
+{
+    float cost;
+    BVHSplittingTree* child1;
+    BVHSplittingTree* child2;
+};
+
 struct BVHTree
 {
     BVHTree* child1;

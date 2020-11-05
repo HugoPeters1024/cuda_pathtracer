@@ -26,25 +26,12 @@ Box buildTriangleBox(const std::vector<Triangle> triangles)
     };
 }
 
-BVHTree* createBVH(std::vector<Triangle> triangles)
+float approximateBVHCost(std::vector<Triangle> triangles, int credit, int* min_level)
 {
-    BVHTree* ret = new BVHTree();
-    ret->isLeaf = false;
-    ret->child1 = nullptr;
-    ret->child2 = nullptr;
-    ret->triangles = std::vector<Triangle>();
-    ret->boundingBox = buildTriangleBox(triangles);
-
-    // Splitting with less than 16 triangles causes too much overhead
-    if (triangles.size() < 16)
-    {
-        ret->triangles = triangles;
-        ret->isLeaf = true;
-        return ret;
-    }
+    // Maximum depth reached, use approximation
+    if (credit == 0) return buildTriangleBox(triangles).volume() * triangles.size();
 
     float min_cost = std::numeric_limits<float>::max();
-    int min_level;
 
     // iterate over the 3 dimensions to find the most profitable splitting plane.
     for(int level=0; level<3; level++)
@@ -62,30 +49,49 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
 
         assert( lows.size() + highs.size() == triangles.size() );
 
-        float cost1 = buildTriangleBox(lows).volume() * lows.size();
-        float cost2 = buildTriangleBox(highs).volume() * highs.size();
-        float cost = cost1 + cost2;
-
+        int tmp;
+        float cost = approximateBVHCost(lows, credit-1, &tmp) + approximateBVHCost(highs, credit-1, &tmp);
         if (cost < min_cost)
         {
+            *min_level = level;
             min_cost = cost;
-            min_level = level;
         }
     }
 
-    // Cost of not splittiing
-    float currentCost = ret->boundingBox.volume() * triangles.size();
-    // Split costs more
-    if (min_cost >= currentCost)
+    // Calculate the cost of not splitting
+    float currentCost = buildTriangleBox(triangles).volume() * triangles.size();
+    if (currentCost <= min_cost)
     {
-        ret->isLeaf = true;
+        min_cost = currentCost;
+        *min_level = -1;
+    }
+    return min_cost;
+}
+
+
+BVHTree* createBVH(std::vector<Triangle> triangles)
+{
+    BVHTree* ret = new BVHTree();
+    ret->isLeaf = false;
+    ret->child1 = nullptr;
+    ret->child2 = nullptr;
+    ret->triangles = std::vector<Triangle>();
+    ret->boundingBox = buildTriangleBox(triangles);
+
+    int min_level;
+    float min_cost = approximateBVHCost(triangles, 3, &min_level);
+    ret->used_level = min_level;
+
+    // Splitting with less than 16 triangles causes too much overhead
+    if (min_level == -1 || triangles.size() < 16)
+    {
         ret->triangles = triangles;
+        ret->isLeaf = true;
         return ret;
     }
 
-    ret->used_level = min_level;
 
-    // Sort the triangles one last time based on min_level
+    // Sort the triangles one last time based on the level the heuristic gave us.
     switch (min_level) {
         case 0: std::sort(triangles.begin(), triangles.end(), __compare_triangles_x); break;
         case 1: std::sort(triangles.begin(), triangles.end(), __compare_triangles_y); break;
