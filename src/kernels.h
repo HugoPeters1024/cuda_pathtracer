@@ -241,8 +241,10 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     return hitInfo;
 }
 
-__device__ float3 radiance(const Ray& ray)
+__device__ float3 radiance(const Ray& ray, int depth = 0)
 {
+    if (depth > 3) return make_float3(0);
+
     HitInfo hitInfo = traverseBVH(ray);
     if (hitInfo.intersected)
     {
@@ -257,14 +259,20 @@ __device__ float3 radiance(const Ray& ray)
         float lightIntensity = 20;
 
 
-        Ray shadowRay = makeRay(intersectionPos, toLight);
-        //HitInfo shadowInfo = traverseBVH(shadowRay);
         float shadow = 1;
-        //if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
-
+        Ray shadowRay = makeRay(intersectionPos, toLight);
+        HitInfo shadowInfo = traverseBVH(shadowRay);
+        if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
         float ambient = 0.2;
 
-        return (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
+        float3 color = (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
+        if (t.reflect > 0.01)
+        {
+            Ray reflectRay = makeRay(intersectionPos, reflect(ray.direction, hitInfo.normal));
+            color = color * (1-t.reflect) + t.reflect * radiance(reflectRay, depth+1);
+        }
+
+        return color;
     }
     return make_float3(0);
 }

@@ -87,6 +87,7 @@ struct Triangle
     float3 n1;
     float3 n2;
     float3 color;
+    float reflect;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
     HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }
