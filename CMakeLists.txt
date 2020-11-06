@@ -20,7 +20,7 @@ target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        --use_fast_math
                        --relocatable-device-code=true
                        --gpu-architecture=sm_50
-                       -O0
+                       -O3
                        -g
                        >)
 

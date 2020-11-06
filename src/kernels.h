@@ -201,7 +201,7 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     bool searching = true;
     int zz = 0;
     // set a limit so we don't crash the pc if something goes wrong.
-    const int max_iterations = 600;
+    const int max_iterations = 900;
     while(zz++ < max_iterations && searching) {
         switch(state)
         {
@@ -266,11 +266,13 @@ __device__ float3 radiance(const Ray& ray, int depth = 0)
         float ambient = 0.2;
 
         float3 color = (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
+        /*
         if (t.reflect > 0.01)
         {
             Ray reflectRay = makeRay(intersectionPos, reflect(ray.direction, hitInfo.normal));
             color = color * (1-t.reflect) + t.reflect * radiance(reflectRay, depth+1);
         }
+        */
 
         return color;
     }

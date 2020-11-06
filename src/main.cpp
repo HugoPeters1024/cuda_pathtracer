@@ -125,8 +125,9 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpy(boxBuf, boxes, sizeof(boxes), cudaMemcpyHostToDevice) );
 
     Scene scene;
-    scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0), 0);
-    scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
+    //scene.addModel("teapot.obj", make_float3(1), 1, make_float3(0), 0);
+    //scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
+    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0,8,0), 0);
     printf("Generating a BVH using the SAH heuristic at a depth of 3, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
 
