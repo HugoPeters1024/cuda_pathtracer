@@ -69,37 +69,33 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
 {
     float3 bounds[2] { box.vmin, box.vmax };
     float tmin, tmax, tymin, tymax, tzmin, tzmax; 
+    bool ret = true;
  
     tmin = (bounds[r.signs[0]].x - r.origin.x) * r.invdir.x; 
     tmax = (bounds[1-r.signs[0]].x - r.origin.x) * r.invdir.x; 
     tymin = (bounds[r.signs[1]].y - r.origin.y) * r.invdir.y; 
     tymax = (bounds[1-r.signs[1]].y - r.origin.y) * r.invdir.y; 
  
-    if ((tmin > tymax) || (tymin > tmax)) 
-        return false; 
-    if (tymin > tmin) 
-        tmin = tymin; 
-    if (tymax < tmax) 
-        tmax = tymax; 
+    ret &= !((tmin > tymax) || (tymin > tmax));
+    tmin = max(tymin, tmin);
+    tmax = min(tymax, tmax);
  
     tzmin = (bounds[r.signs[2]].z - r.origin.z) * r.invdir.z; 
     tzmax = (bounds[1-r.signs[2]].z - r.origin.z) * r.invdir.z; 
  
-    if ((tmin > tzmax) || (tzmin > tmax)) 
-        return false; 
-    if (tzmin > tmin) 
-        tmin = tzmin; 
-    if (tzmax < tmax) 
-        tmax = tzmax;
+    ret &= !((tmin > tzmax) || (tzmin > tmax));
+    tmin = max(tzmin, tmin);
+    tmax = min(tzmax, tmax);
 
     *mint = tmin;
     *maxt = tmax;
-    return tmax > 0;
+    return ret && tmax > 0;
 }
 
 __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t)
 {
-        // compute plane's normal
+    bool ret = true;
+    // compute plane's normal
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     // no need to normalize
@@ -119,7 +115,7 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
     // compute t (equation 3)
     *t = (dot(-N,ray.origin) + d) / NdotRayDirection;
     // check if the triangle is in behind the ray
-    if (*t < 0) return false; // the triangle is behind
+    ret &= *t >= 0; // the triangle is behind
 
     // compute the intersection point using equation 1
     float3 P = ray.origin + *t * ray.direction;
@@ -131,22 +127,22 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
     float3 edge0 = triangle.v1 - triangle.v0;
     float3 vp0 = P - triangle.v0;
     C = cross(edge0, vp0);
-    if (dot(N, C) < 0) return false; // P is on the right side
+    ret &= dot(N, C) >= 0; // P is on the right side
 
     // edge 1
     float3 edge1 = triangle.v2 - triangle.v1;
     float3 vp1 = P - triangle.v1;
     C = cross(edge1, vp1);
-    if (dot(N,C) < 0)  return false; // P is on the right side
+    ret &= dot(N,C) >= 0; // P is on the right side
 
     // edge 2
     float3 edge2 = triangle.v0 - triangle.v2;
     float3 vp2 = P - triangle.v2;
     C = cross(edge2, vp2);
-    if (dot(N, C) < 0) return false; // P is on the right side;
+    ret &= dot(N, C) >= 0; // P is on the right side;
 
     // we hit the triangle.
-    return true;
+    return ret;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -173,7 +169,7 @@ __device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
     for(uint i=start; i<end; i++)
     {
         float t;
-        if (rayTriangleIntersect(ray ,GTriangles[i], &t) && t < hitInfo->t)
+        if (rayTriangleIntersect(ray, GTriangles[i], &t) && t < hitInfo->t)
         {
             hitInfo->intersected = true;
             hitInfo->triangle_id = i;

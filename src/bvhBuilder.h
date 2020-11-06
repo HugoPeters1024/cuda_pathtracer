@@ -82,8 +82,8 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     float min_cost = approximateBVHCost(triangles, 3, &min_level);
     ret->used_level = min_level;
 
-    // Splitting with less than 16 triangles causes too much overhead
-    if (min_level == -1 || triangles.size() < 16)
+    // Splitting with less than 8 triangles causes too much overhead
+    if (min_level == -1 || triangles.size() < 8)
     {
         ret->triangles = triangles;
         ret->isLeaf = true;
@@ -102,8 +102,9 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     std::vector<Triangle> lows(triangles.begin(), triangles.begin() + m);
     std::vector<Triangle> highs(triangles.begin() + m, triangles.end());
 
-    // child1 must be the near child
     assert (lows.size() > 0 && highs.size() > 0);
+
+    // child1 must be the near child
     ret->child1 = createBVH(lows);
     ret->child2 = createBVH(highs);
     return ret;
