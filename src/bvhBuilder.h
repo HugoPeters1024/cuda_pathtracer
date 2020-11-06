@@ -154,6 +154,23 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
     }
 }
 
+BVHSA transformBVHSA(std::vector<BVHNode>& bvh)
+{
+    BVHSA ret;
+    ret.boundingBox = (Box*)malloc(bvh.size() * sizeof(Box));
+    ret.child1 = (uint*)malloc(bvh.size() * sizeof(uint));
+    ret.child2 = (uint*)malloc(bvh.size() * sizeof(uint));
+    ret.parent = (uint*)malloc(bvh.size() * sizeof(uint));
+    ret.split_plane = (uint*)malloc(bvh.size() * sizeof(uint));
+    ret.t_start = (uint*)malloc(bvh.size() * sizeof(uint));
+    ret.t_count = (uint*)malloc(bvh.size() * sizeof(uint));
+
+    for (const BVHNode& node : bvh)
+    {
+    }
+    return ret;
+}
+
 // Sanity checks
 bool verifyBVHTree(const BVHTree* root)
 {

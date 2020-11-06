@@ -50,13 +50,13 @@ struct Box
     }
 };
 
-struct d_align__(16) Ray
+struct __align__(16) Ray
 {
     float3 origin;
     float3 direction;
     float3 invdir;
     int signs[3];
-    float shadowLength;
+    float3 shadowTarget;
 };
 
 HYBRID Ray makeRay(float3 origin, float3 direction)
@@ -161,6 +161,17 @@ struct BVHNode
     uint split_plane;
     uint t_start;
     uint t_count;
+};
+
+struct BVHSA
+{
+    Box* boundingBox;
+    uint* parent;
+    uint* child1;
+    uint* child2;
+    uint* split_plane;
+    uint* t_start;
+    uint* t_count;
 };
 
 class Camera

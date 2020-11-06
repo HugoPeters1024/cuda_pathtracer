@@ -249,28 +249,13 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay)
         float3 toLight = lightPos - intersectionPos;
         float lightDis = length(toLight);
         toLight = toLight / lightDis;
-        float falloff = 1.0f / (lightDis * lightDis);
-        float lightIntensity = 20;
+        float ambient = 0.2;
 
-
-        float shadow = 1;
-       // Ray shadowRay = makeRay(intersectionPos, toLight);
-       // HitInfo shadowInfo = traverseBVH(shadowRay);
-       // if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
-        float ambient = 0.1;
-
-        float3 color = (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
+        float3 color = ambient * t.color;
 
         // We trace shadow rays in reverse to more coherent rays
         *shadowRay = makeRay(lightPos, -toLight);
-        shadowRay->shadowLength = lightDis;
-        /*
-        if (t.reflect > 0.01)
-        {
-            Ray reflectRay = makeRay(intersectionPos, reflect(ray.direction, hitInfo.normal));
-            color = color * (1-t.reflect) + t.reflect * radiance(reflectRay, depth+1);
-        }
-        */
+        shadowRay->shadowTarget = intersectionPos;
 
         return color;
     }
@@ -294,8 +279,6 @@ __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float t
     Ray ray = rays[x + y * WINDOW_WIDTH];
     float3 color = clamp(radiance(ray, &rays[x + y * WINDOW_WIDTH]), 0,1);
     surf2Dwrite(make_float4(color,1), texRef, x*sizeof(float4), y);
-
-    // change the ray to a shadowRay
 }
 
 __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
@@ -305,11 +288,21 @@ __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
 
     Ray ray = rays[x + y * WINDOW_WIDTH];
     HitInfo hitInfo = traverseBVH(ray);
-    float shadow = hitInfo.intersected && hitInfo.t < ray.shadowLength ? 0.2 : 1;
+    if (hitInfo.intersected)
+    {
+        float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+        float3 isectDelta = intersectionPos - ray.shadowTarget;
+        // New intersection point is not our illumination target
+        if (dot(isectDelta, isectDelta) > 0.01) return;
+        float illumination = 25;
+        float falloff = 1.0 / (hitInfo.t * hitInfo.t);
+        float lam = lambert(-ray.direction, hitInfo.normal);
 
-    float4 old_color;
-    surf2Dread(&old_color, texRef, x*sizeof(float4), y);
-    surf2Dwrite(old_color*shadow, texRef, x*sizeof(float4), y);
+        float4 old_color;
+        surf2Dread(&old_color, texRef, x*sizeof(float4), y);
+        surf2Dwrite(old_color + make_float4(illumination) * falloff * lam, texRef, x*sizeof(float4), y);
+    }
+
 }
 
 #endif
