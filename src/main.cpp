@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
 
     // Register the texture with cuda
     cudaGraphicsResource* pGraphicsResource;
-    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard) );
+    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
     cudaArray *arrayPtr;
 
     Sphere spheres[2] {
@@ -162,6 +162,9 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
     cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
+    Ray* rayBuf;
+    cudaSafe ( cudaMalloc(&rayBuf, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(Ray)) );
+
     // Set the global bvh buffer pointer
     // We set this globally instead of kernel parameter, otherwise we would have
     // to pass the whole array constantly to small functions like sibling.
@@ -207,7 +210,9 @@ int main(int argc, char** argv) {
 
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
-        kernel_pathtracer<<<dimBlock, dimThreads>>>(inputSurfObj, glfwGetTime(), camera);
+        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
+        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime());
+        kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda

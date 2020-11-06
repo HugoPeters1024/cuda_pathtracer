@@ -50,12 +50,13 @@ struct Box
     }
 };
 
-struct Ray
+struct d_align__(16) Ray
 {
     float3 origin;
     float3 direction;
     float3 invdir;
     int signs[3];
+    float shadowLength;
 };
 
 HYBRID Ray makeRay(float3 origin, float3 direction)
@@ -78,7 +79,7 @@ struct HitInfo
     float3 normal;
 };
 
-struct Triangle
+struct __align__(16) Triangle
 {
     float3 v0;
     float3 v1;

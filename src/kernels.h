@@ -106,7 +106,7 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
 
     // check if ray and plane are parallel ?
     float NdotRayDirection = dot(N,ray.direction);
-    if (abs(NdotRayDirection) < 0.0001f) // almost 0
+    if (abs(NdotRayDirection) < 0.001f) // almost 0
         return false; // they are parallel so they don't intersect !
 
     // compute d parameter using equation 2
@@ -237,10 +237,8 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     return hitInfo;
 }
 
-__device__ float3 radiance(const Ray& ray, int depth = 0)
+__device__ float3 radiance(const Ray& ray, Ray* shadowRay)
 {
-    if (depth > 3) return make_float3(0);
-
     HitInfo hitInfo = traverseBVH(ray);
     if (hitInfo.intersected)
     {
@@ -249,19 +247,23 @@ __device__ float3 radiance(const Ray& ray, int depth = 0)
         float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
         float3 lightPos = make_float3(3*sin(GTime),2,3*cos(GTime));
         float3 toLight = lightPos - intersectionPos;
-        float lightDis = sqrt(dot(toLight, toLight));
-        toLight = normalize(toLight);
+        float lightDis = length(toLight);
+        toLight = toLight / lightDis;
         float falloff = 1.0f / (lightDis * lightDis);
         float lightIntensity = 20;
 
 
         float shadow = 1;
-        Ray shadowRay = makeRay(intersectionPos, toLight);
-        HitInfo shadowInfo = traverseBVH(shadowRay);
-        if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
-        float ambient = 0.2;
+       // Ray shadowRay = makeRay(intersectionPos, toLight);
+       // HitInfo shadowInfo = traverseBVH(shadowRay);
+       // if (shadowInfo.intersected && shadowInfo.t < lightDis) shadow = 0.0;
+        float ambient = 0.1;
 
         float3 color = (ambient + shadow * lightIntensity * falloff * lambert(hitInfo.normal, toLight)) * t.color;
+
+        // We trace shadow rays in reverse to more coherent rays
+        *shadowRay = makeRay(lightPos, -toLight);
+        shadowRay->shadowLength = lightDis;
         /*
         if (t.reflect > 0.01)
         {
@@ -275,15 +277,39 @@ __device__ float3 radiance(const Ray& ray, int depth = 0)
     return make_float3(0);
 }
 
-
-__global__ void kernel_pathtracer(cudaSurfaceObject_t texRef, float time, Camera camera) {
+__global__ void kernel_create_primary_rays(Ray* rays, Camera camera) {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
 
-    Ray ray = camera.getRay(x,y);
-    float3 color = radiance(ray);
+    rays[x + y * WINDOW_WIDTH] = camera.getRay(x,y);
+}
+
+
+__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time) {
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    CUDA_LIMIT(x,y);
+
+    Ray ray = rays[x + y * WINDOW_WIDTH];
+    float3 color = clamp(radiance(ray, &rays[x + y * WINDOW_WIDTH]), 0,1);
     surf2Dwrite(make_float4(color,1), texRef, x*sizeof(float4), y);
+
+    // change the ray to a shadowRay
+}
+
+__global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    CUDA_LIMIT(x,y);
+
+    Ray ray = rays[x + y * WINDOW_WIDTH];
+    HitInfo hitInfo = traverseBVH(ray);
+    float shadow = hitInfo.intersected && hitInfo.t < ray.shadowLength ? 0.2 : 1;
+
+    float4 old_color;
+    surf2Dread(&old_color, texRef, x*sizeof(float4), y);
+    surf2Dwrite(old_color*shadow, texRef, x*sizeof(float4), y);
 }
 
 #endif
