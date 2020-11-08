@@ -5,10 +5,10 @@
 #include "types.h"
 
 // global pointer to the bvh buffer
-__device__ BVHNode* GBVH;
+__constant__ BVHNode* GBVH;
 
 // global pointer to triangle buffer
-__device__ Triangle* GTriangles;
+__constant__ Triangle* GTriangles;
 
 // the global application time
 __device__ float GTime;

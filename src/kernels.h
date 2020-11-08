@@ -262,21 +262,12 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay)
     return make_float3(0);
 }
 
-__global__ void kernel_create_primary_rays(Ray* rays, Camera camera) {
+__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, Camera camera) {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
 
-    rays[x + y * WINDOW_WIDTH] = camera.getRay(x,y);
-}
-
-
-__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time) {
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    CUDA_LIMIT(x,y);
-
-    Ray ray = rays[x + y * WINDOW_WIDTH];
+    Ray ray = camera.getRay(x,y);
     float3 color = clamp(radiance(ray, &rays[x + y * WINDOW_WIDTH]), 0,1);
     surf2Dwrite(make_float4(color,1), texRef, x*sizeof(float4), y);
 }
@@ -293,7 +284,7 @@ __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
         float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
         float3 isectDelta = intersectionPos - ray.shadowTarget;
         // New intersection point is not our illumination target
-        if (dot(isectDelta, isectDelta) > 0.01) return;
+        if (dot(isectDelta, isectDelta) > 0.0001) return;
         float illumination = 25;
         float falloff = 1.0 / (hitInfo.t * hitInfo.t);
         float lam = lambert(-ray.direction, hitInfo.normal);

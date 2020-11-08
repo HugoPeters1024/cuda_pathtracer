@@ -210,8 +210,8 @@ int main(int argc, char** argv) {
 
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
-        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
-        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime());
+//        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
+        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), camera);
         kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 
