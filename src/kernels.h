@@ -29,20 +29,18 @@ __device__ inline uint parent(uint node_id)
 
 __device__ inline uint nearChild(uint node_id, const Ray& ray)
 {
-    BVHNode node = GBVH[node_id];
-    return firstIsNear(node_id, ray) ? node.child1 : node.child2;
+    return firstIsNear(node_id, ray) ? node_id + 1 : GBVH[node_id].child2;
 }
 
 __device__ inline uint farChild(uint node_id, const Ray& ray)
 {
-    BVHNode node = GBVH[node_id];
-    return firstIsNear(node_id, ray) ? node.child2 : node.child1;
+    return firstIsNear(node_id, ray) ? GBVH[node_id].child2 : node_id + 1;
 }
 
 __device__ inline uint sibling(uint node_id)
 {
-    BVHNode parentNode = GBVH[parent(node_id)];
-    return parentNode.child1 == node_id ? parentNode.child2 : parentNode.child1;
+    uint parent_id = parent(node_id);
+    return parent_id + 1 == node_id ? GBVH[parent_id].child2 : parent_id + 1;
 }
 
 

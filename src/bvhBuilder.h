@@ -125,7 +125,6 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         uint discoveredBy = tmp.first;
 
         BVHNode node;
-        node.child1 = 0;
         node.child2 = 0;
         node.boundingBox = currentNode->boundingBox;
         node.parent = discoveredBy;
@@ -143,7 +142,6 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         uint myId = seqBvh.size();
         if (node.t_count == 0) // aka not a leaf
         {
-            node.child1 = myId + 1;
             node.child2 = myId + 1 + currentNode->child1->treeSize();
 
             // child 1 should be on the top of the stack so we push it last

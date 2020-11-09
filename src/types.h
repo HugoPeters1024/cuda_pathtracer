@@ -156,7 +156,6 @@ struct __align__(16) BVHNode
 {
     Box boundingBox;
     uint parent;
-    uint child1;
     uint child2;
     uint split_plane;
     uint t_start;

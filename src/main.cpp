@@ -137,22 +137,6 @@ int main(int argc, char** argv) {
 
     assert(newBvh.size() == bvh->treeSize());
 
-    for(int i =0; i<newBvh.size(); i++)
-    {
-        // check if parent child is two way
-        BVHNode node = newBvh[i];
-        if (node.child1 != 0) assert (newBvh[node.child1].parent == i);
-        if (node.child1 != 0) assert (newBvh[node.child2].parent == i);
-
-        // check if we get nicely get to the root for every node
-        int current = i;
-        while(true)
-        {
-            if (current == 0) break;
-            current = newBvh[current].parent;
-        }
-    }
-
     Triangle* triangleBuf;
     cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
     cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
