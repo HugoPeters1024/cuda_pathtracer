@@ -278,8 +278,9 @@ __device__ HitInfo traverseBVH(const Ray& ray)
     return hitInfo;
 }
 
-__device__ float3 radiance(const Ray& ray, Ray* shadowRay)
+__device__ float3 radiance(const Ray& ray, Ray* shadowRay, uint depth)
 {
+    if (depth > 2) return make_float3(0);
     HitInfo hitInfo = traverseBVHStack(ray);
     if (hitInfo.intersected)
     {
@@ -290,14 +291,20 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay)
         float3 toLight = lightPos - intersectionPos;
         float lightDis = length(toLight);
         toLight = toLight / lightDis;
-        float ambient = 0.2;
+
+        // ambient comes from above
+        float ambient = 0.2 * dot(hitInfo.normal, make_float3(0,1,0));
 
         float3 color = ambient * t.color;
 
         // We trace shadow rays in reverse to more coherent rays
-        *shadowRay = makeRay(lightPos, -toLight);
-        shadowRay->shadowTarget = intersectionPos;
-        shadowRay->active=true;
+        // but only if the light source isn't behind the triangle
+        if (dot(toLight, hitInfo.normal) > 0) {
+            *shadowRay = makeRay(lightPos, -toLight);
+            shadowRay->shadowTarget = intersectionPos;
+            shadowRay->active = true;
+        }
+        else shadowRay->active = false;
 
         return color;
     }
@@ -311,7 +318,7 @@ __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float t
     CUDA_LIMIT(x,y);
 
     Ray ray = camera.getRay(x,y);
-    float3 color = clamp(radiance(ray, &rays[x + y * WINDOW_WIDTH]), 0,1);
+    float3 color = clamp(radiance(ray, &rays[x + y * WINDOW_WIDTH], 0), 0,1);
     surf2Dwrite(make_float4(color,1), texRef, x*sizeof(float4), y);
 }
 
@@ -332,10 +339,11 @@ __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
         float illumination = 25;
         float falloff = 1.0 / (hitInfo.t * hitInfo.t);
         float lam = lambert(-ray.direction, hitInfo.normal);
+        float3 color = GTriangles[hitInfo.triangle_id].color;
 
         float4 old_color;
         surf2Dread(&old_color, texRef, x*sizeof(float4), y);
-        surf2Dwrite(old_color + make_float4(illumination) * falloff * lam, texRef, x*sizeof(float4), y);
+        surf2Dwrite(old_color + make_float4(color,1) * illumination * falloff * lam, texRef, x*sizeof(float4), y);
     }
 
 }

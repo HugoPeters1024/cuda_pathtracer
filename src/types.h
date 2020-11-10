@@ -42,14 +42,26 @@ struct Box
     HYBRID inline float3 centroid() const { return (vmin + vmax) * 0.5; }
     HYBRID inline float diagonal() const { return length(vmin - vmax); };
     inline float volume() const { return abs((vmax.x - vmin.x) * (vmax.y - vmin.y) * (vmax.z - vmin.z)); }
-    void consumeTriangle(const Triangle& t)
+    inline float getSurfaceArea() const
     {
-        vmin = fmin(t.v0, vmin);
-        vmin = fmin(t.v1, vmin);
-        vmin = fmin(t.v2, vmin);
-        vmax = fmax(t.v0, vmax);
-        vmax = fmax(t.v1, vmax);
-        vmax = fmax(t.v2, vmax);
+        float3 minToMax = vmax - vmin;
+        float lx = minToMax.x;
+        float ly = minToMax.y;
+        float lz = minToMax.z;
+        return 2*lx*ly + 2*lx*lz + 2*ly*lz;
+    }
+
+    static Box fromPoint(const float3 p)
+    {
+        return Box {
+            p,p
+        };
+    }
+
+    void consumePoint(const float3& p)
+    {
+        vmin = fminf(p, vmin);
+        vmax = fmaxf(p, vmax);
     }
 
     bool overlaps(const Box& other) const {

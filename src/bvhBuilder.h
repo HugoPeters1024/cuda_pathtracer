@@ -26,24 +26,6 @@ Box buildTriangleBox(const std::vector<Triangle> triangles)
     };
 }
 
-float triangleBoxArea(const std::vector<Triangle> triangles)
-{
-    if (triangles.size() == 0) return std::numeric_limits<float>::infinity();
-    Box box = buildTriangleBox(triangles);
-    float3 minToMax = box.vmax - box.vmin;
-    float lx = minToMax.x;
-    float ly = minToMax.y;
-    float lz = minToMax.z;
-    return 2*lx*ly + 2*lx*lz + 2*ly*lz;
-}
-
-// Calculate the surface area heuristic
-float SAH(const std::vector<Triangle>& s1, const std::vector<Triangle>& s2, float parentSurface)
-{
-    return (triangleBoxArea(s1) / parentSurface) * s1.size() + (triangleBoxArea(s2) / parentSurface) * s2.size() + 0.5;
-}
-
-
 BVHTree* createBVH(std::vector<Triangle> triangles)
 {
     BVHTree* ret = new BVHTree();
@@ -52,7 +34,7 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     ret->child2 = nullptr;
     ret->triangles = std::vector<Triangle>();
     ret->boundingBox = buildTriangleBox(triangles);
-    const float parentSurface = triangleBoxArea(triangles);
+    const float parentSurface = ret->boundingBox.getSurfaceArea();
     ret->used_level = -1;
 
     int min_level = -1;
@@ -68,24 +50,49 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
             case 2: std::sort(triangles.begin(), triangles.end(), __compare_triangles_z); break;
         }
 
-        std::vector<Triangle> s1 = triangles;
-        std::vector<Triangle> s2 = std::vector<Triangle>();
+        std::vector<float> leftCosts;
+        leftCosts.reserve(triangles.size());
+        Box leftBox = triangles[0].getBoundingBox();
 
-        // Calculate the best SAH by
-        for (int i=triangles.size()-1; i>=0; i--)
+
+        // first sweep from the left to get the left costs
+        // we sweep so we can incrementally update the bounding box for efficiency
+        for (int i=0; i<triangles.size(); i++)
         {
-            float thisCost = SAH(s1, s2, parentSurface);
-            // Save the lowest cost
+            const Triangle& t = triangles[i];
+            leftBox.consumePoint(t.v0);
+            leftBox.consumePoint(t.v1);
+            leftBox.consumePoint(t.v2);
+            leftCosts.push_back((leftBox.getSurfaceArea() / parentSurface));
+        }
+
+        std::vector<float> rightCosts;
+        rightCosts.reserve(triangles.size());
+        Box rightBox = triangles.back().getBoundingBox();
+
+        for(int i=triangles.size()-1; i>=0; i--)
+        {
+            const Triangle& t = triangles[i];
+            rightBox.consumePoint(t.v0);
+            rightBox.consumePoint(t.v1);
+            rightBox.consumePoint(t.v2);
+            rightCosts.push_back((rightBox.getSurfaceArea() / parentSurface));
+        }
+
+        // we reverse the values of the right list because have can only add them from the left
+        std::reverse(rightCosts.begin(), rightCosts.end());
+
+        // Find the optimal combined costs index
+        for(int i=0; i<triangles.size(); i++)
+        {
+            // 0.5 is the cost of traversal
+            float thisCost = leftCosts[i] * i + rightCosts[i] * (triangles.size() - i) + 1.5;
             if (thisCost < min_cost)
             {
                 min_cost = thisCost;
                 min_split_pos = i;
                 min_level = level;
             }
-
-            // Move 1 element from S2 to S1
-            s2.push_back(s1.back());
-            s1.pop_back();
         }
     }
 
@@ -104,7 +111,7 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         case 2: std::sort(triangles.begin(), triangles.end(), __compare_triangles_z); break;
     }
 
-    int m = min_split_pos + 1;
+    int m = min_split_pos;
     std::vector<Triangle> lows(triangles.begin(), triangles.begin() + m);
     std::vector<Triangle> highs(triangles.begin() + m, triangles.end());
 
@@ -158,26 +165,6 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         }
         seqBvh.push_back(node);
     }
-}
-// Sanity checks
-bool verifyBVHTree(const BVHTree* root)
-{
-    std::stack<const BVHTree*> work;
-    work.push(root);
-
-    while (!work.empty())
-    {
-        const BVHTree* current = work.top();
-        work.pop();
-
-        if ((current->child1 == nullptr) ^ (current->child2 == nullptr))
-        {
-            printf("Partial nodes detected in tree, only one child\n");
-            return false;
-        }
-    }
-
-    return true;
 }
 
 class Scene
