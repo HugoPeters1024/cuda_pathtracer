@@ -142,7 +142,6 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         BVHNode node;
         node.child2 = 0;
         node.boundingBox = currentNode->boundingBox;
-        node.parent = discoveredBy;
         node.split_plane = currentNode->used_level;
 
         // The node adds it's segment

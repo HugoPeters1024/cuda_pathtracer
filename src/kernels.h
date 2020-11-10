@@ -10,9 +10,8 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
     return max(dot(v1,v2),0.0f);
 }
 
-__device__ bool firstIsNear(uint node_id, const Ray& ray)
+__device__ bool firstIsNear(const BVHNode& node, const Ray& ray)
 {
-    BVHNode node = GBVH[node_id];
     switch(node.split_plane)
     {
         case 0: return ray.direction.x > 0;
@@ -21,35 +20,6 @@ __device__ bool firstIsNear(uint node_id, const Ray& ray)
     }
     return false;
 }
-
-__device__ inline uint parent(uint node_id)
-{
-    return GBVH[node_id].parent;
-}
-
-__device__ inline uint nearChild(uint node_id, const Ray& ray)
-{
-    return firstIsNear(node_id, ray) ? node_id + 1 : GBVH[node_id].child2;
-}
-
-__device__ inline uint farChild(uint node_id, const Ray& ray)
-{
-    return firstIsNear(node_id, ray) ? GBVH[node_id].child2 : node_id + 1;
-}
-
-__device__ inline uint sibling(uint node_id)
-{
-    uint parent_id = parent(node_id);
-    return parent_id + 1 == node_id ? GBVH[parent_id].child2 : parent_id + 1;
-}
-
-
-__device__ inline bool isLeaf(uint node_id)
-{
-    BVHNode node = GBVH[node_id];
-    return node.t_count > 0;
-}
-
 
 __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis)
 {
@@ -147,21 +117,19 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-__device__ inline bool boxtest(uint node_id, const Ray& ray, const HitInfo* hitInfo)
+__device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hitInfo)
 {
-    BVHNode node = GBVH[node_id];
     float tmin, tmax;
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
-    return rayBoxIntersect(ray, node.boundingBox, &tmin, &tmax) && tmin < hitInfo->t;
+    return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
 
 // Performs intersection against a leaf node's triangles
-__device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
+__device__ void processLeaf(const BVHNode& node, const Ray& ray, HitInfo* hitInfo)
 {
-    BVHNode node = GBVH[node_id];
     uint start = node.t_start;
     uint end = start + node.t_count;
     for(uint i=start; i<end; i++)
@@ -190,18 +158,20 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
     uint size = 1;
     do
     {
-        uint current = *--stackPtr;
+        uint current_id = *--stackPtr;
+        BVHNode current = GBVH[current_id];
         size -= 1;
-        if (boxtest(current, ray, &hitInfo))
+        if (boxtest(current.boundingBox, ray, &hitInfo))
         {
-            if (isLeaf(current))
+            if (current.isLeaf())
             {
                 processLeaf(current, ray, &hitInfo);
             }
             else
             {
-                uint near = nearChild(current, ray);
-                uint far = sibling(near);
+                bool firstNear = firstIsNear(current, ray);
+                uint near = firstNear ? current_id + 1 : current.child2;
+                uint far = firstNear ? current.child2 : current_id + 1;
                 // push on the stack, first the far child
                 *stackPtr++ = far;
                 *stackPtr++ = near;
@@ -223,60 +193,6 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
 #define FROM_PARENT 0
 #define FROM_SIBLING 1
 #define FROM_CHILD 2
-
-
-__device__ HitInfo traverseBVH(const Ray& ray)
-{
-    HitInfo hitInfo;
-    hitInfo.intersected = false;
-    hitInfo.t = 999999;
-
-    uint root = 0;
-    uint current = nearChild(root, ray);
-    char state = FROM_PARENT;
-
-    bool searching = true;
-    int zz = 0;
-    // set a limit so we don't crash the pc if something goes wrong.
-    const int max_iterations = 900;
-    while(zz++ < max_iterations && searching) {
-        switch(state)
-        {
-            case FROM_CHILD:
-                if (current == 0) searching=false; // finished;
-                if (current == nearChild(parent(current), ray)) {
-                    current=sibling(current); state=FROM_SIBLING;
-                } else {
-                    current = parent(current); state=FROM_CHILD;
-                }
-                break;
-
-            case FROM_SIBLING:
-            case FROM_PARENT:
-                if (!boxtest(current,ray, &hitInfo)){
-                    current = state == FROM_SIBLING ? parent(current) : sibling(current);
-                    state = state == FROM_SIBLING ? FROM_CHILD : FROM_SIBLING;
-                } else if (isLeaf(current)) {
-                    processLeaf(current, ray, &hitInfo);
-                    current = state == FROM_SIBLING ? parent(current) : sibling(current);
-                    state = state == FROM_SIBLING ? FROM_CHILD : FROM_SIBLING;
-                } else {
-                    current = nearChild(current, ray); state=FROM_PARENT;
-                }
-                break;
-        }
-    }
-
-    // If the loop terminates because of the max_iterations something went wrong, perhaps the
-    // scene is too large and max_iterations needs to be increased
-    // but be weary of crashing your system if you go too high.
-    assert (zz < max_iterations);
-    if (hitInfo.intersected) {
-        hitInfo.normal = GTriangles[hitInfo.triangle_id].n0;
-        if (dot(hitInfo.normal, ray.direction) >= 0) hitInfo.normal = -hitInfo.normal;
-    }
-    return hitInfo;
-}
 
 __device__ float3 radiance(const Ray& ray, Ray* shadowRay, uint depth)
 {

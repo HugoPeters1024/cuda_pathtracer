@@ -177,11 +177,12 @@ struct BVHTree
 struct __align__(16) BVHNode
 {
     Box boundingBox;
-    uint parent;
     uint child2;
     uint split_plane;
     uint t_start;
     uint t_count;
+
+    HYBRID bool isLeaf() const { return t_count > 0; }
 };
 
 class Camera
