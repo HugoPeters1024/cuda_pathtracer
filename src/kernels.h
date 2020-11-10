@@ -176,6 +176,49 @@ __device__ void processLeaf(uint node_id, const Ray& ray, HitInfo* hitInfo)
     }
 }
 
+__device__ HitInfo traverseBVHStack(const Ray& ray)
+{
+    HitInfo hitInfo;
+    hitInfo.intersected = false;
+    hitInfo.t = 999999;
+
+    const uint STACK_SIZE = 320;
+    uint stack[STACK_SIZE];
+    uint* stackPtr = stack;
+    *stackPtr++ = 0;
+
+    uint size = 1;
+    do
+    {
+        uint current = *--stackPtr;
+        size -= 1;
+        if (boxtest(current, ray, &hitInfo))
+        {
+            if (isLeaf(current))
+            {
+                processLeaf(current, ray, &hitInfo);
+            }
+            else
+            {
+                uint near = nearChild(current, ray);
+                uint far = sibling(near);
+                // push on the stack, first the far child
+                *stackPtr++ = far;
+                *stackPtr++ = near;
+                size += 2;
+                assert (size < STACK_SIZE);
+            }
+        }
+    } while (size > 0);
+
+    if (hitInfo.intersected) {
+        hitInfo.normal = GTriangles[hitInfo.triangle_id].n0;
+        if (dot(hitInfo.normal, ray.direction) >= 0) hitInfo.normal = -hitInfo.normal;
+    }
+    return hitInfo;
+}
+
+
 // Stackless BVH traversal states
 #define FROM_PARENT 0
 #define FROM_SIBLING 1
@@ -237,7 +280,7 @@ __device__ HitInfo traverseBVH(const Ray& ray)
 
 __device__ float3 radiance(const Ray& ray, Ray* shadowRay)
 {
-    HitInfo hitInfo = traverseBVH(ray);
+    HitInfo hitInfo = traverseBVHStack(ray);
     if (hitInfo.intersected)
     {
         Triangle& t = GTriangles[hitInfo.triangle_id];
@@ -276,13 +319,13 @@ __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
     CUDA_LIMIT(x,y);
 
     Ray ray = rays[x + y * WINDOW_WIDTH];
-    HitInfo hitInfo = traverseBVH(ray);
+    HitInfo hitInfo = traverseBVHStack(ray);
     if (hitInfo.intersected)
     {
         float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
         float3 isectDelta = intersectionPos - ray.shadowTarget;
         // New intersection point is not our illumination target
-        if (dot(isectDelta, isectDelta) > 0.0001) return;
+        if (dot(isectDelta, isectDelta) > 0.001) return;
         float illumination = 25;
         float falloff = 1.0 / (hitInfo.t * hitInfo.t);
         float lam = lambert(-ray.direction, hitInfo.normal);
