@@ -182,7 +182,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
     hitInfo.intersected = false;
     hitInfo.t = 999999;
 
-    const uint STACK_SIZE = 320;
+    const uint STACK_SIZE = 200;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
     *stackPtr++ = 0;
@@ -297,9 +297,11 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay)
         // We trace shadow rays in reverse to more coherent rays
         *shadowRay = makeRay(lightPos, -toLight);
         shadowRay->shadowTarget = intersectionPos;
+        shadowRay->active=true;
 
         return color;
     }
+    shadowRay->active = false;
     return make_float3(0);
 }
 
@@ -319,6 +321,7 @@ __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
     CUDA_LIMIT(x,y);
 
     Ray ray = rays[x + y * WINDOW_WIDTH];
+    if (!ray.active) return;
     HitInfo hitInfo = traverseBVHStack(ray);
     if (hitInfo.intersected)
     {

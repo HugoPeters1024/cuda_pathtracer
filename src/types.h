@@ -42,6 +42,15 @@ struct Box
     HYBRID inline float3 centroid() const { return (vmin + vmax) * 0.5; }
     HYBRID inline float diagonal() const { return length(vmin - vmax); };
     inline float volume() const { return abs((vmax.x - vmin.x) * (vmax.y - vmin.y) * (vmax.z - vmin.z)); }
+    void consumeTriangle(const Triangle& t)
+    {
+        vmin = fmin(t.v0, vmin);
+        vmin = fmin(t.v1, vmin);
+        vmin = fmin(t.v2, vmin);
+        vmax = fmax(t.v0, vmax);
+        vmax = fmax(t.v1, vmax);
+        vmax = fmax(t.v2, vmax);
+    }
 
     bool overlaps(const Box& other) const {
         return vmax.x >= other.vmin.x && other.vmax.x >= vmin.x &&
@@ -57,6 +66,7 @@ struct __align__(16) Ray
     float3 invdir;
     int signs[3];
     float3 shadowTarget;
+    bool active;
 };
 
 HYBRID Ray makeRay(float3 origin, float3 direction)
