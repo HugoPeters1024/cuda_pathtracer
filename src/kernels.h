@@ -10,15 +10,9 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
     return max(dot(v1,v2),0.0f);
 }
 
-__device__ bool firstIsNear(const BVHNode& node, const Ray& ray)
+__device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
 {
-    switch(node.split_plane)
-    {
-        case 0: return ray.direction.x > 0;
-        case 1: return ray.direction.y > 0;
-        case 2: return ray.direction.z > 0;
-    }
-    return false;
+    return (ray.direction.x > 0) * (node.split_plane == 0) + (ray.direction.y > 0) * (node.split_plane == 1) + (ray.direction.z > 0) * (node.split_plane == 2);
 }
 
 __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis)
