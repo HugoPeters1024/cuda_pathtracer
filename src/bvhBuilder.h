@@ -54,39 +54,32 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         leftCosts.reserve(triangles.size());
         Box leftBox = triangles[0].getBoundingBox();
 
+        std::vector<float> rightCosts;
+        rightCosts.reserve(triangles.size());
+        Box rightBox = triangles.back().getBoundingBox();
 
         // first sweep from the left to get the left costs
         // we sweep so we can incrementally update the bounding box for efficiency
         for (int i=0; i<triangles.size(); i++)
         {
-            const Triangle& t = triangles[i];
-            leftBox.consumePoint(t.v0);
-            leftBox.consumePoint(t.v1);
-            leftBox.consumePoint(t.v2);
+            const Triangle& tl = triangles[i];
+            leftBox.consumePoint(tl.v0);
+            leftBox.consumePoint(tl.v1);
+            leftBox.consumePoint(tl.v2);
             leftCosts.push_back((leftBox.getSurfaceArea() / parentSurface));
-        }
 
-        std::vector<float> rightCosts;
-        rightCosts.reserve(triangles.size());
-        Box rightBox = triangles.back().getBoundingBox();
-
-        for(int i=triangles.size()-1; i>=0; i--)
-        {
-            const Triangle& t = triangles[i];
-            rightBox.consumePoint(t.v0);
-            rightBox.consumePoint(t.v1);
-            rightBox.consumePoint(t.v2);
+            const Triangle& tr = triangles[triangles.size() - i-1];
+            rightBox.consumePoint(tr.v0);
+            rightBox.consumePoint(tr.v1);
+            rightBox.consumePoint(tr.v2);
             rightCosts.push_back((rightBox.getSurfaceArea() / parentSurface));
         }
-
-        // we reverse the values of the right list because have can only add them from the left
-        std::reverse(rightCosts.begin(), rightCosts.end());
 
         // Find the optimal combined costs index
         for(int i=0; i<triangles.size(); i++)
         {
             // 0.5 is the cost of traversal
-            float thisCost = leftCosts[i] * i + rightCosts[i] * (triangles.size() - i) + 1.5;
+            float thisCost = leftCosts[i] * i + rightCosts[triangles.size() - i - 1] * (triangles.size() - i) + 1.0;
             if (thisCost < min_cost)
             {
                 min_cost = thisCost;
