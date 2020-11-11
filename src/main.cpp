@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpy(boxBuf, boxes, sizeof(boxes), cudaMemcpyHostToDevice) );
 
     Scene scene;
-    //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), 0);
+    scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), 0);
     //scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
     scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0,8,0), 0);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
 
         // Calculate the thread size and warp size
         int tx = 8;
-        int ty = 16;
+        int ty = 8;
         dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);
         dim3 dimThreads(tx,ty);
 
@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
 //        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
         kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), camera);
-        kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
+      //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda
