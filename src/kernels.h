@@ -5,6 +5,31 @@
 #include "types.h"
 #include "globals.h"
 
+__device__ uint wang_hash(uint seed)
+{
+    seed = (seed ^ 61) ^ (seed >> 16);
+    seed *= 9;
+    seed = seed ^ (seed >> 4);
+    seed *= 0x27d4eb2d;
+    seed = seed ^ (seed >> 15);
+    return seed;
+}
+
+__device__ inline float rand(uint* seed)
+{
+    uint m = wang_hash(*seed);
+    *seed = m;
+
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+
+    float  f = reinterpret_cast<float&>(m);       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
+}
+
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
     return max(dot(v1,v2),0.0f);
@@ -178,6 +203,16 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
         hitInfo.normal = GTriangles[hitInfo.triangle_id].n0;
         if (dot(hitInfo.normal, ray.direction) >= 0) hitInfo.normal = -hitInfo.normal;
     }
+
+    float light_t;
+    if (raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
+    {
+        hitInfo.t = light_t;
+        float3 isectPos = ray.origin + light_t * ray.direction;
+        hitInfo.normal = normalize(isectPos - GLight.pos);
+        hitInfo.intersected = true;
+        hitInfo.triangle_id = 0;
+    }
     return hitInfo;
 }
 
@@ -216,39 +251,27 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay, uint depth)
     return make_float3(0);
 }
 
-__device__ static float getRandom(uint *seed0, uint *seed1) {
-    *seed0 = 36969 * ((*seed0) & 65535) + ((*seed0) >> 16);  // hash the seeds using bitwise AND and bitshifts
-    *seed1 = 18000 * ((*seed1) & 65535) + ((*seed1) >> 16);
+__device__ float3 sampleLight(float3& origin)
+{
 
-    unsigned int ires = ((*seed0) << 16) + (*seed1);
-
-    // Convert to float
-    union {
-        float f;
-        unsigned int ui;
-    } res;
-
-    res.ui = (ires & 0x007fffff) | 0x40000000;  // bitwise AND, bitwise OR
-
-    return (res.f - 2.f) / 2.f;
 }
 
-__device__ float3 radiance2(Ray& ray, uint* s0, uint* s1)
+__device__ float3 radiance2(Ray& ray, uint* seed)
 {
     float3 accucolor = make_float3(0);
     float3 mask = make_float3(1);
 
-    for(int bounces=0; bounces < 2; bounces++)
+    for(int bounces=0; bounces < 3; bounces++)
     {
         HitInfo hitInfo = traverseBVHStack(ray);
         if (!hitInfo.intersected) return make_float3(0);
 
         Triangle& collider = GTriangles[hitInfo.triangle_id];
-        float3 emission = (collider.color.y < 0.9) * make_float3(100);
+        float3 emission = (hitInfo.triangle_id == 0) * make_float3(3,3,3);
         accucolor += mask * emission;
 
-        float r1 = 2 * 3.1415926535 * getRandom(s0, s1);
-        float r2 = getRandom(s0, s1);
+        float r1 = 2 * 3.1415926535 * rand(seed);
+        float r2 = rand(seed);
         float r2s = sqrtf(r2);
 
         float3 w = hitInfo.normal;
@@ -271,21 +294,28 @@ __device__ float3 radiance2(Ray& ray, uint* s0, uint* s1)
     return accucolor;
 }
 
+__global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    CUDA_LIMIT(x,y);
+    surf2Dwrite(make_float4(0), texRef, x*sizeof(float4), y);
+}
+
+
 __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, Camera camera) {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
 
-    uint s0 = x * int(time*100);
-    uint s1 = y * int(time*100);
-
+    uint seed = (x + WINDOW_WIDTH * y) * (uint)(time * 100);
     Ray ray = camera.getRay(x,y);
 
-    float alpha = 0.95;
-    float3 color = clamp(radiance2(ray, &s0, &s1), 0,1);
-    float4 old_color;
-    surf2Dread(&old_color, texRef, x*sizeof(float4), y);
-    surf2Dwrite(old_color * alpha + make_float4(color,1)*(1-alpha), texRef, x*sizeof(float4), y);
+    float3 color = radiance2(ray, &seed);
+    float4 old_color_all;
+    surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
+    float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
+    surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, x*sizeof(float4), y);
 }
 
 __global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {

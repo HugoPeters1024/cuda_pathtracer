@@ -11,6 +11,7 @@
 #include <cuda_runtime_api.h>
 #include <driver_types.h>
 #include <texture_types.h>
+#include <curand_kernel.h>
 #include "cutil_math.h"
 
 #define cudaSafe(ans) { cudaAssert((ans), __FILE__, __LINE__); }

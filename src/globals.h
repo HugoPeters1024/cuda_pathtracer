@@ -10,6 +10,8 @@ __constant__ BVHNode* GBVH;
 // global pointer to triangle buffer
 __constant__ Triangle* GTriangles;
 
+__constant__ Sphere GLight;
+
 // the global application time
 __device__ float GTime;
 

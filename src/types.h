@@ -136,6 +136,11 @@ struct __align__(16) Triangle
         };
     }
 
+    float getSurfaceArea() const
+    {
+        return 0.5 * (v0.x*(v1.y - v2.y) + v1.x*(v2.y - v0.y) + v2.x*(v0.y-v1.y));
+    }
+
 };
 
 static bool __compare_triangles_x (Triangle a, Triangle b) {

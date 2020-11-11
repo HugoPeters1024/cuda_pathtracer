@@ -40,7 +40,8 @@ uniform sampler2D tex;
 layout (location = 0) uniform float time;
 
 void main() { 
-    color = texture(tex, uv);
+    vec4 c = texture(tex, uv);
+    color = vec4(c.xyz / c.w, 1);
 }
 )";
 
@@ -101,33 +102,11 @@ int main(int argc, char** argv) {
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
     cudaArray *arrayPtr;
 
-    Sphere spheres[2] {
-        Sphere {
-            make_float3(-0.4,1.0,0.5),
-            0.34 
-        },
-        Sphere {
-            make_float3(0.3,1.5,0),
-            0.7
-        }
-    };
-    Sphere* sphereBuf;
-    cudaSafe( cudaMalloc(&sphereBuf, sizeof(spheres)) );
-    cudaSafe( cudaMemcpy(sphereBuf, spheres, sizeof(spheres), cudaMemcpyHostToDevice) );
-
-    Box boxes[1] {
-        Box {
-            make_float3(-0.5, 2, -0.5),
-            make_float3(0.5, 3, 0.5),
-        }
-    };
-    Box* boxBuf;
-    cudaSafe( cudaMalloc(&boxBuf, sizeof(boxes)) );
-    cudaSafe( cudaMemcpy(boxBuf, boxes, sizeof(boxes), cudaMemcpyHostToDevice) );
-
+    // Add the models
     Scene scene;
-    scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), 0);
+    //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), 0);
     //scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
+    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0,8,0), 0);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
@@ -136,6 +115,14 @@ int main(int argc, char** argv) {
     std::vector<Triangle> newTriangles;
     std::vector<BVHNode> newBvh;
     sequentializeBvh(bvh, newTriangles, newBvh);
+
+    // add a sphere as light source
+    Sphere light = {
+            make_float3(-3,0,0),
+            2,
+            make_float3(0.8,0.2, 0.2)
+    };
+    cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
 
     assert(newBvh.size() == bvh->treeSize());
 
@@ -197,6 +184,8 @@ int main(int argc, char** argv) {
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
 //        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
+        if (camera.hasMoved())
+            kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
         kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), camera);
       //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
