@@ -251,9 +251,23 @@ __device__ float3 radiance(const Ray& ray, Ray* shadowRay, uint depth)
     return make_float3(0);
 }
 
-__device__ float3 sampleLight(float3& origin)
+__device__ float3 sampleLight(const float3& origin, uint* seed)
 {
+    float3 r = normalize(make_float3(rand(seed), rand(seed), rand(seed)));
+    float3 samplePoint = GLight.pos + r;
 
+    float3 toSample = samplePoint - origin;
+    float3 newDir = normalize(toSample);
+    Ray ray = makeRay(origin, newDir);
+
+    HitInfo hitInfo = traverseBVHStack(ray);
+
+    if (!hitInfo.intersected || hitInfo.triangle_id != 0) return make_float3(0);
+
+    // solid angle of a sphere: https://en.wikipedia.org/wiki/Solid_angle
+    float r2 = dot(toSample, toSample);
+    float SA = 4 * 3.1415926535 * r2;
+    return make_float3(25) / SA;
 }
 
 __device__ float3 radiance2(Ray& ray, uint* seed)
@@ -261,14 +275,14 @@ __device__ float3 radiance2(Ray& ray, uint* seed)
     float3 accucolor = make_float3(0);
     float3 mask = make_float3(1);
 
-    for(int bounces=0; bounces < 3; bounces++)
+    for(int bounces=0; bounces < 2; bounces++)
     {
         HitInfo hitInfo = traverseBVHStack(ray);
         if (!hitInfo.intersected) return make_float3(0);
 
         Triangle& collider = GTriangles[hitInfo.triangle_id];
-        float3 emission = (hitInfo.triangle_id == 0) * make_float3(3,3,3);
-        accucolor += mask * emission;
+        //float3 emission = (hitInfo.triangle_id == 0) * make_float3(3,3,3);
+        //accucolor += mask * emission;
 
         float r1 = 2 * 3.1415926535 * rand(seed);
         float r2 = rand(seed);
@@ -289,6 +303,8 @@ __device__ float3 radiance2(Ray& ray, uint* seed)
         mask *= collider.color;
         mask *= dot(d, hitInfo.normal);
         mask *= 2;
+
+        accucolor += mask * sampleLight(newOrigin, seed);
     }
 
     return accucolor;
