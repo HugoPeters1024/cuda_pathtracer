@@ -15,13 +15,6 @@
 
 #define inf 99999999
 
-#ifdef __CUDACC__
-#define HYBRID __host__ __device__
-#else
-#define HYBRID
-#endif 
-
-
 // Asserts that the current location is within the space
 #define CUDA_LIMIT(x,y) { if (x >= WINDOW_WIDTH || y >= WINDOW_HEIGHT) return; }
 
@@ -236,9 +229,9 @@ public:
 
     inline bool hasMoved() const { return has_moved; }
 
-    HYBRID inline Ray getRay(unsigned int x, unsigned int y) const {
-        float xf = x / (float)WINDOW_WIDTH;
-        float yf = y / (float)WINDOW_HEIGHT;
+    HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint* seed) const {
+        float xf = ((float)x + rand(seed)) / WINDOW_WIDTH;
+        float yf = ((float)y + rand(seed)) / WINDOW_HEIGHT;
         float3 point = lt + xf * u + yf * v;
 
         float3 direction = normalize(point - eye);

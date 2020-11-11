@@ -5,30 +5,6 @@
 #include "types.h"
 #include "globals.h"
 
-__device__ uint wang_hash(uint seed)
-{
-    seed = (seed ^ 61) ^ (seed >> 16);
-    seed *= 9;
-    seed = seed ^ (seed >> 4);
-    seed *= 0x27d4eb2d;
-    seed = seed ^ (seed >> 15);
-    return seed;
-}
-
-__device__ inline float rand(uint* seed)
-{
-    uint m = wang_hash(*seed);
-    *seed = m;
-
-    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
-    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
-
-    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
-    m |= ieeeOne;                          // Add fractional part to 1.0
-
-    float  f = reinterpret_cast<float&>(m);       // Range [1:2]
-    return f - 1.0;                        // Range [0:1]
-}
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
@@ -244,6 +220,7 @@ __device__ float3 sampleLight(const float3& origin, uint* seed)
     // From the center of the light, go to sample point
     // (by definition of the BRDF on the visible by the origin (if not occluded)
     float3 samplePoint = GLight.pos + GLight.radius * r * 1.001;
+    
 
     // We invert the ray direction to maintain a higher level of coherence.
     float3 fromSample = origin - samplePoint;
@@ -255,13 +232,13 @@ __device__ float3 sampleLight(const float3& origin, uint* seed)
     if (!hitInfo.intersected) return make_float3(0);
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
     float3 isectDelta = intersectionPos - origin;
-    // New intersection point is not our illumination target
-    if (dot(isectDelta, isectDelta) > 0.1) return make_float3(0);
+    // New intersection point is not our llumination target
+    if (dot(isectDelta, isectDelta) > 0.001) return make_float3(0);
 
     // solid angle of a sphere: https://en.wikipedia.org/wiki/Solid_angle
     float r2 = dot(fromSample, fromSample);
     float SA = 4 * 3.1415926535 * r2;
-    return make_float3(25) / SA;
+    return make_float3(60) / SA;
 }
 
 __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
@@ -307,7 +284,7 @@ __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float t
     CUDA_LIMIT(x,y);
 
     uint seed = (x + WINDOW_WIDTH * y) * (uint)(time * 100);
-    Ray ray = camera.getRay(x,y);
+    Ray ray = camera.getRay(x,y, &seed);
 
     float3 color = radiance(ray, max_bounces,  &seed);
     float4 old_color_all;

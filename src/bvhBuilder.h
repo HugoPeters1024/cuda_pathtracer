@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "constants.h"
+#include "vec.h"
 
 Box buildTriangleBox(const std::vector<Triangle> triangles)
 {
@@ -163,7 +164,7 @@ class Scene
 {
 public:
     std::vector<Triangle> triangles;
-    void addModel(std::string filename, float3 color, float scale, float3 offset, float reflect)
+    void addModel(std::string filename, float3 color, float scale, float3 rotation, float3 offset, float reflect)
     {
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
@@ -171,15 +172,25 @@ public:
         tinyobj::ObjReader objReader;
         objReader.ParseFromFile(filename, objConfig);
 
+        Matrix4 transform = Matrix4::FromTranslation(offset.x, offset.y, offset.z) * Matrix4::FromScale(scale) * Matrix4::FromAxisRotations(rotation.x, rotation.y, rotation.z);
+
         for(int i=0; i<objReader.GetShapes()[0].mesh.indices.size(); i+=3)
         {
             auto it0 = objReader.GetShapes()[0].mesh.indices[i+0];
             auto it1 = objReader.GetShapes()[0].mesh.indices[i+1];
             auto it2 = objReader.GetShapes()[0].mesh.indices[i+2];
             auto vertices = objReader.GetAttrib().vertices;
-            float3 v0 = offset + scale * make_float3(vertices[it0.vertex_index * 3 + 0], vertices[it0.vertex_index * 3 + 1], vertices[it0.vertex_index * 3 + 2]);
-            float3 v1 = offset + scale * make_float3(vertices[it1.vertex_index * 3 + 0], vertices[it1.vertex_index * 3 + 1], vertices[it1.vertex_index * 3 + 2]);
-            float3 v2 = offset + scale * make_float3(vertices[it2.vertex_index * 3 + 0], vertices[it2.vertex_index * 3 + 1], vertices[it2.vertex_index * 3 + 2]);
+            float3 v0 = make_float3(vertices[it0.vertex_index * 3 + 0], vertices[it0.vertex_index * 3 + 1], vertices[it0.vertex_index * 3 + 2]);
+            float3 v1 = make_float3(vertices[it1.vertex_index * 3 + 0], vertices[it1.vertex_index * 3 + 1], vertices[it1.vertex_index * 3 + 2]);
+            float3 v2 = make_float3(vertices[it2.vertex_index * 3 + 0], vertices[it2.vertex_index * 3 + 1], vertices[it2.vertex_index * 3 + 2]);
+
+            Vector4 v0_tmp = transform * Vector4(v0.x, v0.y, v0.z, 1);
+            Vector4 v1_tmp = transform * Vector4(v1.x, v1.y, v1.z, 1);
+            Vector4 v2_tmp = transform * Vector4(v2.x, v2.y, v2.z, 1);
+
+            v0 = make_float3(v0_tmp.x, v0_tmp.y, v0_tmp.z);
+            v1 = make_float3(v1_tmp.x, v1_tmp.y, v1_tmp.z);
+            v2 = make_float3(v2_tmp.x, v2_tmp.y, v2_tmp.z);
 
             float3 n0, n1, n2;
 
@@ -196,7 +207,6 @@ public:
                 n2 = make_float3(normals[it2.normal_index * 3 + 0], normals[it2.normal_index * 3 + 1], normals[it2.normal_index * 3 + 2]);
             }
 
-            color = i%2==0 ? make_float3(0.8, 0.0,0.4) : make_float3(0.4, 0.0, 0.8);
             triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, color, reflect});
         }
     }

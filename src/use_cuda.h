@@ -14,6 +14,12 @@
 #include <curand_kernel.h>
 #include "cutil_math.h"
 
+#ifdef __CUDACC__
+#define HYBRID __host__ __device__
+#else
+#define HYBRID
+#endif 
+
 #define cudaSafe(ans) { cudaAssert((ans), __FILE__, __LINE__); }
 inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -22,5 +28,30 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
+}
+
+HYBRID uint wang_hash(uint seed)
+{
+    seed = (seed ^ 61) ^ (seed >> 16);
+    seed *= 9;
+    seed = seed ^ (seed >> 4);
+    seed *= 0x27d4eb2d;
+    seed = seed ^ (seed >> 15);
+    return seed;
+}
+
+HYBRID inline float rand(uint* seed)
+{
+    uint m = wang_hash(*seed);
+    *seed = m;
+
+    const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    m |= ieeeOne;                          // Add fractional part to 1.0
+
+    float  f = reinterpret_cast<float&>(m);       // Range [1:2]
+    return f - 1.0;                        // Range [0:1]
 }
 #endif
