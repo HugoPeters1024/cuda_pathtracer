@@ -186,7 +186,9 @@ int main(int argc, char** argv) {
 //        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
         if (camera.hasMoved())
             kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
-        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), camera);
+
+        uint bounces = camera.hasMoved() ? 1 : 3;
+        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), bounces, camera);
       //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 

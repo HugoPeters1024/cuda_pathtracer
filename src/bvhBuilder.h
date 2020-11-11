@@ -195,6 +195,8 @@ public:
                 n1 = make_float3(normals[it1.normal_index * 3 + 0], normals[it1.normal_index * 3 + 1], normals[it1.normal_index * 3 + 2]);
                 n2 = make_float3(normals[it2.normal_index * 3 + 0], normals[it2.normal_index * 3 + 1], normals[it2.normal_index * 3 + 2]);
             }
+
+            color = i%2==0 ? make_float3(0.8, 0.0,0.4) : make_float3(0.4, 0.0, 0.8);
             triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, color, reflect});
         }
     }

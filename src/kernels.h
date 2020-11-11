@@ -162,7 +162,7 @@ __device__ void processLeaf(const BVHNode& node, const Ray& ray, HitInfo* hitInf
     }
 }
 
-__device__ HitInfo traverseBVHStack(const Ray& ray)
+__device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight)
 {
     HitInfo hitInfo;
     hitInfo.intersected = false;
@@ -205,7 +205,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
     }
 
     float light_t;
-    if (raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
+    if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
     {
         hitInfo.t = light_t;
         float3 isectPos = ray.origin + light_t * ray.direction;
@@ -213,97 +213,77 @@ __device__ HitInfo traverseBVHStack(const Ray& ray)
         hitInfo.intersected = true;
         hitInfo.triangle_id = 0;
     }
+
     return hitInfo;
 }
 
-
-__device__ float3 radiance(const Ray& ray, Ray* shadowRay, uint depth)
+__device__ float3 BRDF(const float3& normal, uint* seed)
 {
-    if (depth > 2) return make_float3(0);
-    HitInfo hitInfo = traverseBVHStack(ray);
-    if (hitInfo.intersected)
-    {
-        Triangle& t = GTriangles[hitInfo.triangle_id];
+    float r1 = 2 * 3.1415926535 * rand(seed);
+    float r2 = rand(seed);
+    float r2s = sqrtf(r2);
 
-        float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
-        float3 lightPos = make_float3(3*sin(GTime),2,3*cos(GTime));
-        float3 toLight = lightPos - intersectionPos;
-        float lightDis = length(toLight);
-        toLight = toLight / lightDis;
+    float3 w = normal;
+    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 v = cross(w,u);
 
-        // ambient comes from above
-        float ambient = 0.2 * dot(hitInfo.normal, make_float3(0,1,0));
-
-        float3 color = ambient * t.color;
-
-        // We trace shadow rays in reverse to more coherent rays
-        // but only if the light source isn't behind the triangle
-        if (dot(toLight, hitInfo.normal) > 0) {
-            *shadowRay = makeRay(lightPos, -toLight);
-            shadowRay->shadowTarget = intersectionPos;
-            shadowRay->active = true;
-        }
-        else shadowRay->active = false;
-
-        return color;
-    }
-    shadowRay->active = false;
-    return make_float3(0);
+    // compute random ray direction on hemisphere using polar coordinates
+    // cosine weighted importance sampling (favours ray directions closer to normal direction)
+    return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 }
+
 
 __device__ float3 sampleLight(const float3& origin, uint* seed)
 {
-    float3 r = normalize(make_float3(rand(seed), rand(seed), rand(seed)));
-    float3 samplePoint = GLight.pos + r;
+    // The normal pointing to our origin from the light
+    float3 normal = normalize(origin - GLight.pos);
 
-    float3 toSample = samplePoint - origin;
-    float3 newDir = normalize(toSample);
-    Ray ray = makeRay(origin, newDir);
+    // Sample the brdf from that point.
+    float3 r = BRDF(normal, seed);
 
-    HitInfo hitInfo = traverseBVHStack(ray);
+    // From the center of the light, go to sample point
+    // (by definition of the BRDF on the visible by the origin (if not occluded)
+    float3 samplePoint = GLight.pos + GLight.radius * r * 1.001;
 
-    if (!hitInfo.intersected || hitInfo.triangle_id != 0) return make_float3(0);
+    // We invert the ray direction to maintain a higher level of coherence.
+    float3 fromSample = origin - samplePoint;
+    float3 newDir = normalize(fromSample);
+    Ray ray = makeRay(samplePoint, newDir);
+
+    HitInfo hitInfo = traverseBVHStack(ray, true);
+
+    if (!hitInfo.intersected) return make_float3(0);
+    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+    float3 isectDelta = intersectionPos - origin;
+    // New intersection point is not our illumination target
+    if (dot(isectDelta, isectDelta) > 0.1) return make_float3(0);
 
     // solid angle of a sphere: https://en.wikipedia.org/wiki/Solid_angle
-    float r2 = dot(toSample, toSample);
+    float r2 = dot(fromSample, fromSample);
     float SA = 4 * 3.1415926535 * r2;
     return make_float3(25) / SA;
 }
 
-__device__ float3 radiance2(Ray& ray, uint* seed)
+__device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
 {
     float3 accucolor = make_float3(0);
     float3 mask = make_float3(1);
 
-    for(int bounces=0; bounces < 2; bounces++)
+    for(int bounces=0; bounces < max_bounces; bounces++)
     {
-        HitInfo hitInfo = traverseBVHStack(ray);
+        HitInfo hitInfo = traverseBVHStack(ray, false);
         if (!hitInfo.intersected) return make_float3(0);
+        if (hitInfo.triangle_id == 0) return make_float3(1);
 
         Triangle& collider = GTriangles[hitInfo.triangle_id];
-        //float3 emission = (hitInfo.triangle_id == 0) * make_float3(3,3,3);
-        //accucolor += mask * emission;
-
-        float r1 = 2 * 3.1415926535 * rand(seed);
-        float r2 = rand(seed);
-        float r2s = sqrtf(r2);
-
-        float3 w = hitInfo.normal;
-        float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-        float3 v = cross(w,u);
-
-        // compute random ray direction on hemisphere using polar coordinates
-        // cosine weighted importance sampling (favours ray directions closer to normal direction)
-        float3 d = normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 
         // setup ray for new intersection
         float3 newOrigin = ray.origin + (hitInfo.t - 0.001) * ray.direction;
-        ray = makeRay(newOrigin, d);
+        float3 newDir = BRDF(hitInfo.normal, seed);
+        ray = makeRay(newOrigin, newDir);
 
         mask *= collider.color;
-        mask *= dot(d, hitInfo.normal);
-        mask *= 2;
-
+        mask *= dot(newDir, hitInfo.normal);
         accucolor += mask * sampleLight(newOrigin, seed);
     }
 
@@ -319,7 +299,9 @@ __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
 }
 
 
-__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, Camera camera) {
+__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, uint max_bounces, Camera camera) {
+    // Let's take it easy here cowboy
+    assert (max_bounces < 5);
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
@@ -327,37 +309,11 @@ __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float t
     uint seed = (x + WINDOW_WIDTH * y) * (uint)(time * 100);
     Ray ray = camera.getRay(x,y);
 
-    float3 color = radiance2(ray, &seed);
+    float3 color = radiance(ray, max_bounces,  &seed);
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
     surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, x*sizeof(float4), y);
-}
-
-__global__ void kernel_shadows(Ray* rays, cudaSurfaceObject_t texRef) {
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    CUDA_LIMIT(x,y);
-
-    Ray ray = rays[x + y * WINDOW_WIDTH];
-    if (!ray.active) return;
-    HitInfo hitInfo = traverseBVHStack(ray);
-    if (hitInfo.intersected)
-    {
-        float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
-        float3 isectDelta = intersectionPos - ray.shadowTarget;
-        // New intersection point is not our illumination target
-        if (dot(isectDelta, isectDelta) > 0.001) return;
-        float illumination = 25;
-        float falloff = 1.0 / (hitInfo.t * hitInfo.t);
-        float lam = lambert(-ray.direction, hitInfo.normal);
-        float3 color = GTriangles[hitInfo.triangle_id].color;
-
-        float4 old_color;
-        surf2Dread(&old_color, texRef, x*sizeof(float4), y);
-        surf2Dwrite(old_color + make_float4(color,1) * illumination * falloff * lam, texRef, x*sizeof(float4), y);
-    }
-
 }
 
 #endif

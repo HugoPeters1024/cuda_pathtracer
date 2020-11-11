@@ -77,8 +77,6 @@ struct __align__(16) Ray
     float3 direction;
     float3 invdir;
     int signs[3];
-    float3 shadowTarget;
-    bool active;
 };
 
 HYBRID Ray makeRay(float3 origin, float3 direction)
