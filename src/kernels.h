@@ -238,7 +238,7 @@ __device__ float3 sampleLight(const float3& origin, uint* seed)
     // solid angle of a sphere: https://en.wikipedia.org/wiki/Solid_angle
     float r2 = dot(fromSample, fromSample);
     float SA = 4 * 3.1415926535 * r2;
-    return make_float3(60) / SA;
+    return GLight.color / SA;
 }
 
 __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)

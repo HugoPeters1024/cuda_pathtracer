@@ -1,7 +1,7 @@
 #ifndef H_TYPES
 #define H_TYPES
 
-#include <vector>
+include <vector>
 #include <algorithm>
 #include <stack>
 
@@ -167,6 +167,12 @@ struct BVHTree
         uint left = child1 != nullptr ? child1->treeSize() : 0;
         uint right = child2 != nullptr ? child2->treeSize() : 0;
         return 1 + left + right;
+    }
+
+    ~BVHTree()
+    {
+        delete child1;
+        delete child2;
     }
 };
 

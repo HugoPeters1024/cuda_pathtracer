@@ -116,23 +116,24 @@ int main(int argc, char** argv) {
     std::vector<Triangle> newTriangles;
     std::vector<BVHNode> newBvh;
     sequentializeBvh(bvh, newTriangles, newBvh);
+    assert(newBvh.size() == bvh->treeSize());
+
+    delete bvh;
 
     // add a sphere as light source
     Sphere light = {
-            make_float3(-3                                                                                         ,4,0),
+            make_float3(-8,4,0),
             0.05,
-            make_float3(0.8,0.2, 0.2)
+            make_float3(150)
     };
-    cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
 
-    assert(newBvh.size() == bvh->treeSize());
 
     Triangle* triangleBuf;
     cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
     cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
 
     BVHNode* bvhBuf;
-    printf("BVH Size: %ul\n", newBvh.size());
+    printf("BVH Size: %u\n", newBvh.size());
     cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
     cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
@@ -155,6 +156,7 @@ int main(int argc, char** argv) {
     printf("BVHNode is %i bytes\n", sizeof(BVHNode));
     printf("Triangle is %i bytes\n", sizeof(BVHNode));
 
+    bool shouldClear = false;
     while (!glfwWindowShouldClose(window))
     {
         tick++;
@@ -184,8 +186,9 @@ int main(int argc, char** argv) {
 
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
+        cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
 //        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
-        if (camera.hasMoved())
+        if (shouldClear)
             kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
 
         uint bounces = camera.hasMoved() ? 1 : 3;
@@ -207,12 +210,19 @@ int main(int argc, char** argv) {
 
         // Handle IO and swap the backbuffer
         camera.update(window);
+        shouldClear = camera.hasMoved();
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { light.color *= 0.97; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { light.color *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
         glfwPollEvents();
         glfwSwapBuffers(window);
 
         double fps = 1.0f / (glfwGetTime() - start);
         runningAverageFps = runningAverageFps * 0.95 + 0.05 * fps;
         if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
+
+
 
         // Vsync is broken in GLFW for my card, so just hack it in.
         while (glfwGetTime() - start < 1.0 / 60.0) {}
