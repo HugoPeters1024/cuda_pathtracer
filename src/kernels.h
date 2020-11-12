@@ -209,10 +209,13 @@ __device__ float3 BRDF(const float3& normal, uint* seed)
 }
 
 
-__device__ float3 sampleLight(const float3& origin, uint* seed)
+__device__ float3 sampleLight(const float3& origin, const float3& surfaceNormal, uint* seed)
 {
     // The normal pointing to our origin from the light
     float3 normal = normalize(origin - GLight.pos);
+
+    // We are our own ocluder, so no need to trace
+    if (dot(normal, surfaceNormal) > 0) return make_float3(0);
 
     // Sample the brdf from that point.
     float3 r = BRDF(normal, seed);
@@ -261,7 +264,7 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
 
         mask *= collider.color;
         mask *= dot(newDir, hitInfo.normal);
-        accucolor += mask * sampleLight(newOrigin, seed);
+        accucolor += mask * sampleLight(newOrigin, hitInfo.normal, seed);
     }
 
     return accucolor;
