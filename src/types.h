@@ -68,28 +68,28 @@ struct __align__(16) Ray
 {
     float3 origin;
     float3 direction;
-    float3 invdir;
-    int signs[3];
+    uint pixelx;
+    uint pixely;
 };
 
-HYBRID Ray makeRay(float3 origin, float3 direction)
+HYBRID Ray makeRay(float3 origin, float3 direction, uint px, uint py)
 {
     Ray ray;
     ray.origin = origin;
     ray.direction = direction;
-    ray.invdir = 1.0 / ray.direction;
-    ray.signs[0] = (int)(ray.invdir.x < 0);
-    ray.signs[1] = (int)(ray.invdir.y < 0);
-    ray.signs[2] = (int)(ray.invdir.z < 0);
+    ray.pixelx = px;
+    ray.pixely = py;
     return ray;
 }
 
-struct HitInfo
+struct __align__(16) HitInfo
 {
     bool intersected;
     uint triangle_id;
     float t;
     float3 normal;
+    uint pixelx;
+    uint pixely;
 };
 
 struct __align__(16) Triangle
@@ -187,6 +187,37 @@ struct __align__(16) BVHNode
     HYBRID bool isLeaf() const { return t_count > 0; }
 };
 
+struct RayQueue
+{
+    Ray* values;
+    uint size;
+
+    RayQueue() {}
+    RayQueue(uint capacity)
+    {
+        cudaSafe( cudaMalloc(&values, capacity * sizeof(Ray)) );
+        size = 0;
+    }
+
+    void syncFromDevice(const RayQueue& origin)
+    {
+        cudaSafe (cudaMemcpyFromSymbol(this, origin, sizeof(RayQueue)) );
+    }
+
+    void syncToDevice(const RayQueue& destination)
+    {
+        cudaSafe( cudaMemcpyToSymbol(destination, this, sizeof(RayQueue)) );
+    }
+
+    __device__ void push(const Ray& ray)
+    {
+        uint index = atomicAdd(&size, 1);
+        values[index] = ray;
+    }
+
+    inline void clear() { size = 0; }
+};
+
 class Camera
 {
 private:
@@ -241,7 +272,7 @@ public:
         float3 point = lt + xf * u + yf * v;
 
         float3 direction = normalize(point - eye);
-        return makeRay(eye, direction);
+        return makeRay(eye, direction, x, y);
     }
 };
 

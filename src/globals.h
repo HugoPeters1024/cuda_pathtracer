@@ -15,4 +15,8 @@ __constant__ Sphere GLight;
 // the global application time
 __device__ float GTime;
 
+__device__ RayQueue GRayQueue;
+
+__device__ RayQueue GShadowRayQueue;
+
 #endif

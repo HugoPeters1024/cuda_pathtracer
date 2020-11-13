@@ -1,4 +1,6 @@
 
+#include "constants.h"
+#include <cuda_runtime_api.h>
 #include <driver_types.h>
 #include <stdio.h>
 #include <iostream>
@@ -148,6 +150,14 @@ int main(int argc, char** argv) {
     // Do the same for the triangle buffer
     cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
+    // queue of rays used in wavefront tracing
+    RayQueue rayQueue(WINDOW_WIDTH * WINDOW_HEIGHT);
+    RayQueue shadowRayQueue(WINDOW_WIDTH * WINDOW_HEIGHT);
+
+    HitInfo* intersectionBuf;
+    cudaSafe( cudaMalloc(&intersectionBuf, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(HitInfo)) );
+
+
     // Set the initial camera values;
     Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1);
     double runningAverageFps = 0;
@@ -155,6 +165,8 @@ int main(int argc, char** argv) {
 
     printf("BVHNode is %i bytes\n", sizeof(BVHNode));
     printf("Triangle is %i bytes\n", sizeof(BVHNode));
+    printf("Ray is %i bytes\n", sizeof(Ray));
+    printf("HitInfo is %i bytes\n", sizeof(HitInfo));
 
     bool shouldClear = false;
     while (!glfwWindowShouldClose(window))
@@ -187,12 +199,29 @@ int main(int argc, char** argv) {
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
         cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
-//        kernel_create_primary_rays<<<dimBlock, dimThreads>>>(rayBuf, camera);
+
+        // clear the ray queue and update on gpu
         if (shouldClear)
             kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
 
-        uint bounces = camera.hasMoved() ? 1 : 3;
-        kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), bounces, camera);
+        uint bounces = shouldClear ? 1 : 3;
+
+        // Generate primary rays in the ray queue
+        rayQueue.clear();
+        rayQueue.syncToDevice(GRayQueue);
+        kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, glfwGetTime());
+        rayQueue.syncFromDevice(GRayQueue);
+        assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
+
+
+        // Find intersection point then clear the ray buffer again.
+        kernel_extend<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size);
+
+        shadowRayQueue.clear();
+        shadowRayQueue.syncToDevice(GShadowRayQueue);
+        kernel_shade<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size, inputSurfObj);
+        shadowRayQueue.syncFromDevice(GShadowRayQueue);
+        //kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), bounces, camera);
       //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 

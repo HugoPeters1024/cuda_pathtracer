@@ -14,6 +14,8 @@
 #include <curand_kernel.h>
 #include "cutil_math.h"
 
+#include "constants.h"
+
 #ifdef __CUDACC__
 #define HYBRID __host__ __device__
 #else
@@ -54,4 +56,10 @@ HYBRID inline float rand(uint* seed)
     float  f = reinterpret_cast<float&>(m);       // Range [1:2]
     return f - 1.0;                        // Range [0:1]
 }
+
+HYBRID inline uint getSeed(uint x, uint y, float time)
+{
+    return (x + WINDOW_WIDTH * y) * (uint)(time * 100);
+}
+
 #endif

@@ -1,6 +1,7 @@
 #ifndef H_KERNELS
 #define H_KERNELS
 
+#include "constants.h"
 #include "use_cuda.h"
 #include "types.h"
 #include "globals.h"
@@ -30,21 +31,26 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
 
 __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float* maxt)
 {
+    int signs[3];
+    float3 invdir = 1.0 / r.direction;
+    signs[0] = (int)(invdir.x < 0);
+    signs[1] = (int)(invdir.y < 0);
+    signs[2] = (int)(invdir.z < 0);
     float3 bounds[2] { box.vmin, box.vmax };
     float tmin, tmax, tymin, tymax, tzmin, tzmax; 
     bool ret = true;
  
-    tmin = (bounds[r.signs[0]].x - r.origin.x) * r.invdir.x; 
-    tmax = (bounds[1-r.signs[0]].x - r.origin.x) * r.invdir.x; 
-    tymin = (bounds[r.signs[1]].y - r.origin.y) * r.invdir.y; 
-    tymax = (bounds[1-r.signs[1]].y - r.origin.y) * r.invdir.y; 
+    tmin = (bounds[signs[0]].x - r.origin.x) * invdir.x; 
+    tmax = (bounds[1-signs[0]].x - r.origin.x) * invdir.x; 
+    tymin = (bounds[signs[1]].y - r.origin.y) * invdir.y; 
+    tymax = (bounds[1-signs[1]].y - r.origin.y) * invdir.y; 
  
     ret &= !((tmin > tymax) || (tymin > tmax));
     tmin = max(tymin, tmin);
     tmax = min(tymax, tmax);
  
-    tzmin = (bounds[r.signs[2]].z - r.origin.z) * r.invdir.z; 
-    tzmax = (bounds[1-r.signs[2]].z - r.origin.z) * r.invdir.z; 
+    tzmin = (bounds[signs[2]].z - r.origin.z) * invdir.z; 
+    tzmax = (bounds[1-signs[2]].z - r.origin.z) * invdir.z; 
  
     ret &= !((tmin > tzmax) || (tzmin > tmax));
     tmin = max(tzmin, tmin);
@@ -57,6 +63,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
 
 __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t)
 {
+    bool ret = true;
     // compute plane's normal
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -68,8 +75,8 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
 
     // check if ray and plane are parallel ?
     float NdotRayDirection = dot(N,ray.direction);
-    if (abs(NdotRayDirection) < 0.0001f) // almost 0
-        return false; // they are parallel so they don't intersect !
+    ret &= abs(NdotRayDirection) > 0.0001f; // almost 0
+        // they are parallel so they don't intersect !
 
     // compute d parameter using equation 2
     float d = dot(N,triangle.v0);
@@ -77,7 +84,7 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
     // compute t (equation 3)
     *t = (dot(-N,ray.origin) + d) / NdotRayDirection;
     // check if the triangle is in behind the ray
-    if (*t < 0) return false; // the triangle is behind
+    ret &= *t > 0;
 
     // compute the intersection point using equation 1
     float3 P = ray.origin + *t * ray.direction;
@@ -89,22 +96,22 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
     float3 edge0 = triangle.v1 - triangle.v0;
     float3 vp0 = P - triangle.v0;
     C = cross(edge0, vp0);
-    if(dot(N, C) < 0) return false; // P is on the right side
+    ret &= (dot(N, C) > 0); // P is on the right side
 
     // edge 1
     float3 edge1 = triangle.v2 - triangle.v1;
     float3 vp1 = P - triangle.v1;
     C = cross(edge1, vp1);
-    if(dot(N,C) < 0) return false; // P is on the right side
+    ret &= (dot(N,C) > 0); // P is on the right side
 
     // edge 2
     float3 edge2 = triangle.v0 - triangle.v2;
     float3 vp2 = P - triangle.v2;
     C = cross(edge2, vp2);
-    if (dot(N, C) < 0) return false; // P is on the right side;
+    ret &= (dot(N, C) > 0); // P is on the right side;
 
     // we hit the triangle.
-    return true;
+    return ret;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -228,7 +235,7 @@ __device__ float3 sampleLight(const float3& origin, const float3& surfaceNormal,
     // We invert the ray direction to maintain a higher level of coherence.
     float3 fromSample = origin - samplePoint;
     float3 newDir = normalize(fromSample);
-    Ray ray = makeRay(samplePoint, newDir);
+    Ray ray = makeRay(samplePoint, newDir,0,0);
 
     HitInfo hitInfo = traverseBVHStack(ray, true);
 
@@ -260,7 +267,7 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
         // setup ray for new intersection
         float3 newOrigin = ray.origin + (hitInfo.t - 0.001) * ray.direction;
         float3 newDir = BRDF(hitInfo.normal, seed);
-        ray = makeRay(newOrigin, newDir);
+        ray = makeRay(newOrigin, newDir,0,0);
 
         mask *= collider.color;
         mask *= dot(newDir, hitInfo.normal);
@@ -268,6 +275,45 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
     }
 
     return accucolor;
+}
+
+__global__ void kernel_generate_primary_rays(Camera camera, float time)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    CUDA_LIMIT(x,y);
+    uint seed = getSeed(x,y,time);
+    Ray ray = camera.getRay(x,y,&seed);
+    GRayQueue.push(ray);
+}
+
+__global__ void kernel_extend(HitInfo* intersections, int n)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const Ray& ray = GRayQueue.values[i];
+    HitInfo hitInfo = traverseBVHStack(ray, false);
+    hitInfo.pixelx = ray.pixelx;
+    hitInfo.pixely = ray.pixely;
+    intersections[i] = hitInfo;
+}
+
+__global__ void kernel_shade(const HitInfo* intersections, int n, cudaSurfaceObject_t texRef)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const Ray& ray = GRayQueue.values[i];
+    const HitInfo& hitInfo = intersections[i];
+
+    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
+    float3 fromLight = normalize(intersectionPos - GLight.pos);
+    if (dot(fromLight, hitInfo.normal) < 0)
+    {
+        // We invert the shadowrays to get coherent origins.
+        Ray shadowRay = makeRay(GLight.pos, fromLight, ray.pixelx, ray.pixely);
+        GShadowRayQueue.push(shadowRay);
+    }
+    surf2Dwrite(make_float4(make_float3(1-hitInfo.t/10), 1), texRef, hitInfo.pixelx * sizeof(float4), hitInfo.pixely);
 }
 
 __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
@@ -279,6 +325,7 @@ __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
 }
 
 
+
 __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, uint max_bounces, Camera camera) {
     // Let's take it easy here cowboy
     assert (max_bounces < 5);
@@ -286,7 +333,7 @@ __global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float t
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
 
-    uint seed = (x + WINDOW_WIDTH * y) * (uint)(time * 100);
+    uint seed = getSeed(x,y,time);
     Ray ray = camera.getRay(x,y, &seed);
 
     float3 color = radiance(ray, max_bounces,  &seed);
