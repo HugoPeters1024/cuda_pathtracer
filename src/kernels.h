@@ -247,7 +247,7 @@ __device__ float3 sampleLight(const float3& origin, const float3& surfaceNormal,
     // We invert the ray direction to maintain a higher level of coherence.
     float3 fromSample = origin - samplePoint;
     float3 newDir = normalize(fromSample);
-    Ray ray = makeRay(samplePoint, newDir,0,0);
+    Ray ray(samplePoint, newDir,0,0);
 
     HitInfo hitInfo = traverseBVHStack(ray, true, true);
 
@@ -279,7 +279,7 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
         // setup ray for new intersection
         float3 newOrigin = ray.origin + (hitInfo.t - 0.001) * ray.direction;
         float3 newDir = BRDF(hitInfo.normal, seed);
-        ray = makeRay(newOrigin, newDir,0,0);
+        ray = Ray(newOrigin, newDir,0,0);
 
         mask *= collider.color;
         mask *= dot(newDir, hitInfo.normal);
@@ -289,6 +289,13 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
     return accucolor;
 }
 
+__global__ void kernel_clear_state(TraceState* state)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= NR_PIXELS) return;
+    state[i] = { make_float3(1.0f), make_float3(0.0f) };
+}
+
 __global__ void kernel_generate_primary_rays(Camera camera, float time)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -296,6 +303,7 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     CUDA_LIMIT(x,y);
     uint seed = getSeed(x,y,time);
     Ray ray = camera.getRay(x,y,&seed);
+
     GRayQueue.push(ray);
 }
 
@@ -305,18 +313,28 @@ __global__ void kernel_extend(HitInfo* intersections, int n)
     if (i >= n) return;
     const Ray& ray = GRayQueue.values[i];
     HitInfo hitInfo = traverseBVHStack(ray, false, false);
-    hitInfo.rayId = i;
     intersections[i] = hitInfo;
 }
 
-__global__ void kernel_shade(const HitInfo* intersections, int n, cudaSurfaceObject_t texRef, float time)
+__global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* stateBuf, float time)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo& hitInfo = intersections[i];
     if (!hitInfo.intersected) return;
+
     const Ray& ray = GRayQueue.values[i];
+    if (hitInfo.triangle_id == 0) {
+        stateBuf[ray.pixeli].accucolor = GLight.color;
+        return;
+    }
+
+    const Triangle& collider = GTriangles[hitInfo.triangle_id];
+    TraceState& state = stateBuf[ray.pixeli];
+    state.mask = state.mask * collider.color;
+    state.currentNormal = hitInfo.normal;
+    stateBuf[ray.pixeli] = state;
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     float3 fromLight = normalize(intersectionPos - GLight.pos);
@@ -334,20 +352,20 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, cudaSurfaceObj
         shadowDir /= shadowLength;
 
         // We invert the shadowrays to get coherent origins.
-        Ray shadowRay = makeRay(samplePoint, shadowDir, ray.pixelx, ray.pixely);
+        Ray shadowRay(samplePoint, shadowDir, ray.pixeli);
         shadowRay.length = shadowLength - EPS;
         GShadowRayQueue.push(shadowRay);
     }
-   // surf2Dwrite(make_float4(make_float3(1-hitInfo.t/10), 1), texRef, hitInfo.pixelx * sizeof(float4), hitInfo.pixely);
 }
 
 // Traces the shadow rays
-__global__ void kernel_connect(cudaSurfaceObject_t texRef, int n)
+__global__ void kernel_connect(int n, TraceState* stateBuf)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
 
     const Ray& shadowRay = GShadowRayQueue.values[i];
+    TraceState& state = stateBuf[shadowRay.pixeli];
     const HitInfo hitInfo = traverseBVHStack(shadowRay, true, true);
     float3 color;
     if (hitInfo.intersected)
@@ -358,12 +376,26 @@ __global__ void kernel_connect(cudaSurfaceObject_t texRef, int n)
     {
         float r2 = shadowRay.length * shadowRay.length;
         float SA = 4 * 3.1415926535 * r2;
+        float NL = lambert(-shadowRay.direction, state.currentNormal);
         color = GLight.color / SA;
     }
+
+    state.accucolor += state.mask * color * lambert(-state.currentNormal, shadowRay.direction);
+    stateBuf[shadowRay.pixeli] = state;
+}
+
+__global__ void kernel_add_to_screen(const TraceState* stateBuf, cudaSurfaceObject_t texRef)
+{
+    const uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= NR_PIXELS) return;
+    const uint x = i % WINDOW_WIDTH;
+    const uint y = i / WINDOW_WIDTH;
+
+    float3 color = stateBuf[i].accucolor;
     float4 old_color_all;
-    surf2Dread(&old_color_all, texRef, shadowRay.pixelx*sizeof(float4), shadowRay.pixely);
+    surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
-    surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, shadowRay.pixelx*sizeof(float4), shadowRay.pixely);
+    surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, x*sizeof(float4), y);
 }
 
 __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)

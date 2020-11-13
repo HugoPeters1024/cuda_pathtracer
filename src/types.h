@@ -69,20 +69,12 @@ struct __align__(16) Ray
     float3 origin;
     float3 direction;
     float length;
-    uint pixelx;
-    uint pixely;
-};
+    uint pixeli;
 
-HYBRID Ray makeRay(float3 origin, float3 direction, uint px, uint py)
-{
-    Ray ray;
-    ray.origin = origin;
-    ray.direction = direction;
-    ray.pixelx = px;
-    ray.pixely = py;
-    ray.length = 9999999;
-    return ray;
-}
+    HYBRID Ray() {}
+    HYBRID Ray(float3 origin, float3 direction, uint pixeli) : origin(origin), direction(direction), pixeli(pixeli) { length = 9999999; }
+    HYBRID Ray(float3 origin, float3 direction, uint px, uint py) : origin(origin), direction(direction), pixeli(px + py * WINDOW_WIDTH) { length = 9999999;}
+};
 
 struct __align__(16) HitInfo
 {
@@ -90,7 +82,6 @@ struct __align__(16) HitInfo
     uint triangle_id;
     float t;
     float3 normal;
-    uint rayId;
 };
 
 struct __align__(16) Triangle
@@ -188,6 +179,13 @@ struct __align__(16) BVHNode
     HYBRID bool isLeaf() const { return t_count > 0; }
 };
 
+struct __align__(16) TraceState
+{
+    float3 mask;
+    float3 accucolor;
+    float3 currentNormal;
+};
+
 template <class T>
 struct AtomicQueue
 {
@@ -274,7 +272,7 @@ public:
         float3 point = lt + xf * u + yf * v;
 
         float3 direction = normalize(point - eye);
-        return makeRay(eye, direction, x, y);
+        return Ray(eye, direction, x,y);
     }
 };
 
