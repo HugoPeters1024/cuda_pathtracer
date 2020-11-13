@@ -212,10 +212,9 @@ struct AtomicQueue
         cudaSafe( cudaMemcpyToSymbol(destination, this, sizeof(AtomicQueue<T>)) );
     }
 
-    __device__ void push(const T& ray)
+    __device__ inline void push(const T& ray)
     {
-        uint index = atomicAdd(&size, 1);
-        values[index] = ray;
+        values[atomicAdd(&size, 1)] = ray;
     }
 
     inline void clear() { size = 0; }

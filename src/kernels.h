@@ -261,22 +261,30 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
-    // Create a secondary ray
-    float3 newDir = BRDF(hitInfo.normal, &seed);
-    Ray secondary(intersectionPos, newDir,ray.pixeli);
-    float lambert = dot(newDir, hitInfo.normal);
-
-    // We double the energy because it looks better with more indirect light.
-    state.mask = state.mask * lambert;
-    state.correction = 1.0f / lambert;
+    // Create a secondary ray either diffuse or reflected
+    Ray secondary;
+    if (rand(&seed) < collider.reflect)
+    {
+        float3 newDir = reflect(ray.direction, hitInfo.normal);
+        secondary = Ray(intersectionPos, newDir, ray.pixeli);
+        state.correction = (1.0f - collider.reflect);
+    }
+    else {
+        float3 newDir = BRDF(hitInfo.normal, &seed);
+        secondary = Ray(intersectionPos, newDir, ray.pixeli);
+        float lambert = dot(newDir, hitInfo.normal);
+        // We double the energy because it looks better with more indirect light.
+        state.mask = state.mask * lambert;
+        state.correction = 1.0f / lambert;
+    }
 
     GRayQueueNew.push(secondary);
 
     stateBuf[ray.pixeli] = state;
 
-    // Create a shadow ray
+    // Create a shadow ray if it isn't corrected away (by being a mirror for example)
     float3 fromLight = normalize(intersectionPos - GLight.pos);
-    if (dot(fromLight, hitInfo.normal) < 0)
+    if (state.correction > 0.01 && dot(fromLight, hitInfo.normal) < 0)
     {
         // Sample the brdf from that point.
         float3 r = BRDF(fromLight, &seed);
