@@ -228,67 +228,6 @@ __device__ float3 BRDF(const float3& normal, uint* seed)
 }
 
 
-__device__ float3 sampleLight(const float3& origin, const float3& surfaceNormal, uint* seed)
-{
-    // The normal pointing to our origin from the light
-    float3 normal = normalize(origin - GLight.pos);
-
-    // We are our own ocluder, so no need to trace
-    if (dot(normal, surfaceNormal) > 0) return make_float3(0);
-
-    // Sample the brdf from that point.
-    float3 r = BRDF(normal, seed);
-
-    // From the center of the light, go to sample point
-    // (by definition of the BRDF on the visible by the origin (if not occluded)
-    float3 samplePoint = GLight.pos + GLight.radius * r * 1.001;
-    
-
-    // We invert the ray direction to maintain a higher level of coherence.
-    float3 fromSample = origin - samplePoint;
-    float3 newDir = normalize(fromSample);
-    Ray ray(samplePoint, newDir,0,0);
-
-    HitInfo hitInfo = traverseBVHStack(ray, true, true);
-
-    if (!hitInfo.intersected) return make_float3(0);
-    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
-    float3 isectDelta = intersectionPos - origin;
-    // New intersection point is not our llumination target
-    if (dot(isectDelta, isectDelta) > 0.001) return make_float3(0);
-
-    // solid angle of a sphere: https://en.wikipedia.org/wiki/Solid_angle
-    float r2 = dot(fromSample, fromSample);
-    float SA = 4 * 3.1415926535 * r2;
-    return GLight.color / SA;
-}
-
-__device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
-{
-    float3 accucolor = make_float3(0);
-    float3 mask = make_float3(1);
-
-    for(int bounces=0; bounces < max_bounces; bounces++)
-    {
-        HitInfo hitInfo = traverseBVHStack(ray, false, false);
-        if (!hitInfo.intersected) return make_float3(0);
-        if (hitInfo.triangle_id == 0) return make_float3(1);
-
-        Triangle& collider = GTriangles[hitInfo.triangle_id];
-
-        // setup ray for new intersection
-        float3 newOrigin = ray.origin + (hitInfo.t - 0.001) * ray.direction;
-        float3 newDir = BRDF(hitInfo.normal, seed);
-        ray = Ray(newOrigin, newDir,0,0);
-
-        mask *= collider.color;
-        mask *= dot(newDir, hitInfo.normal);
-        accucolor += mask * sampleLight(newOrigin, hitInfo.normal, seed);
-    }
-
-    return accucolor;
-}
-
 __global__ void kernel_clear_state(TraceState* state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -325,13 +264,14 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     if (!hitInfo.intersected) return;
 
     const Ray& ray = GRayQueue.values[i];
+    TraceState& state = stateBuf[ray.pixeli];
+
     if (hitInfo.triangle_id == 0) {
-        stateBuf[ray.pixeli].accucolor = make_float3(1);
+        state.accucolor += state.mask;
         return;
     }
 
     const Triangle& collider = GTriangles[hitInfo.triangle_id];
-    TraceState& state = stateBuf[ray.pixeli];
 
     state.mask = state.mask * collider.color;
 
@@ -343,6 +283,7 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     float3 newDir = BRDF(hitInfo.normal, &seed);
     Ray secondary(intersectionPos, newDir,ray.pixeli);
     float lambert = dot(newDir, hitInfo.normal);
+
     // We double the energy because it looks better with more indirect light.
     state.mask = state.mask * lambert;
     state.correction = 1.0f / lambert;
@@ -419,25 +360,6 @@ __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
     surf2Dwrite(make_float4(0), texRef, x*sizeof(float4), y);
-}
-
-
-
-__global__ void kernel_pathtracer(Ray* rays, cudaSurfaceObject_t texRef, float time, uint max_bounces, Camera camera) {
-    // Let's take it easy here cowboy
-    assert (max_bounces < 5);
-    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    CUDA_LIMIT(x,y);
-
-    uint seed = getSeed(x,y,time);
-    Ray ray = camera.getRay(x,y, &seed);
-
-    float3 color = radiance(ray, max_bounces,  &seed);
-    float4 old_color_all;
-    surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
-    float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
-    surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, x*sizeof(float4), y);
 }
 
 #endif

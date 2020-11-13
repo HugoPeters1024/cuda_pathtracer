@@ -222,19 +222,19 @@ int main(int argc, char** argv) {
         uint max_bounces = shouldClear ? 1 : 3;
         for(int bounces = 0; bounces < max_bounces; bounces++) {
             // Test for intersections with each of the rays,
-            kernel_extend<<<rayQueue.size / 64, 64>>>(intersectionBuf, rayQueue.size);
+            kernel_extend<<<rayQueue.size / 128, 128>>>(intersectionBuf, rayQueue.size);
 
             // Foreach intersection, possibly create shadow rays and secondary rays.
             shadowRayQueue.clear();
             shadowRayQueue.syncToDevice(GShadowRayQueue);
             rayQueueNew.clear();
             rayQueueNew.syncToDevice(GRayQueueNew);
-            kernel_shade<<<rayQueue.size / 64, 64>>>(intersectionBuf, rayQueue.size, traceBuf, glfwGetTime());
+            kernel_shade<<<rayQueue.size / 1024, 1024>>>(intersectionBuf, rayQueue.size, traceBuf, glfwGetTime());
             shadowRayQueue.syncFromDevice(GShadowRayQueue);
             rayQueueNew.syncFromDevice(GRayQueueNew);
 
             // Check if location is occluded
-            kernel_connect<<<shadowRayQueue.size / 64, 64>>>(shadowRayQueue.size, traceBuf);
+            kernel_connect<<<shadowRayQueue.size / 256, 256>>>(shadowRayQueue.size, traceBuf);
 
             kernel_add_to_screen<<<NR_PIXELS / 1024, 1024>>>(traceBuf, inputSurfObj);
 
