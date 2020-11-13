@@ -145,7 +145,7 @@ __device__ void processLeaf(const BVHNode& node, const Ray& ray, HitInfo* hitInf
     }
 }
 
-__device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight)
+__device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
     HitInfo hitInfo;
     hitInfo.intersected = false;
@@ -166,7 +166,19 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight)
         {
             if (current.isLeaf())
             {
-                processLeaf(current, ray, &hitInfo);
+                uint start = current.t_start;
+                uint end = start + current.t_count;
+                for(uint i=start; i<end; i++)
+                {
+                    float t;
+                    if (rayTriangleIntersect(ray, GTriangles[i], &t) && t < hitInfo.t)
+                    {
+                        hitInfo.intersected = true;
+                        hitInfo.triangle_id = i;
+                        hitInfo.t = t;
+                        if (anyIntersection) return hitInfo;
+                    }
+                }
             }
             else
             {
@@ -237,7 +249,7 @@ __device__ float3 sampleLight(const float3& origin, const float3& surfaceNormal,
     float3 newDir = normalize(fromSample);
     Ray ray = makeRay(samplePoint, newDir,0,0);
 
-    HitInfo hitInfo = traverseBVHStack(ray, true);
+    HitInfo hitInfo = traverseBVHStack(ray, true, true);
 
     if (!hitInfo.intersected) return make_float3(0);
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
@@ -258,7 +270,7 @@ __device__ float3 radiance(Ray& ray, uint max_bounces, uint* seed)
 
     for(int bounces=0; bounces < max_bounces; bounces++)
     {
-        HitInfo hitInfo = traverseBVHStack(ray, false);
+        HitInfo hitInfo = traverseBVHStack(ray, false, false);
         if (!hitInfo.intersected) return make_float3(0);
         if (hitInfo.triangle_id == 0) return make_float3(1);
 
@@ -292,7 +304,7 @@ __global__ void kernel_extend(HitInfo* intersections, int n)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     const Ray& ray = GRayQueue.values[i];
-    HitInfo hitInfo = traverseBVHStack(ray, false);
+    HitInfo hitInfo = traverseBVHStack(ray, false, false);
     hitInfo.rayId = i;
     intersections[i] = hitInfo;
 }
@@ -336,7 +348,7 @@ __global__ void kernel_connect(cudaSurfaceObject_t texRef, int n)
     if (i >= n) return;
 
     const Ray& shadowRay = GShadowRayQueue.values[i];
-    const HitInfo hitInfo = traverseBVHStack(shadowRay, true);
+    const HitInfo hitInfo = traverseBVHStack(shadowRay, true, true);
     float3 color;
     if (hitInfo.intersected)
     {
