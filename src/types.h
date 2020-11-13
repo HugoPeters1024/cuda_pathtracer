@@ -68,6 +68,7 @@ struct __align__(16) Ray
 {
     float3 origin;
     float3 direction;
+    float length;
     uint pixelx;
     uint pixely;
 };
@@ -79,6 +80,7 @@ HYBRID Ray makeRay(float3 origin, float3 direction, uint px, uint py)
     ray.direction = direction;
     ray.pixelx = px;
     ray.pixely = py;
+    ray.length = 9999999;
     return ray;
 }
 
@@ -90,6 +92,7 @@ struct __align__(16) HitInfo
     float3 normal;
     uint pixelx;
     uint pixely;
+    uint rayId;
 };
 
 struct __align__(16) Triangle
@@ -187,29 +190,30 @@ struct __align__(16) BVHNode
     HYBRID bool isLeaf() const { return t_count > 0; }
 };
 
-struct RayQueue
+template <class T>
+struct AtomicQueue
 {
-    Ray* values;
+    T* values;
     uint size;
 
-    RayQueue() {}
-    RayQueue(uint capacity)
+    AtomicQueue() {}
+    AtomicQueue(uint capacity)
     {
-        cudaSafe( cudaMalloc(&values, capacity * sizeof(Ray)) );
+        cudaSafe( cudaMalloc(&values, capacity * sizeof(T)) );
         size = 0;
     }
 
-    void syncFromDevice(const RayQueue& origin)
+    void syncFromDevice(const AtomicQueue<T>& origin)
     {
-        cudaSafe (cudaMemcpyFromSymbol(this, origin, sizeof(RayQueue)) );
+        cudaSafe (cudaMemcpyFromSymbol(this, origin, sizeof(AtomicQueue<T>)) );
     }
 
-    void syncToDevice(const RayQueue& destination)
+    void syncToDevice(const AtomicQueue<T>& destination)
     {
-        cudaSafe( cudaMemcpyToSymbol(destination, this, sizeof(RayQueue)) );
+        cudaSafe( cudaMemcpyToSymbol(destination, this, sizeof(AtomicQueue<T>)) );
     }
 
-    __device__ void push(const Ray& ray)
+    __device__ void push(const T& ray)
     {
         uint index = atomicAdd(&size, 1);
         values[index] = ray;

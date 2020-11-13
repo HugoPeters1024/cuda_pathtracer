@@ -149,7 +149,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight)
 {
     HitInfo hitInfo;
     hitInfo.intersected = false;
-    hitInfo.t = 999999;
+    hitInfo.t = ray.length;
 
     const uint STACK_SIZE = 200;
     uint stack[STACK_SIZE];
@@ -295,25 +295,56 @@ __global__ void kernel_extend(HitInfo* intersections, int n)
     HitInfo hitInfo = traverseBVHStack(ray, false);
     hitInfo.pixelx = ray.pixelx;
     hitInfo.pixely = ray.pixely;
+    hitInfo.rayId = i;
     intersections[i] = hitInfo;
 }
 
-__global__ void kernel_shade(const HitInfo* intersections, int n, cudaSurfaceObject_t texRef)
+__global__ void kernel_shade(const HitInfo* intersections, int n, cudaSurfaceObject_t texRef, float time)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
-    const Ray& ray = GRayQueue.values[i];
+    uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo& hitInfo = intersections[i];
+    if (!hitInfo.intersected) return;
+    const Ray& ray = GRayQueue.values[i];
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     float3 fromLight = normalize(intersectionPos - GLight.pos);
     if (dot(fromLight, hitInfo.normal) < 0)
     {
+        // Sample the brdf from that point.
+        float3 r = BRDF(fromLight, &seed);
+
+        // From the center of the light, go to sample point
+        // (by definition of the BRDF on the visible by the origin (if not occluded)
+        float3 samplePoint = GLight.pos + GLight.radius * r;
+
+        float3 shadowDir = intersectionPos - samplePoint;
+        float shadowLength = length(shadowDir);
+        shadowDir /= shadowLength;
+
         // We invert the shadowrays to get coherent origins.
-        Ray shadowRay = makeRay(GLight.pos, fromLight, ray.pixelx, ray.pixely);
+        Ray shadowRay = makeRay(samplePoint, shadowDir, ray.pixelx, ray.pixely);
+        shadowRay.length = shadowLength - EPS;
         GShadowRayQueue.push(shadowRay);
     }
-    surf2Dwrite(make_float4(make_float3(1-hitInfo.t/10), 1), texRef, hitInfo.pixelx * sizeof(float4), hitInfo.pixely);
+   // surf2Dwrite(make_float4(make_float3(1-hitInfo.t/10), 1), texRef, hitInfo.pixelx * sizeof(float4), hitInfo.pixely);
+}
+
+// Traces the shadow rays
+__global__ void kernel_connect(cudaSurfaceObject_t texRef, int n)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+
+    const Ray& shadowRay = GShadowRayQueue.values[i];
+    const HitInfo hitInfo = traverseBVHStack(shadowRay, true);
+
+    float3 color = hitInfo.intersected ? make_float3(0) : make_float3(0.7);
+    float4 old_color_all;
+    surf2Dread(&old_color_all, texRef, shadowRay.pixelx*sizeof(float4), shadowRay.pixely);
+    float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
+    surf2Dwrite(make_float4(old_color + color, old_color_all.w+1), texRef, shadowRay.pixelx*sizeof(float4), shadowRay.pixely);
 }
 
 __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)

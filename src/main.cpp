@@ -151,12 +151,11 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
     // queue of rays used in wavefront tracing
-    RayQueue rayQueue(WINDOW_WIDTH * WINDOW_HEIGHT);
-    RayQueue shadowRayQueue(WINDOW_WIDTH * WINDOW_HEIGHT);
+    AtomicQueue<Ray> rayQueue(NR_PIXELS);
+    AtomicQueue<Ray> shadowRayQueue(NR_PIXELS);
 
     HitInfo* intersectionBuf;
     cudaSafe( cudaMalloc(&intersectionBuf, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(HitInfo)) );
-
 
     // Set the initial camera values;
     Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1);
@@ -214,13 +213,19 @@ int main(int argc, char** argv) {
         assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-        // Find intersection point then clear the ray buffer again.
+        // Test for intersections with each of the rays,
         kernel_extend<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size);
 
+
+        // Foreach intersection, possibly create shadow rays.
         shadowRayQueue.clear();
         shadowRayQueue.syncToDevice(GShadowRayQueue);
-        kernel_shade<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size, inputSurfObj);
+        kernel_shade<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size, inputSurfObj, glfwGetTime());
         shadowRayQueue.syncFromDevice(GShadowRayQueue);
+
+        // Check if location is occluded
+        kernel_connect<<<shadowRayQueue.size/64, 64>>>(inputSurfObj, shadowRayQueue.size);
+
         //kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), bounces, camera);
       //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );

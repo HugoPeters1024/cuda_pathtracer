@@ -3,6 +3,7 @@
 
 #define WINDOW_WIDTH 640
 #define WINDOW_HEIGHT 480
+#define NR_PIXELS (WINDOW_WIDTH * WINDOW_HEIGHT)
 
 #define EPS 0.00001
 
