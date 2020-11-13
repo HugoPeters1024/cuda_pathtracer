@@ -39,7 +39,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     float3 bounds[2] { box.vmin, box.vmax };
     float tmin, tmax, tymin, tymax, tzmin, tzmax; 
     bool ret = true;
- 
+
     tmin = (bounds[signs[0]].x - r.origin.x) * invdir.x; 
     tmax = (bounds[1-signs[0]].x - r.origin.x) * invdir.x; 
     tymin = (bounds[signs[1]].y - r.origin.y) * invdir.y; 
@@ -61,7 +61,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     return ret && tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t)
+__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t, float currentT)
 {
     bool ret = true;
     // compute plane's normal
@@ -83,8 +83,8 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, f
 
     // compute t (equation 3)
     *t = (dot(-N,ray.origin) + d) / NdotRayDirection;
-    // check if the triangle is in behind the ray
-    ret &= *t > 0;
+    // check if the triangle is in behind the ray or too far away
+    ret &= *t > 0 && *t < currentT;
 
     // compute the intersection point using equation 1
     float3 P = ray.origin + *t * ray.direction;
@@ -128,23 +128,6 @@ __device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hi
 }
 
 
-// Performs intersection against a leaf node's triangles
-__device__ void processLeaf(const BVHNode& node, const Ray& ray, HitInfo* hitInfo)
-{
-    uint start = node.t_start;
-    uint end = start + node.t_count;
-    for(uint i=start; i<end; i++)
-    {
-        float t;
-        if (rayTriangleIntersect(ray, GTriangles[i], &t) && t < hitInfo->t)
-        {
-            hitInfo->intersected = true;
-            hitInfo->triangle_id = i;
-            hitInfo->t = t;
-        }
-    }
-}
-
 __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
     HitInfo hitInfo;
@@ -171,7 +154,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                 for(uint i=start; i<end; i++)
                 {
                     float t;
-                    if (rayTriangleIntersect(ray, GTriangles[i], &t) && t < hitInfo.t)
+                    if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                     {
                         hitInfo.intersected = true;
                         hitInfo.triangle_id = i;
@@ -189,7 +172,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                 *stackPtr++ = far;
                 *stackPtr++ = near;
                 size += 2;
-                assert (size < STACK_SIZE);
+               // assert (size < STACK_SIZE);
             }
         }
     } while (size > 0);
@@ -242,7 +225,6 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     CUDA_LIMIT(x,y);
     uint seed = getSeed(x,y,time);
     Ray ray = camera.getRay(x,y,&seed);
-
     GRayQueue.push(ray);
 }
 
