@@ -293,8 +293,6 @@ __global__ void kernel_extend(HitInfo* intersections, int n)
     if (i >= n) return;
     const Ray& ray = GRayQueue.values[i];
     HitInfo hitInfo = traverseBVHStack(ray, false);
-    hitInfo.pixelx = ray.pixelx;
-    hitInfo.pixely = ray.pixely;
     hitInfo.rayId = i;
     intersections[i] = hitInfo;
 }
@@ -339,8 +337,17 @@ __global__ void kernel_connect(cudaSurfaceObject_t texRef, int n)
 
     const Ray& shadowRay = GShadowRayQueue.values[i];
     const HitInfo hitInfo = traverseBVHStack(shadowRay, true);
-
-    float3 color = hitInfo.intersected ? make_float3(0) : make_float3(0.7);
+    float3 color;
+    if (hitInfo.intersected)
+    {
+        color = make_float3(0);
+    }
+    else
+    {
+        float r2 = shadowRay.length * shadowRay.length;
+        float SA = 4 * 3.1415926535 * r2;
+        color = GLight.color / SA;
+    }
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, shadowRay.pixelx*sizeof(float4), shadowRay.pixely);
     float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);

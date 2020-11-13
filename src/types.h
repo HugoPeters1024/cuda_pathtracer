@@ -90,8 +90,6 @@ struct __align__(16) HitInfo
     uint triangle_id;
     float t;
     float3 normal;
-    uint pixelx;
-    uint pixely;
     uint rayId;
 };
 
