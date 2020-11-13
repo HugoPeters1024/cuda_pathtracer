@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
     //scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0);
-    //scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0);
+    scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
@@ -153,6 +153,7 @@ int main(int argc, char** argv) {
     // queue of rays used in wavefront tracing
     AtomicQueue<Ray> rayQueue(NR_PIXELS);
     AtomicQueue<Ray> shadowRayQueue(NR_PIXELS);
+    AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
 
     HitInfo* intersectionBuf;
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
@@ -169,6 +170,7 @@ int main(int argc, char** argv) {
     printf("Triangle is %i bytes\n", sizeof(BVHNode));
     printf("Ray is %i bytes\n", sizeof(Ray));
     printf("HitInfo is %i bytes\n", sizeof(HitInfo));
+    printf("TraceState is %i bytes\n", sizeof(TraceState));
 
     bool shouldClear = false;
     while (!glfwWindowShouldClose(window))
@@ -206,7 +208,6 @@ int main(int argc, char** argv) {
         if (shouldClear)
             kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
 
-        uint bounces = shouldClear ? 1 : 3;
 
         kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBuf);
 
@@ -218,23 +219,31 @@ int main(int argc, char** argv) {
         assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-        // Test for intersections with each of the rays,
-        kernel_extend<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size);
+        uint max_bounces = shouldClear ? 1 : 3;
+        for(int bounces = 0; bounces < max_bounces; bounces++) {
+            // Test for intersections with each of the rays,
+            kernel_extend<<<rayQueue.size / 64, 64>>>(intersectionBuf, rayQueue.size);
+
+            // Foreach intersection, possibly create shadow rays and secondary rays.
+            shadowRayQueue.clear();
+            shadowRayQueue.syncToDevice(GShadowRayQueue);
+            rayQueueNew.clear();
+            rayQueueNew.syncToDevice(GRayQueueNew);
+            kernel_shade<<<rayQueue.size / 64, 64>>>(intersectionBuf, rayQueue.size, traceBuf, glfwGetTime());
+            shadowRayQueue.syncFromDevice(GShadowRayQueue);
+            rayQueueNew.syncFromDevice(GRayQueueNew);
+
+            // Check if location is occluded
+            kernel_connect<<<shadowRayQueue.size / 64, 64>>>(shadowRayQueue.size, traceBuf);
+
+            kernel_add_to_screen<<<NR_PIXELS / 1024, 1024>>>(traceBuf, inputSurfObj);
+
+            // swap the ray buffers
+            rayQueueNew.syncToDevice(GRayQueue);
+            std::swap(rayQueue, rayQueueNew);
+        }
 
 
-        // Foreach intersection, possibly create shadow rays.
-        shadowRayQueue.clear();
-        shadowRayQueue.syncToDevice(GShadowRayQueue);
-        kernel_shade<<<rayQueue.size/64, 64>>>(intersectionBuf, rayQueue.size, traceBuf, glfwGetTime());
-        shadowRayQueue.syncFromDevice(GShadowRayQueue);
-
-        // Check if location is occluded
-        kernel_connect<<<shadowRayQueue.size/64, 64>>>(shadowRayQueue.size, traceBuf);
-
-        kernel_add_to_screen<<<NR_PIXELS/1024, 1024>>>(traceBuf, inputSurfObj);
-
-        //kernel_pathtracer<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj, glfwGetTime(), bounces, camera);
-      //  kernel_shadows<<<dimBlock, dimThreads>>>(rayBuf, inputSurfObj);
         cudaSafe ( cudaDeviceSynchronize() );
 
         // Unmap the resource from cuda

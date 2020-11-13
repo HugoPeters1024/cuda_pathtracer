@@ -326,17 +326,32 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 
     const Ray& ray = GRayQueue.values[i];
     if (hitInfo.triangle_id == 0) {
-        stateBuf[ray.pixeli].accucolor = GLight.color;
+        stateBuf[ray.pixeli].accucolor = make_float3(1);
         return;
     }
 
     const Triangle& collider = GTriangles[hitInfo.triangle_id];
     TraceState& state = stateBuf[ray.pixeli];
+
     state.mask = state.mask * collider.color;
+
     state.currentNormal = hitInfo.normal;
+
+    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+
+    // Create a secondary ray
+    float3 newDir = BRDF(hitInfo.normal, &seed);
+    Ray secondary(intersectionPos, newDir,ray.pixeli);
+    float lambert = dot(newDir, hitInfo.normal);
+    // We double the energy because it looks better with more indirect light.
+    state.mask = state.mask * lambert;
+    state.correction = 1.0f / lambert;
+
+    GRayQueueNew.push(secondary);
+
     stateBuf[ray.pixeli] = state;
 
-    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
+    // Create a shadow ray
     float3 fromLight = normalize(intersectionPos - GLight.pos);
     if (dot(fromLight, hitInfo.normal) < 0)
     {
@@ -380,7 +395,7 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
         color = GLight.color / SA;
     }
 
-    state.accucolor += state.mask * color * lambert(-state.currentNormal, shadowRay.direction);
+    state.accucolor += state.correction * state.mask * color * lambert(-state.currentNormal, shadowRay.direction);
     stateBuf[shadowRay.pixeli] = state;
 }
 

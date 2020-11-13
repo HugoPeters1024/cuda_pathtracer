@@ -19,4 +19,6 @@ __device__ AtomicQueue<Ray> GRayQueue;
 
 __device__ AtomicQueue<Ray> GShadowRayQueue;
 
+__device__ AtomicQueue<Ray> GRayQueueNew;
+
 #endif
