@@ -123,11 +123,12 @@ int main(int argc, char** argv) {
     delete bvh;
 
     // add a sphere as light source
-    Sphere light = {
-            make_float3(-8,4,0),
-            0.05,
-            make_float3(150)
+    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0);
+
+    Sphere spheres[1] = {
+            Sphere(make_float3(-8, 1, 1), 1, make_float3(1), 0.5),
     };
+    SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
 
     Triangle* triangleBuf;
@@ -221,6 +222,7 @@ int main(int argc, char** argv) {
 
         uint max_bounces = shouldClear ? 1 : 3;
         for(int bounces = 0; bounces < max_bounces; bounces++) {
+
             // Test for intersections with each of the rays,
             kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf, rayQueue.size);
 
@@ -233,15 +235,16 @@ int main(int argc, char** argv) {
             shadowRayQueue.syncFromDevice(GShadowRayQueue);
             rayQueueNew.syncFromDevice(GRayQueueNew);
 
-            // Check if location is occluded
+            // Sample the light source for every shadow ray
             kernel_connect<<<shadowRayQueue.size / 256 + 1, 256>>>(shadowRayQueue.size, traceBuf);
-
-            kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBuf, inputSurfObj);
 
             // swap the ray buffers
             rayQueueNew.syncToDevice(GRayQueue);
             std::swap(rayQueue, rayQueueNew);
         }
+
+        // Write the final state accumulator into the texture
+        kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBuf, inputSurfObj);
 
 
         cudaSafe ( cudaDeviceSynchronize() );

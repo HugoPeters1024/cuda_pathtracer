@@ -21,4 +21,6 @@ __device__ AtomicQueue<Ray> GShadowRayQueue;
 
 __device__ AtomicQueue<Ray> GRayQueueNew;
 
+__device__ SizedBuffer<Sphere> GSpheres;
+
 #endif

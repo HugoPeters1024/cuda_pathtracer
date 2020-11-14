@@ -23,6 +23,10 @@ struct Sphere
     float3 pos;
     float radius;
     float3 color;
+    float reflect;
+
+    Sphere() {}
+    Sphere(float3 pos, float radius, float3 color, float reflect) : pos(pos), radius(radius), color(color), reflect(reflect) {}
 
     HYBRID inline float3 centroid() { return pos; }
 };
@@ -76,10 +80,13 @@ struct __align__(16) Ray
     HYBRID Ray(float3 origin, float3 direction, uint px, uint py) : origin(origin), direction(direction), pixeli(px + py * WINDOW_WIDTH) { length = 9999999;}
 };
 
+enum PRIMITIVE_TYPE { TRIANGLE, SPHERE };
+
 struct __align__(16) HitInfo
 {
+    PRIMITIVE_TYPE primitive_type;
     bool intersected;
-    uint triangle_id;
+    uint primitive_id;
     float t;
     float3 normal;
 };
@@ -168,6 +175,7 @@ struct BVHTree
     }
 };
 
+
 struct __align__(16) BVHNode
 {
     Box boundingBox;
@@ -202,6 +210,8 @@ struct AtomicQueue
         size = 0;
     }
 
+    __device__ T const& operator[](int index) { return values[index]; }
+
     void syncFromDevice(const AtomicQueue<T>& origin)
     {
         cudaSafe (cudaMemcpyFromSymbol(this, origin, sizeof(AtomicQueue<T>)) );
@@ -219,6 +229,24 @@ struct AtomicQueue
 
     inline void clear() { size = 0; }
 };
+
+template <class T>
+struct SizedBuffer
+{
+    T* values;
+    uint size;
+
+    SizedBuffer() {}
+    SizedBuffer(T* src, int size, const SizedBuffer<T>& dest) : size(size)
+    {
+        cudaSafe( cudaMalloc(&values, size * sizeof(T)));
+        cudaSafe( cudaMemcpy(values, src, size * sizeof(T), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpyToSymbol(dest, this, sizeof(SizedBuffer<T>)) );
+    }
+
+    __device__ T const& operator[](int index) { return values[index]; }
+};
+
 
 class Camera
 {

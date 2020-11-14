@@ -6,6 +6,9 @@
 #include "types.h"
 #include "globals.h"
 
+// Some random large number
+#define LIGHT_ID 29347528
+
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
@@ -15,6 +18,45 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
 __device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
 {
     return (ray.direction.x > 0) * (node.split_plane == 0) + (ray.direction.y > 0) * (node.split_plane == 1) + (ray.direction.z > 0) * (node.split_plane == 2);
+}
+
+__device__ inline float3 getColliderColor(const HitInfo& hitInfo)
+{
+    switch (hitInfo.primitive_type)
+    {
+        case TRIANGLE: return GTriangles[hitInfo.primitive_id].color;
+        case SPHERE:   return make_float3(1);//GSpheres[hitInfo.primitive_id].color;
+    }
+    return make_float3(0);
+}
+
+__device__ inline float getColliderReflect(const HitInfo& hitInfo)
+{
+    switch (hitInfo.primitive_type)
+    {
+        case TRIANGLE: return GTriangles[hitInfo.primitive_id].reflect;
+        case SPHERE:   return 1; //GSpheres[hitInfo.primitive_id].reflect;
+    }
+    return 0;
+}
+
+
+__device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ray)
+{
+    switch (hitInfo.primitive_type)
+    {
+        case TRIANGLE: {
+            float3 normal = GTriangles[hitInfo.primitive_id].n0;
+            // ensure front facing normal
+            if (dot(normal, ray.direction) >= 0) normal = -normal;
+            return normal;
+        }
+        case SPHERE: {
+            float3 position = ray.origin + hitInfo.t * ray.direction;
+            return normalize(position - GSpheres[hitInfo.primitive_id].pos);
+        }
+    }
+    return make_float3(0);
 }
 
 __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis)
@@ -37,21 +79,21 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     signs[1] = (int)(invdir.y < 0);
     signs[2] = (int)(invdir.z < 0);
     float3 bounds[2] { box.vmin, box.vmax };
-    float tmin, tmax, tymin, tymax, tzmin, tzmax; 
+    float tmin, tmax, tymin, tymax, tzmin, tzmax;
     bool ret = true;
 
-    tmin = (bounds[signs[0]].x - r.origin.x) * invdir.x; 
-    tmax = (bounds[1-signs[0]].x - r.origin.x) * invdir.x; 
-    tymin = (bounds[signs[1]].y - r.origin.y) * invdir.y; 
-    tymax = (bounds[1-signs[1]].y - r.origin.y) * invdir.y; 
- 
+    tmin = (bounds[signs[0]].x - r.origin.x) * invdir.x;
+    tmax = (bounds[1-signs[0]].x - r.origin.x) * invdir.x;
+    tymin = (bounds[signs[1]].y - r.origin.y) * invdir.y;
+    tymax = (bounds[1-signs[1]].y - r.origin.y) * invdir.y;
+
     ret &= !((tmin > tymax) || (tymin > tmax));
     tmin = max(tymin, tmin);
     tmax = min(tymax, tmax);
- 
-    tzmin = (bounds[signs[2]].z - r.origin.z) * invdir.z; 
-    tzmax = (bounds[1-signs[2]].z - r.origin.z) * invdir.z; 
- 
+
+    tzmin = (bounds[signs[2]].z - r.origin.z) * invdir.z;
+    tzmax = (bounds[1-signs[2]].z - r.origin.z) * invdir.z;
+
     ret &= !((tmin > tzmax) || (tzmin > tmax));
     tmin = max(tzmin, tmin);
     tmax = min(tzmax, tmax);
@@ -127,12 +169,24 @@ __device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hi
     return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
-
 __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
     HitInfo hitInfo;
     hitInfo.intersected = false;
     hitInfo.t = ray.length;
+
+    for(int i=0; i<GSpheres.size; i++)
+    {
+        float t;
+        if (raySphereIntersect(ray, GSpheres[i], &t) && t < hitInfo.t)
+        {
+            hitInfo.intersected = true;
+            if (anyIntersection) return hitInfo;
+            hitInfo.primitive_id = 1;
+            hitInfo.primitive_type = SPHERE;
+            hitInfo.t = t;
+        }
+    }
 
     const uint STACK_SIZE = 200;
     uint stack[STACK_SIZE];
@@ -157,9 +211,10 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                     if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                     {
                         hitInfo.intersected = true;
-                        hitInfo.triangle_id = i;
-                        hitInfo.t = t;
                         if (anyIntersection) return hitInfo;
+                        hitInfo.primitive_id = i;
+                        hitInfo.primitive_type = TRIANGLE;
+                        hitInfo.t = t;
                     }
                 }
             }
@@ -178,18 +233,17 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     } while (size > 0);
 
     if (hitInfo.intersected) {
-        hitInfo.normal = GTriangles[hitInfo.triangle_id].n0;
-        if (dot(hitInfo.normal, ray.direction) >= 0) hitInfo.normal = -hitInfo.normal;
+        hitInfo.normal = getColliderNormal(hitInfo, ray);
     }
 
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
     {
-        hitInfo.t = light_t;
         float3 isectPos = ray.origin + light_t * ray.direction;
+        hitInfo.t = light_t;
         hitInfo.normal = normalize(isectPos - GLight.pos);
         hitInfo.intersected = true;
-        hitInfo.triangle_id = 0;
+        hitInfo.primitive_id = LIGHT_ID;
     }
 
     return hitInfo;
@@ -232,10 +286,11 @@ __global__ void kernel_extend(HitInfo* intersections, int n)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
-    const Ray& ray = GRayQueue.values[i];
+    const Ray& ray = GRayQueue[i];
     HitInfo hitInfo = traverseBVHStack(ray, false, false);
     intersections[i] = hitInfo;
 }
+
 
 __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* stateBuf, float time)
 {
@@ -245,29 +300,28 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     const HitInfo& hitInfo = intersections[i];
     if (!hitInfo.intersected) return;
 
-    const Ray& ray = GRayQueue.values[i];
+    const Ray& ray = GRayQueue[i];
     TraceState& state = stateBuf[ray.pixeli];
 
-    if (hitInfo.triangle_id == 0) {
+    if (hitInfo.primitive_id == LIGHT_ID) {
         state.accucolor += state.mask;
         return;
     }
 
-    const Triangle& collider = GTriangles[hitInfo.triangle_id];
+    float3 colliderColor = getColliderColor(hitInfo);
+    float colliderReflect = getColliderReflect(hitInfo);
 
-    state.mask = state.mask * collider.color;
-
+    state.mask = state.mask * colliderColor;
     state.currentNormal = hitInfo.normal;
-
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (rand(&seed) < collider.reflect)
+    if (rand(&seed) < colliderReflect)
     {
         float3 newDir = reflect(ray.direction, hitInfo.normal);
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
-        state.correction = (1.0f - collider.reflect);
+        state.correction = (1.0f - colliderReflect);
     }
     else {
         float3 newDir = BRDF(hitInfo.normal, &seed);
@@ -310,7 +364,7 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
 
-    const Ray& shadowRay = GShadowRayQueue.values[i];
+    const Ray& shadowRay = GShadowRayQueue[i];
     TraceState& state = stateBuf[shadowRay.pixeli];
     const HitInfo hitInfo = traverseBVHStack(shadowRay, true, true);
     float3 color;
