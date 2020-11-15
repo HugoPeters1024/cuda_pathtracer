@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0);
 
     Sphere spheres[1] = {
-            Sphere(make_float3(-8, 1, 1), 1, make_float3(1), 0.5),
+            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6),
     };
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 

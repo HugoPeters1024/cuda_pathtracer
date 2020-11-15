@@ -25,8 +25,9 @@ __device__ inline float3 getColliderColor(const HitInfo& hitInfo)
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: return GTriangles[hitInfo.primitive_id].color;
-        case SPHERE:   return make_float3(1);//GSpheres[hitInfo.primitive_id].color;
+        case SPHERE:   return GSpheres[hitInfo.primitive_id].color;
     }
+    assert(false);
     return make_float3(0);
 }
 
@@ -35,8 +36,9 @@ __device__ inline float getColliderReflect(const HitInfo& hitInfo)
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: return GTriangles[hitInfo.primitive_id].reflect;
-        case SPHERE:   return 1; //GSpheres[hitInfo.primitive_id].reflect;
+        case SPHERE:   return GSpheres[hitInfo.primitive_id].reflect;
     }
+    assert(false);
     return 0;
 }
 
@@ -56,6 +58,7 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ra
             return normalize(position - GSpheres[hitInfo.primitive_id].pos);
         }
     }
+    assert(false);
     return make_float3(0);
 }
 
@@ -182,7 +185,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         {
             hitInfo.intersected = true;
             if (anyIntersection) return hitInfo;
-            hitInfo.primitive_id = 1;
+            hitInfo.primitive_id = i;
             hitInfo.primitive_type = SPHERE;
             hitInfo.t = t;
         }
@@ -321,7 +324,7 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     {
         float3 newDir = reflect(ray.direction, hitInfo.normal);
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
-        state.correction = (1.0f - colliderReflect);
+        state.correction = 0;
     }
     else {
         float3 newDir = BRDF(hitInfo.normal, &seed);
