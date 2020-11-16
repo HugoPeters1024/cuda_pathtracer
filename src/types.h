@@ -24,9 +24,11 @@ struct Sphere
     float radius;
     float3 color;
     float reflect;
+    float glossy;
 
     Sphere() {}
-    Sphere(float3 pos, float radius, float3 color, float reflect) : pos(pos), radius(radius), color(color), reflect(reflect) {}
+    Sphere(float3 pos, float radius, float3 color, float reflect, float glossy) 
+        : pos(pos), radius(radius), color(color), reflect(reflect), glossy(glossy) {}
 
     HYBRID inline float3 centroid() { return pos; }
 };
@@ -101,6 +103,7 @@ struct __align__(16) Triangle
     float3 n2;
     float3 color;
     float reflect;
+    float glossy;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
     HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }

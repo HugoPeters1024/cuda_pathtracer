@@ -106,11 +106,11 @@ int main(int argc, char** argv) {
 
     // Add the models
     Scene scene;
-    //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), 0);
-    //scene.addModel("cube.obj", make_float3(0.8,0.2,0.2), 8, make_float3(0), 0.6);
+    //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
+    //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.8, 0.01);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.1);
-    scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0.0);
+    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.0, 0.1);
+    scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0.1, 0.1);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
@@ -123,10 +123,10 @@ int main(int argc, char** argv) {
     delete bvh;
 
     // add a sphere as light source
-    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0);
+    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0, 0);
 
     Sphere spheres[1] = {
-            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6),
+            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6, 0),
     };
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
@@ -274,7 +274,6 @@ int main(int argc, char** argv) {
         double fps = 1.0f / (glfwGetTime() - start);
         runningAverageFps = runningAverageFps * 0.95 + 0.05 * fps;
         if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
-
 
 
         // Vsync is broken in GLFW for my card, so just hack it in.

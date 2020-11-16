@@ -42,6 +42,17 @@ __device__ inline float getColliderReflect(const HitInfo& hitInfo)
     return 0;
 }
 
+__device__ inline float getColliderGlossy(const HitInfo& hitInfo)
+{
+    switch (hitInfo.primitive_type)
+    {
+        case TRIANGLE: return GTriangles[hitInfo.primitive_id].glossy;
+        case SPHERE:   return GSpheres[hitInfo.primitive_id].glossy;
+    }
+    assert(false);
+    return 0;
+}
+
 
 __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ray)
 {
@@ -234,7 +245,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                 for(uint i=start; i<end; i++)
                 {
                     float t;
-                    if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                    if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                     {
                         hitInfo.intersected = true;
                         if (anyIntersection) return hitInfo;
@@ -336,6 +347,7 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 
     float3 colliderColor = getColliderColor(hitInfo);
     float colliderReflect = getColliderReflect(hitInfo);
+    float colliderGlossy = getColliderGlossy(hitInfo);
 
     state.mask = state.mask * colliderColor;
     state.currentNormal = hitInfo.normal;
@@ -345,7 +357,11 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     Ray secondary;
     if (rand(&seed) < colliderReflect)
     {
-        float3 newDir = reflect(ray.direction, hitInfo.normal);
+        // reflect case
+        // Interpolate a normal and a random brdf sample with the glossyness
+        float3 newDirN = reflect(ray.direction, hitInfo.normal);
+        float3 newDirS = BRDF(newDirN, &seed);
+        float3 newDir = newDirN * (1-colliderGlossy) + colliderGlossy * newDirS;
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
         state.correction = 0;
     }
