@@ -106,6 +106,29 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     return ret && tmax > 0;
 }
 
+__device__ bool rayTriangleIntersect2(const Ray& ray, const Triangle& triangle, float* t, float currentT)
+{
+    bool ret = false;
+    float3 v0v1 = triangle.v1 - triangle.v0;
+    float3 v0v2 = triangle.v2 - triangle.v0;
+    float3 pvec = cross(ray.direction, v0v2);
+    float det = dot(v0v1, pvec);
+    ret |= fabs(det) < 0.0001f;
+    float invDet = 1 / det;
+
+    float3 tvec = ray.origin - triangle.v0;
+    float u = dot(tvec, pvec) * invDet;
+    ret |= u < 0 || u > 1;
+
+    float3 qvec = cross(tvec, v0v1);
+    float v = dot(ray.direction, qvec) * invDet;
+    ret |= v < 0 || u + v > 1;
+
+    *t = dot(v0v2, qvec) * invDet;
+    return !ret;
+}
+
+
 __device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t, float currentT)
 {
     bool ret = true;
@@ -211,7 +234,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                 for(uint i=start; i<end; i++)
                 {
                     float t;
-                    if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                    if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                     {
                         hitInfo.intersected = true;
                         if (anyIntersection) return hitInfo;

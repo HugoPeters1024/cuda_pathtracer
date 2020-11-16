@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
         assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-        uint max_bounces = shouldClear ? 1 : 3;
+        uint max_bounces = shouldClear ? 1 : 5;
         for(int bounces = 0; bounces < max_bounces; bounces++) {
 
             // Test for intersections with each of the rays,
