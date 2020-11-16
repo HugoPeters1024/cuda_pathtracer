@@ -90,7 +90,6 @@ struct __align__(16) HitInfo
     bool intersected;
     uint primitive_id;
     float t;
-    float3 normal;
 };
 
 struct __align__(16) Triangle
@@ -133,7 +132,22 @@ struct __align__(16) Triangle
     {
         return 0.5 * (v0.x*(v1.y - v2.y) + v1.x*(v2.y - v0.y) + v2.x*(v0.y-v1.y));
     }
+};
 
+struct __align__(16) TriangleV
+{
+    float3 v0, v1, v2;
+
+    TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
+};
+
+struct __align__(16) TriangleD
+{
+    float3 n0, n1, n2, color;
+    float reflect, glossy;
+
+    TriangleD(float3 n0, float3 n1, float3 n2, float3 color, float reflect, float glossy)
+        : n0(n0), n1(n1), n2(n2), color(color), reflect(reflect), glossy(glossy) {}
 };
 
 static bool __compare_triangles_x (Triangle a, Triangle b) {
@@ -183,9 +197,9 @@ struct __align__(16) BVHNode
 {
     Box boundingBox;
     uint child2;
-    uint split_plane;
+    char split_plane;
     uint t_start;
-    uint t_count;
+    char t_count;
 
     HYBRID bool isLeaf() const { return t_count > 0; }
 };

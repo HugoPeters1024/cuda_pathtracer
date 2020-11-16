@@ -24,7 +24,7 @@ __device__ inline float3 getColliderColor(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return GTriangles[hitInfo.primitive_id].color;
+        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].color;
         case SPHERE:   return GSpheres[hitInfo.primitive_id].color;
     }
     assert(false);
@@ -35,7 +35,7 @@ __device__ inline float getColliderReflect(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return GTriangles[hitInfo.primitive_id].reflect;
+        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].reflect;
         case SPHERE:   return GSpheres[hitInfo.primitive_id].reflect;
     }
     assert(false);
@@ -46,7 +46,7 @@ __device__ inline float getColliderGlossy(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return GTriangles[hitInfo.primitive_id].glossy;
+        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].glossy;
         case SPHERE:   return GSpheres[hitInfo.primitive_id].glossy;
     }
     assert(false);
@@ -59,7 +59,7 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ra
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            float3 normal = GTriangles[hitInfo.primitive_id].n0;
+            float3 normal = GTriangleData[hitInfo.primitive_id].n0;
             // ensure front facing normal
             if (dot(normal, ray.direction) >= 0) normal = -normal;
             return normal;
@@ -117,7 +117,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     return ret && tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect2(const Ray& ray, const Triangle& triangle, float* t, float currentT)
+__device__ bool rayTriangleIntersect2(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
 {
     bool ret = false;
     float3 v0v1 = triangle.v1 - triangle.v0;
@@ -140,7 +140,7 @@ __device__ bool rayTriangleIntersect2(const Ray& ray, const Triangle& triangle, 
 }
 
 
-__device__ bool rayTriangleIntersect(const Ray& ray, const Triangle& triangle, float* t, float currentT)
+__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
 {
     bool ret = true;
     // compute plane's normal
@@ -218,10 +218,10 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         if (raySphereIntersect(ray, GSpheres[i], &t) && t < hitInfo.t)
         {
             hitInfo.intersected = true;
-            if (anyIntersection) return hitInfo;
             hitInfo.primitive_id = i;
             hitInfo.primitive_type = SPHERE;
             hitInfo.t = t;
+            if (anyIntersection) return hitInfo;
         }
     }
 
@@ -248,10 +248,10 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
                     if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                     {
                         hitInfo.intersected = true;
-                        if (anyIntersection) return hitInfo;
                         hitInfo.primitive_id = i;
                         hitInfo.primitive_type = TRIANGLE;
                         hitInfo.t = t;
+                        if (anyIntersection) return hitInfo;
                     }
                 }
             }
@@ -269,16 +269,11 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     } while (size > 0);
 
-    if (hitInfo.intersected) {
-        hitInfo.normal = getColliderNormal(hitInfo, ray);
-    }
-
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
     {
         float3 isectPos = ray.origin + light_t * ray.direction;
         hitInfo.t = light_t;
-        hitInfo.normal = normalize(isectPos - GLight.pos);
         hitInfo.intersected = true;
         hitInfo.primitive_id = LIGHT_ID;
     }
@@ -346,11 +341,12 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     }
 
     float3 colliderColor = getColliderColor(hitInfo);
+    float3 colliderNormal = getColliderNormal(hitInfo, ray);
     float colliderReflect = getColliderReflect(hitInfo);
     float colliderGlossy = getColliderGlossy(hitInfo);
 
     state.mask = state.mask * colliderColor;
-    state.currentNormal = hitInfo.normal;
+    state.currentNormal = colliderNormal;
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
     // Create a secondary ray either diffuse or reflected
@@ -359,16 +355,16 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     {
         // reflect case
         // Interpolate a normal and a random brdf sample with the glossyness
-        float3 newDirN = reflect(ray.direction, hitInfo.normal);
+        float3 newDirN = reflect(ray.direction, colliderNormal);
         float3 newDirS = BRDF(newDirN, &seed);
         float3 newDir = newDirN * (1-colliderGlossy) + colliderGlossy * newDirS;
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
         state.correction = 0;
     }
     else {
-        float3 newDir = BRDF(hitInfo.normal, &seed);
+        float3 newDir = BRDF(colliderNormal, &seed);
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
-        float lambert = dot(newDir, hitInfo.normal);
+        float lambert = dot(newDir, colliderNormal);
         // We double the energy because it looks better with more indirect light.
         state.mask = state.mask * lambert;
         state.correction = 1.0f / lambert;
@@ -380,7 +376,7 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
     float3 fromLight = normalize(intersectionPos - GLight.pos);
-    if (state.correction > 0.01 && dot(fromLight, hitInfo.normal) < 0)
+    if (state.correction > 0.05 && dot(fromLight, colliderNormal) < 0)
     {
         // Sample the brdf from that point.
         float3 r = BRDF(fromLight, &seed);
@@ -419,10 +415,10 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
         float r2 = shadowRay.length * shadowRay.length;
         float SA = 4 * 3.1415926535 * r2;
         float NL = lambert(-shadowRay.direction, state.currentNormal);
-        color = GLight.color / SA;
+        color = (GLight.color / SA) * NL;
     }
 
-    state.accucolor += state.correction * state.mask * color * lambert(-state.currentNormal, shadowRay.direction);
+    state.accucolor += state.correction * state.mask * color;
     stateBuf[shadowRay.pixeli] = state;
 }
 

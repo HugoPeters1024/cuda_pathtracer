@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
     // Add the models
     Scene scene;
     //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
-    //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.8, 0.01);
+    //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.0, 0.01);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.0, 0.1);
     scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0.1, 0.1);
@@ -122,18 +122,25 @@ int main(int argc, char** argv) {
 
     delete bvh;
 
-    // add a sphere as light source
-    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0, 0);
 
-    Sphere spheres[1] = {
-            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6, 0),
-    };
-    SizedBuffer<Sphere>(spheres, 1, GSpheres);
+    // Split the vertices and other data for better caching
+    std::vector<TriangleV> triangleVertices;
+    std::vector<TriangleD> triangleData;
+    for(const Triangle& t : newTriangles)
+    {
+        triangleVertices.push_back(TriangleV(t.v0, t.v1, t.v2));
+        triangleData.push_back(TriangleD(t.n0, t.n1, t.n2, t.color, t.reflect, t.glossy));
+    }
 
+    TriangleV* triangleVerticesBuf;
+    cudaSafe( cudaMalloc(&triangleVerticesBuf, triangleVertices.size() * sizeof(TriangleV)) );
+    cudaSafe( cudaMemcpy(triangleVerticesBuf, &triangleVertices[0], triangleVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleVerticesBuf, sizeof(triangleVerticesBuf)) );
 
-    Triangle* triangleBuf;
-    cudaSafe( cudaMalloc(&triangleBuf, newTriangles.size() * sizeof(Triangle)) );
-    cudaSafe( cudaMemcpy(triangleBuf, &newTriangles[0], newTriangles.size() * sizeof(Triangle), cudaMemcpyHostToDevice) );
+    TriangleD* triangleDataBuf;
+    cudaSafe( cudaMalloc(&triangleDataBuf, triangleData.size() * sizeof(TriangleD)) );
+    cudaSafe( cudaMemcpy(triangleDataBuf, &triangleData[0], triangleData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyToSymbol(GTriangleData, &triangleDataBuf, sizeof(triangleDataBuf)) );
 
     BVHNode* bvhBuf;
     printf("BVH Size: %u\n", newBvh.size());
@@ -148,13 +155,19 @@ int main(int argc, char** argv) {
     // to pass the whole array constantly to small functions like sibling.
     cudaSafe( cudaMemcpyToSymbol(GBVH, &bvhBuf, sizeof(bvhBuf)) );
 
-    // Do the same for the triangle buffer
-    cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleBuf, sizeof(triangleBuf)) );
 
     // queue of rays used in wavefront tracing
     AtomicQueue<Ray> rayQueue(NR_PIXELS);
     AtomicQueue<Ray> shadowRayQueue(NR_PIXELS);
     AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
+
+    // add a sphere as light source
+    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0, 0);
+
+    Sphere spheres[1] = {
+            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6, 0),
+    };
+    SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
     HitInfo* intersectionBuf;
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );

@@ -7,8 +7,11 @@
 // global pointer to the bvh buffer
 __constant__ BVHNode* GBVH;
 
-// global pointer to triangle buffer
-__constant__ Triangle* GTriangles;
+// global pointer to triangle buffer, one for just vertices
+__constant__ TriangleV* GTriangles;
+
+// the rest in a different buffer
+__constant__ TriangleD* GTriangleData;
 
 __constant__ Sphere GLight;
 
