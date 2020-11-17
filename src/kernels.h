@@ -225,7 +225,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    const uint STACK_SIZE = 200;
+    const uint STACK_SIZE = 20;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
     *stackPtr++ = 0;
@@ -236,43 +236,41 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         uint current_id = *--stackPtr;
         BVHNode current = GBVH[current_id];
         size -= 1;
-        if (boxtest(current.boundingBox, ray, &hitInfo))
+        if (!boxtest(current.boundingBox, ray, &hitInfo)) continue;
+
+        if (current.isLeaf())
         {
-            if (current.isLeaf())
+            uint start = current.t_start;
+            uint end = start + current.t_count;
+            float t;
+            for(uint i=start; i<end; i++)
             {
-                uint start = current.t_start;
-                uint end = start + current.t_count;
-                for(uint i=start; i<end; i++)
+                if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                 {
-                    float t;
-                    if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
-                    {
-                        hitInfo.intersected = true;
-                        hitInfo.primitive_id = i;
-                        hitInfo.primitive_type = TRIANGLE;
-                        hitInfo.t = t;
-                        if (anyIntersection) return hitInfo;
-                    }
+                    hitInfo.intersected = true;
+                    hitInfo.primitive_id = i;
+                    hitInfo.primitive_type = TRIANGLE;
+                    hitInfo.t = t;
+                    if (anyIntersection) return hitInfo;
                 }
             }
-            else
-            {
-                bool firstNear = firstIsNear(current, ray);
-                uint near = firstNear ? current_id + 1 : current.child2;
-                uint far = firstNear ? current.child2 : current_id + 1;
-                // push on the stack, first the far child
-                *stackPtr++ = far;
-                *stackPtr++ = near;
-                size += 2;
-               // assert (size < STACK_SIZE);
-            }
+        }
+        else
+        {
+            bool firstNear = firstIsNear(current, ray);
+            uint near = firstNear ? current_id + 1 : current.child2;
+            uint far = firstNear ? current.child2 : current_id + 1;
+            // push on the stack, first the far child
+            *stackPtr++ = far;
+            *stackPtr++ = near;
+            size += 2;
+           // assert (size < STACK_SIZE);
         }
     } while (size > 0);
 
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
     {
-        float3 isectPos = ray.origin + light_t * ray.direction;
         hitInfo.t = light_t;
         hitInfo.intersected = true;
         hitInfo.primitive_id = LIGHT_ID;

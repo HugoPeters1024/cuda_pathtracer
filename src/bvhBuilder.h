@@ -98,6 +98,8 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         return ret;
     }
 
+    assert(triangles.size() >= 2);
+
     // Sort the triangles one last time based on the level the heuristic gave us.
     switch (min_level) {
         case 0: std::sort(triangles.begin(), triangles.end(), __compare_triangles_x); break;
