@@ -80,7 +80,7 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
         for(int i=0; i<triangles.size(); i++)
         {
             // 0.5 is the cost of traversal
-            float thisCost = leftCosts[i] * i + rightCosts[triangles.size() - i - 1] * (triangles.size() - i) + 1.0;
+            float thisCost = leftCosts[i] * i + rightCosts[triangles.size() - i - 1] * (triangles.size() - i) + 1.5;
             if (thisCost < min_cost)
             {
                 min_cost = thisCost;
@@ -121,11 +121,17 @@ BVHTree* createBVH(std::vector<Triangle> triangles)
     return ret;
 }
 
-void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, std::vector<BVHNode>& seqBvh)
+BVHNode* sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles)
 {
-    // Keep track of a parent id and subtree.
+    // Allocate necessary memory
+    BVHNode* ret = (BVHNode*)malloc(root->treeSize() * sizeof(BVHNode));
+
+    // Keep track of the assigned id and subtree.
     std::stack<std::pair<uint, const BVHTree*>> work;
-    work.push(std::pair<uint, const BVHTree*>(0, root));
+    uint indexCounter = 0;
+
+    // perform a depth first search using (index, item)
+    work.push(std::pair<uint, const BVHTree*>(indexCounter++, root));
 
     while(!work.empty())
     {
@@ -133,35 +139,33 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         work.pop();
 
         const BVHTree* currentNode = tmp.second;
-        uint discoveredBy = tmp.first;
+        uint myIndex = tmp.first;
 
         Box boundingBox = currentNode->boundingBox;
         uint split_plane = currentNode->used_level;
 
-        // The node adds it's segment
-        uint t_start = newTriangles.size();
         uint t_count = currentNode->triangles.size();
-
-        // Add the triangles
-        for (const Triangle& t : currentNode->triangles) newTriangles.push_back(t);
-
-
-        // Calculate the indices of the children before hand
-        uint myId = seqBvh.size();
         if (t_count == 0) // aka not a leaf
         {
-            uint child2 = myId + 1 + currentNode->child1->treeSize();
-            seqBvh.push_back(BVHNode::MakeNode(boundingBox, child2, split_plane));
+            // get the child id, child2 should always be 1 more than child1
+            uint child1 = indexCounter++;
+            uint child2 = indexCounter++;
+            ret[myIndex] = BVHNode::MakeNode(boundingBox, child1, split_plane);
 
-            // child 1 should be on the top of the stack so we push it last
-            work.push(std::make_pair(myId, currentNode->child2));
-            work.push(std::make_pair(myId, currentNode->child1));
+            work.push(std::make_pair(child1, currentNode->child1));
+            work.push(std::make_pair(child2, currentNode->child2));
         }
         else
         {
-            seqBvh.push_back(BVHNode::MakeChild(boundingBox, t_start, t_count));
+            // The node adds it's segment
+            uint t_start = newTriangles.size();
+            for (const Triangle& t : currentNode->triangles) newTriangles.push_back(t);
+
+            ret[myIndex] = BVHNode::MakeChild(boundingBox, t_start, t_count);
         }
     }
+
+    return ret;
 }
 
 class Scene

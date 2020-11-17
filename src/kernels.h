@@ -9,15 +9,25 @@
 // Some random large number
 #define LIGHT_ID 29347528
 
+template <typename T>
+__device__ inline void swap(T* left, T* right)
+{
+    T* tmp = left;
+    left = right;
+    right = tmp;
+}
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
     return max(dot(v1,v2),0.0f);
 }
 
-__device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
+__device__ inline bool firstIsFar(const Ray& ray, const uint split_plane)
 {
-    return (ray.direction.x > 0) * (node.split_plane() == 0) + (ray.direction.y > 0) * (node.split_plane() == 1) + (ray.direction.z > 0) * (node.split_plane() == 2);
+    // branchless switch
+    return (ray.direction.x < 0) * (split_plane == 0) + 
+           (ray.direction.y < 0) * (split_plane == 1) + 
+           (ray.direction.z < 0) * (split_plane == 2);
 }
 
 __device__ inline float3 getColliderColor(const HitInfo& hitInfo)
@@ -205,6 +215,24 @@ __device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hi
     return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
+__device__ inline void processLeaf(const BVHNode& node, const Ray& ray, HitInfo* hitInfo, bool anyIntersection)
+{
+    uint start = node.t_start;
+    uint end = start + node.t_count();
+    float t;
+    for(uint i=start; i<end; i++)
+    {
+        if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo->t) && t < hitInfo->t)
+        {
+            hitInfo->intersected = true;
+            hitInfo->primitive_id = i;
+            hitInfo->primitive_type = TRIANGLE;
+            hitInfo->t = t;
+            if (anyIntersection) return;
+        }
+    }
+}
+
 __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
     HitInfo hitInfo;
@@ -224,48 +252,73 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    const uint STACK_SIZE = 20;
-    uint stack[STACK_SIZE];
-    uint* stackPtr = stack;
-    *stackPtr++ = 0;
+    const uint STACK_SIZE = 10;
+    uint node_stack[STACK_SIZE];
+    uint split_stack[STACK_SIZE];
+    uint* nodeStackPtr = node_stack;
+    uint* splitStackPtr = split_stack;
+    uint size = 0;
 
-    uint size = 1;
-    do
+    // test if the root node is intersected, then push its child on the stack.
+    const BVHNode& root = GBVH[0];
+    if (boxtest(root.boundingBox, ray, &hitInfo)) {
+        if (root.isLeaf())
+            processLeaf(root, ray, &hitInfo, anyIntersection);
+        else {
+            *nodeStackPtr++ = root.child1;
+            *splitStackPtr++ = root.split_plane();
+            size++;
+        }
+    }
+
+    while(size > 0)
     {
-        uint current_id = *--stackPtr;
-        BVHNode current = GBVH[current_id];
+        uint child1_id = *--nodeStackPtr;
+        uint split_plane = *--splitStackPtr;
         size -= 1;
-        if (!boxtest(current.boundingBox, ray, &hitInfo)) continue;
 
-        if (current.isLeaf())
+        const BVHNode children[2] =  { GBVH[child1_id], GBVH[child1_id + 1] };
+
+        // ensure child1 is near
+        if (firstIsFar(ray, split_plane)) swap(children, children+1);
+
+        bool b[2] = { false, false };
+        for(int c=0; c<1; c++)
         {
-            uint start = current.t_start;
-            uint end = start + current.t_count();
-            float t;
-            for(uint i=start; i<end; i++)
+            const BVHNode& node = children[c];
+            if (!boxtest(node.boundingBox, ray , &hitInfo)) continue;
+            if (node.isLeaf())
             {
-                if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                uint start = node.t_start;
+                uint end = start + node.t_count();
+                float t;
+                for(uint i=start; i<end; i++)
                 {
-                    hitInfo.intersected = true;
-                    hitInfo.primitive_id = i;
-                    hitInfo.primitive_type = TRIANGLE;
-                    hitInfo.t = t;
-                    if (anyIntersection) return hitInfo;
+                    if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                    {
+                        hitInfo.intersected = true;
+                        hitInfo.primitive_id = i;
+                        hitInfo.primitive_type = TRIANGLE;
+                        hitInfo.t = t;
+                        if (anyIntersection) return hitInfo;
+                    }
                 }
             }
+            else
+            {
+                b[c] = true;
+                *nodeStackPtr++ = node.child1;
+                *splitStackPtr++ = node.split_plane();
+                size++;
+            }
         }
-        else
+
+        if (b[0] && b[1] && firstIsFar(ray, split_plane))
         {
-            bool firstNear = firstIsNear(current, ray);
-            uint near = firstNear ? current_id + 1 : current.child2;
-            uint far = firstNear ? current.child2 : current_id + 1;
-            // push on the stack, first the far child
-            *stackPtr++ = far;
-            *stackPtr++ = near;
-            size += 2;
-           // assert (size < STACK_SIZE);
+            swap(nodeStackPtr, nodeStackPtr-1);
+            swap(splitStackPtr, splitStackPtr-1);
         }
-    } while (size > 0);
+    }
 
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)

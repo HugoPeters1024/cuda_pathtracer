@@ -162,13 +162,6 @@ static bool __compare_triangles_z (Triangle a, Triangle b) {
     return (a.centroid().z < b.centroid().z);
 }
 
-struct BVHSplittingTree
-{
-    float cost;
-    BVHSplittingTree* child1;
-    BVHSplittingTree* child2;
-};
-
 struct BVHTree
 {
     BVHTree* child1;
@@ -180,8 +173,8 @@ struct BVHTree
 
     uint treeSize() const {
         if (isLeaf) return 1;
-        uint left = child1 != nullptr ? child1->treeSize() : 0;
-        uint right = child2 != nullptr ? child2->treeSize() : 0;
+        uint left = child1->treeSize();
+        uint right =child2->treeSize();
         return 1 + left + right;
     }
 
@@ -198,7 +191,7 @@ struct __align__(16) BVHNode
     Box boundingBox;
     // either a leaf or a child
     union {
-        uint child2;
+        uint child1;
         uint t_start;
     };
     uint t_data;
@@ -214,11 +207,11 @@ struct __align__(16) BVHNode
         ret.t_data = t_count;
         return ret;
     }
-    static BVHNode MakeNode(Box boundingBox, uint child2, uint split_plane) 
+    static BVHNode MakeNode(Box boundingBox, uint child1, uint split_plane) 
     {
         BVHNode ret;
         ret.boundingBox = boundingBox;
-        ret.child2 = child2;
+        ret.child1 = child1;
         ret.t_data = split_plane << 30;
         return ret;
     }
