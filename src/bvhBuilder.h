@@ -135,14 +135,12 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
         const BVHTree* currentNode = tmp.second;
         uint discoveredBy = tmp.first;
 
-        BVHNode node;
-        node.child2 = 0;
-        node.boundingBox = currentNode->boundingBox;
-        node.split_plane = currentNode->used_level;
+        Box boundingBox = currentNode->boundingBox;
+        uint split_plane = currentNode->used_level;
 
         // The node adds it's segment
-        node.t_start = newTriangles.size();
-        node.t_count = currentNode->triangles.size();
+        uint t_start = newTriangles.size();
+        uint t_count = currentNode->triangles.size();
 
         // Add the triangles
         for (const Triangle& t : currentNode->triangles) newTriangles.push_back(t);
@@ -150,15 +148,19 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
 
         // Calculate the indices of the children before hand
         uint myId = seqBvh.size();
-        if (node.t_count == 0) // aka not a leaf
+        if (t_count == 0) // aka not a leaf
         {
-            node.child2 = myId + 1 + currentNode->child1->treeSize();
+            uint child2 = myId + 1 + currentNode->child1->treeSize();
+            seqBvh.push_back(BVHNode::MakeNode(boundingBox, child2, split_plane));
 
             // child 1 should be on the top of the stack so we push it last
             work.push(std::make_pair(myId, currentNode->child2));
             work.push(std::make_pair(myId, currentNode->child1));
         }
-        seqBvh.push_back(node);
+        else
+        {
+            seqBvh.push_back(BVHNode::MakeChild(boundingBox, t_start, t_count));
+        }
     }
 }
 

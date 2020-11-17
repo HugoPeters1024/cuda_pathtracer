@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
     //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
     //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.0, 0.01);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.8, 0.05);
+    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.0, 0.05);
     scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0.1, 0.1);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");

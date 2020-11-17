@@ -196,12 +196,32 @@ struct BVHTree
 struct __align__(16) BVHNode
 {
     Box boundingBox;
-    uint child2;
-    char split_plane;
-    uint t_start;
-    char t_count;
+    // either a leaf or a child
+    union {
+        uint child2;
+        uint t_start;
+    };
+    uint t_data;
+    HYBRID uint split_plane() const { return t_data >> 30; }
+    HYBRID uint t_count() const { return t_data & (0xffffffff>>2); }
+    HYBRID bool isLeaf() const { return t_count() > 0; }
 
-    HYBRID bool isLeaf() const { return t_count > 0; }
+    static BVHNode MakeChild(Box boundingBox, uint t_start, uint t_count) 
+    {
+        BVHNode ret;
+        ret.boundingBox = boundingBox;
+        ret.t_start = t_start;
+        ret.t_data = t_count;
+        return ret;
+    }
+    static BVHNode MakeNode(Box boundingBox, uint child2, uint split_plane) 
+    {
+        BVHNode ret;
+        ret.boundingBox = boundingBox;
+        ret.child2 = child2;
+        ret.t_data = split_plane << 30;
+        return ret;
+    }
 };
 
 struct __align__(16) TraceState

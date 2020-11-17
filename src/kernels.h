@@ -17,7 +17,7 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
 
 __device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
 {
-    return (ray.direction.x > 0) * (node.split_plane == 0) + (ray.direction.y > 0) * (node.split_plane == 1) + (ray.direction.z > 0) * (node.split_plane == 2);
+    return (ray.direction.x > 0) * (node.split_plane() == 0) + (ray.direction.y > 0) * (node.split_plane() == 1) + (ray.direction.z > 0) * (node.split_plane() == 2);
 }
 
 __device__ inline float3 getColliderColor(const HitInfo& hitInfo)
@@ -119,24 +119,23 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
 
 __device__ bool rayTriangleIntersect2(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
 {
-    bool ret = false;
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
     float det = dot(v0v1, pvec);
-    ret |= fabs(det) < 0.0001f;
+    if (fabs(det) < 0.0001f) return false;
     float invDet = 1 / det;
 
     float3 tvec = ray.origin - triangle.v0;
     float u = dot(tvec, pvec) * invDet;
-    ret |= u < 0 || u > 1;
+    if (u < 0 || u > 1) return false;
 
     float3 qvec = cross(tvec, v0v1);
     float v = dot(ray.direction, qvec) * invDet;
-    ret |= v < 0 || u + v > 1;
+    if(v < 0 || u + v > 1) return false;
 
     *t = dot(v0v2, qvec) * invDet;
-    return !ret;
+    return *t > 0;
 }
 
 
@@ -241,11 +240,11 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         if (current.isLeaf())
         {
             uint start = current.t_start;
-            uint end = start + current.t_count;
+            uint end = start + current.t_count();
             float t;
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                 {
                     hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
