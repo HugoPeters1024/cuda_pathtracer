@@ -167,6 +167,9 @@ int main(int argc, char** argv) {
     Sphere spheres[1] = {
             Sphere(make_float3(-8, 1, 1), 1, Material::DIFFUSE(make_float3(1))),
     };
+    spheres[0].material.transmit = 0.5;
+    spheres[0].material.refractive_index = 1.1;
+    spheres[0].material.reflect = 0.2;
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
     HitInfo* intersectionBuf;

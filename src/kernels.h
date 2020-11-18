@@ -9,6 +9,45 @@
 // Some random large number
 #define LIGHT_ID 29347528
 
+template <typename T>
+__device__ inline void swap(T* left, T* right)
+{
+    T* tmp = left;
+    left = right;
+    right = tmp;
+}
+
+__device__ float FresnelReflectAmount (float n1, float n2, float3 normal, float3 incident, float reflect)
+{
+        // Schlick aproximation
+        float r0 = (n1-n2) / (n1+n2);
+        r0 *= r0;
+        float cosX = -dot(normal, incident);
+        if (n1 > n2)
+        {
+            float n = n1/n2;
+            float sinT2 = n*n*(1.0-cosX*cosX);
+            // Total internal reflection
+            if (sinT2 > 1.0)
+                return 1.0;
+            cosX = sqrt(1.0-sinT2);
+        }
+        float x = 1.0-cosX;
+        float ret = r0+(1.0-r0)*x*x*x*x*x;
+ 
+        // adjust reflect multiplier for object reflectivity
+        ret = (reflect + (1.0-reflect) * ret);
+        return ret;
+}
+
+// https://developer.download.nvidia.cn/cg/refract.html
+__device__ float3 refract( float3 i, float3 n, float eta )
+{
+  float cosi = dot(-i, n);
+  float cost2 = 1.0f - eta * eta * (1.0f - cosi*cosi);
+  float3 t = eta*i + ((eta*cosi - sqrt(abs(cost2))) * n);
+  return t * make_float3(cost2 > 0);
+}
 
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
@@ -37,15 +76,15 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ra
         case TRIANGLE: {
             float3 normal = GTriangleData[hitInfo.primitive_id].n0;
             // ensure front facing normal
-            if (dot(normal, ray.direction) >= 0) normal = -normal;
+            //if (dot(normal, ray.direction) >= 0) normal = -normal;
             return normal;
         }
         case SPHERE: {
             const Sphere& sphere = GSpheres[hitInfo.primitive_id];
             float3 position = ray.origin + hitInfo.t * ray.direction;
-            float3 normal = normalize(position - sphere.pos);
-            float3 OP = ray.origin - sphere.pos;
-            return dot(OP, OP) < sphere.radius * sphere.radius ? -normal : normal;
+            return normalize(position - sphere.pos);
+            //float3 OP = ray.origin - sphere.pos;
+            //return dot(OP, OP) < sphere.radius * sphere.radius ? -normal : normal;
         }
     }
     assert(false);
@@ -288,6 +327,35 @@ __device__ float3 BRDF(const float3& normal, uint* seed)
     return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 }
 
+__device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, uint* seed)
+{
+    // reflect case
+    // Interpolate a normal and a random brdf sample with the glossyness
+    float3 newDirN = reflect(ray.direction, -normal);
+    float3 newDirS = BRDF(newDirN, seed);
+    float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
+    return Ray(intersectionPos, newDir, ray.pixeli);
+}
+
+__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed)
+{
+    // calcuate the eta based on whether we are inside
+    float eta = inside ? material.refractive_index : 1.0 / material.refractive_index;
+    float reflected = FresnelReflectAmount(1.0 / eta, eta, normal, ray.direction, material.reflect);
+    if (rand(seed) < reflected)
+        return getReflectRay(ray, inside ? -normal : normal, intersectionPos, material, seed);
+
+
+    float3 newDir = refract(ray.direction, inside ? -normal : normal, eta);
+    return Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
+}
+
+__device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint* seed)
+{
+    float3 newDir = BRDF(normal, seed);
+    return Ray(intersectionPos, newDir, ray.pixeli);
+}
+
 
 __global__ void kernel_clear_state(TraceState* state)
 {
@@ -333,31 +401,59 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     }
 
     const Material& material = getColliderMaterial(hitInfo);
-    float3 colliderNormal = getColliderNormal(hitInfo, ray);
+    float3 originalNormal = getColliderNormal(hitInfo, ray);
+    bool inside = dot(ray.direction, originalNormal) > 0;
+    float3 colliderNormal = inside ? -originalNormal : originalNormal;
+
 
     state.mask = state.mask * material.color;
     state.currentNormal = colliderNormal;
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
+
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (rand(&seed) < material.reflect)
+    if (material.transmit > 0)
     {
-        // reflect case
-        // Interpolate a normal and a random brdf sample with the glossyness
-        float3 newDirN = reflect(ray.direction, colliderNormal);
-        float3 newDirS = BRDF(newDirN, &seed);
-        float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
-        secondary = Ray(intersectionPos, newDir, ray.pixeli);
+        /*
+        float3 normal = normalize(intersectionPos - GSpheres[0].pos);
+        float cosi = dot(normal, ray.direction);
+        float eta = dot(normal, ray.direction) < 1 ? 1.0f / 1.2f : 1.1f;
+
+        float reflected = FresnelReflectAmount(eta, 1.0 / eta, normal, ray.direction, material.reflect);
+
+        float3 newDir = refract(ray.direction, colliderNormal, eta);
+        secondary = Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
+        */
+
+        float reflected;
+        secondary = getRefractRay(ray, originalNormal, intersectionPos, material, inside, &seed);
         state.correction = 0;
     }
-    else {
-        float3 newDir = BRDF(colliderNormal, &seed);
-        secondary = Ray(intersectionPos, newDir, ray.pixeli);
-        float lambert = dot(newDir, colliderNormal);
-        // We double the energy because it looks better with more indirect light.
-        state.mask = state.mask * lambert;
-        state.correction = 1.0f / lambert;
+    else
+    {
+        if (rand(&seed) < material.reflect)
+        {
+            // reflect case
+            // Interpolate a normal and a random brdf sample with the glossyness
+            //float3 newDirN = reflect(ray.direction, -colliderNormal);
+            //float3 newDirS = BRDF(newDirN, &seed);
+            //float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
+            secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, &seed);
+
+            // ensure that no shadow ray will be cast
+            state.correction = 0;
+        }
+        else 
+        {
+           // float3 newDir = BRDF(colliderNormal, &seed);
+            //secondary = Ray(intersectionPos, newDir, ray.pixeli);
+            secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, &seed);
+            float lambert = dot(secondary.direction, colliderNormal);
+
+            state.mask = state.mask * lambert;
+            state.correction = 1.0f / lambert;
+        }
     }
 
     GRayQueueNew.push(secondary);
@@ -379,10 +475,14 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
         float shadowLength = length(shadowDir);
         shadowDir /= shadowLength;
 
-        // We invert the shadowrays to get coherent origins.
-        Ray shadowRay(samplePoint, shadowDir, ray.pixeli);
-        shadowRay.length = shadowLength - EPS;
-        GShadowRayQueue.push(shadowRay);
+        // otherwise we are our own occluder
+        if (dot(colliderNormal, shadowDir) < 0)
+        {
+            // We invert the shadowrays to get coherent origins.
+            Ray shadowRay(samplePoint, shadowDir, ray.pixeli);
+            shadowRay.length = shadowLength - EPS;
+            GShadowRayQueue.push(shadowRay);
+        }
     }
 }
 
