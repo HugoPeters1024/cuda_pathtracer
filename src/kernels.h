@@ -253,37 +253,56 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     }
 
     const uint STACK_SIZE = 10;
-    uint node_stack[STACK_SIZE];
-    uint split_stack[STACK_SIZE];
-    uint* nodeStackPtr = node_stack;
-    uint* splitStackPtr = split_stack;
-    uint size = 0;
-
-    // test if the root node is intersected, then push its child on the stack.
+    BVHNode node_stack[STACK_SIZE];
+    BVHNode* nodeStackPtr = node_stack;
     const BVHNode& root = GBVH[0];
-    if (boxtest(root.boundingBox, ray, &hitInfo)) {
-        if (root.isLeaf())
-            processLeaf(root, ray, &hitInfo, anyIntersection);
-        else {
-            *nodeStackPtr++ = root.child1;
-            *splitStackPtr++ = root.split_plane();
-            size++;
-        }
-    }
+    *nodeStackPtr++  = root;
+    uint size = 1;
 
     while(size > 0)
     {
-        uint child1_id = *--nodeStackPtr;
-        uint split_plane = *--splitStackPtr;
+        BVHNode node = *--nodeStackPtr;
         size -= 1;
 
-        const BVHNode children[2] =  { GBVH[child1_id], GBVH[child1_id + 1] };
+        if (!boxtest(node.boundingBox, ray, &hitInfo)) continue;
+        if (node.isLeaf())
+        {
+            uint start = node.t_start;
+            uint end = start + node.t_count();
+            float t;
+            for(uint i=start; i<end; i++)
+            {
+                if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                {
+                    hitInfo.intersected = true;
+                    hitInfo.primitive_id = i;
+                    hitInfo.primitive_type = TRIANGLE;
+                    hitInfo.t = t;
+                    if (anyIntersection) return hitInfo;
+                }
+            }
+        }
+        else
+        {
+            const BVHNode child1 = GBVH[node.child1];
+            const BVHNode child2 = GBVH[node.child1 + 1];
 
-        // ensure child1 is near
-        if (firstIsFar(ray, split_plane)) swap(children, children+1);
+            // ensure child1 is near
+            if (!firstIsFar(ray, node.split_plane())) swap(&child1, &child2);
 
+            // push the children
+            *nodeStackPtr++ = child2;
+            *nodeStackPtr++ = child1;
+            size += 2;
+        }
+
+
+
+        // process near child
+
+        /*
         bool b[2] = { false, false };
-        for(int c=0; c<1; c++)
+        for(int c=0; c<2; c++)
         {
             const BVHNode& node = children[c];
             if (!boxtest(node.boundingBox, ray , &hitInfo)) continue;
@@ -318,6 +337,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
             swap(nodeStackPtr, nodeStackPtr-1);
             swap(splitStackPtr, splitStackPtr-1);
         }
+        */
     }
 
     float light_t;
