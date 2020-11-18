@@ -20,39 +20,15 @@ __device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
     return (ray.direction.x > 0) * (node.split_plane() == 0) + (ray.direction.y > 0) * (node.split_plane() == 1) + (ray.direction.z > 0) * (node.split_plane() == 2);
 }
 
-__device__ inline float3 getColliderColor(const HitInfo& hitInfo)
+__device__ inline Material getColliderMaterial(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].color;
-        case SPHERE:   return GSpheres[hitInfo.primitive_id].color;
+        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].material;
+        case SPHERE:   return GSpheres[hitInfo.primitive_id].material;
     }
     assert(false);
-    return make_float3(0);
 }
-
-__device__ inline float getColliderReflect(const HitInfo& hitInfo)
-{
-    switch (hitInfo.primitive_type)
-    {
-        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].reflect;
-        case SPHERE:   return GSpheres[hitInfo.primitive_id].reflect;
-    }
-    assert(false);
-    return 0;
-}
-
-__device__ inline float getColliderGlossy(const HitInfo& hitInfo)
-{
-    switch (hitInfo.primitive_type)
-    {
-        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].glossy;
-        case SPHERE:   return GSpheres[hitInfo.primitive_id].glossy;
-    }
-    assert(false);
-    return 0;
-}
-
 
 __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ray)
 {
@@ -65,16 +41,34 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ra
             return normal;
         }
         case SPHERE: {
+            const Sphere& sphere = GSpheres[hitInfo.primitive_id];
             float3 position = ray.origin + hitInfo.t * ray.direction;
-            return normalize(position - GSpheres[hitInfo.primitive_id].pos);
+            float3 normal = normalize(position - sphere.pos);
+            float3 OP = ray.origin - sphere.pos;
+            return dot(OP, OP) < sphere.radius * sphere.radius ? -normal : normal;
         }
     }
     assert(false);
     return make_float3(0);
 }
 
-__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* dis)
+__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* t)
 {
+    float3 OC = ray.origin - sphere.pos;
+    float a = dot(ray.direction, ray.direction);
+    float b = 2 * dot(ray.direction, OC);
+    float c = dot(OC, OC) - sphere.radius * sphere.radius;
+    float det = b*b - 4 * a *c;
+    if (det < 0) return false;
+    det = sqrt(det);
+    float tmin = (-b - det) / (2*a);
+    float tmax = (-b + det) / (2*a);
+    *t = tmin;
+    if (tmin < 0) *t = tmax;
+    return tmax > 0;
+
+
+    /*
     float3 c = sphere.pos - ray.origin;
     float t = dot(c, ray.direction);
     float3 q = c - (t * ray.direction);
@@ -83,6 +77,7 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
     t -= sqrtf(sphere.radius * sphere.radius - p2);
     *dis = t;
     return t > 0;
+    */
 }
 
 __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float* maxt)
@@ -224,7 +219,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    const uint STACK_SIZE = 20;
+    const uint STACK_SIZE = 10;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
     *stackPtr++ = 0;
@@ -337,24 +332,22 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
         return;
     }
 
-    float3 colliderColor = getColliderColor(hitInfo);
+    const Material& material = getColliderMaterial(hitInfo);
     float3 colliderNormal = getColliderNormal(hitInfo, ray);
-    float colliderReflect = getColliderReflect(hitInfo);
-    float colliderGlossy = getColliderGlossy(hitInfo);
 
-    state.mask = state.mask * colliderColor;
+    state.mask = state.mask * material.color;
     state.currentNormal = colliderNormal;
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (rand(&seed) < colliderReflect)
+    if (rand(&seed) < material.reflect)
     {
         // reflect case
         // Interpolate a normal and a random brdf sample with the glossyness
         float3 newDirN = reflect(ray.direction, colliderNormal);
         float3 newDirS = BRDF(newDirN, &seed);
-        float3 newDir = newDirN * (1-colliderGlossy) + colliderGlossy * newDirS;
+        float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
         secondary = Ray(intersectionPos, newDir, ray.pixeli);
         state.correction = 0;
     }
@@ -372,9 +365,9 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     stateBuf[ray.pixeli] = state;
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
-    float3 fromLight = normalize(intersectionPos - GLight.pos);
-    if (state.correction > 0.05 && dot(fromLight, colliderNormal) < 0)
+    if (state.correction > 0.05)
     {
+        float3 fromLight = normalize(intersectionPos - GLight.pos);
         // Sample the brdf from that point.
         float3 r = BRDF(fromLight, &seed);
 
@@ -412,7 +405,7 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
         float r2 = shadowRay.length * shadowRay.length;
         float SA = 4 * 3.1415926535 * r2;
         float NL = lambert(-shadowRay.direction, state.currentNormal);
-        color = (GLight.color / SA) * NL;
+        color = (GLight.material.color / SA) * NL;
     }
 
     state.accucolor += state.correction * state.mask * color;

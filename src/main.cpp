@@ -109,8 +109,8 @@ int main(int argc, char** argv) {
     //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
     //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.0, 0.01);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", make_float3(1), 1, make_float3(0), make_float3(0,12,0), 0.0, 0.05);
-    scene.addModel("lucy.obj", make_float3(0.722, 0.451, 0.012), 0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), 0.1, 0.1);
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), Material::DIFFUSE(make_float3(1)));
+    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), Material::DIFFUSE(make_float3(0.722, 0.451, 0.012)));
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     for(const Triangle& t : newTriangles)
     {
         triangleVertices.push_back(TriangleV(t.v0, t.v1, t.v2));
-        triangleData.push_back(TriangleD(t.n0, t.n1, t.n2, t.color, t.reflect, t.glossy));
+        triangleData.push_back(TriangleD(t.n0, t.n1, t.n2, t.material));
     }
 
     TriangleV* triangleVerticesBuf;
@@ -162,10 +162,10 @@ int main(int argc, char** argv) {
     AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
 
     // add a sphere as light source
-    Sphere light(make_float3(-8,4,0), 0.05, make_float3(150), 0, 0);
+    Sphere light(make_float3(-8,4,0), 0.05, Material::DIFFUSE(make_float3(150)));
 
     Sphere spheres[1] = {
-            Sphere(make_float3(-8, 1, 1), 1, make_float3(0,0,1), 0.6, 0),
+            Sphere(make_float3(-8, 1, 1), 1, Material::DIFFUSE(make_float3(1))),
     };
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
@@ -277,8 +277,8 @@ int main(int argc, char** argv) {
         // Handle IO and swap the backbuffer
         camera.update(window);
         shouldClear = camera.hasMoved();
-        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { light.color *= 0.97; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { light.color *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { light.material.color *= 0.97; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { light.material.color *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
         glfwPollEvents();

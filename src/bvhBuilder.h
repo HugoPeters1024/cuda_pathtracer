@@ -168,7 +168,7 @@ class Scene
 {
 public:
     std::vector<Triangle> triangles;
-    void addModel(std::string filename, float3 color, float scale, float3 rotation, float3 offset, float reflect, float glossy)
+    void addModel(std::string filename, float scale, float3 rotation, float3 offset, Material material)
     {
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
@@ -211,7 +211,7 @@ public:
                 n2 = make_float3(normals[it2.normal_index * 3 + 0], normals[it2.normal_index * 3 + 1], normals[it2.normal_index * 3 + 2]);
             }
 
-            triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, color, reflect, glossy});
+            triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, material});
         }
     }
 

@@ -18,17 +18,30 @@
 // Asserts that the current location is within the space
 #define CUDA_LIMIT(x,y) { if (x >= WINDOW_WIDTH || y >= WINDOW_HEIGHT) return; }
 
+struct Material
+{
+    float3 color;
+    float reflect;
+    float glossy;
+    float transmit;
+    float refractive_index;
+
+    Material() {}
+    Material(float3 color, float reflect, float transmit, float refractive_index)
+        : color(color), reflect(reflect), transmit(transmit), refractive_index(refractive_index) {}
+
+    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0); }
+};
+
 struct Sphere
 {
     float3 pos;
     float radius;
-    float3 color;
-    float reflect;
-    float glossy;
+    Material material;
 
     Sphere() {}
-    Sphere(float3 pos, float radius, float3 color, float reflect, float glossy) 
-        : pos(pos), radius(radius), color(color), reflect(reflect), glossy(glossy) {}
+    Sphere(float3 pos, float radius, Material material) 
+        : pos(pos), radius(radius), material(material) {}
 
     HYBRID inline float3 centroid() { return pos; }
 };
@@ -100,9 +113,7 @@ struct __align__(16) Triangle
     float3 n0;
     float3 n1;
     float3 n2;
-    float3 color;
-    float reflect;
-    float glossy;
+    Material material;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
     HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }
@@ -137,17 +148,16 @@ struct __align__(16) Triangle
 struct __align__(16) TriangleV
 {
     float3 v0, v1, v2;
-
     TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
 };
 
 struct __align__(16) TriangleD
 {
-    float3 n0, n1, n2, color;
-    float reflect, glossy;
+    float3 n0, n1, n2;
+    Material material;
 
-    TriangleD(float3 n0, float3 n1, float3 n2, float3 color, float reflect, float glossy)
-        : n0(n0), n1(n1), n2(n2), color(color), reflect(reflect), glossy(glossy) {}
+    TriangleD(float3 n0, float3 n1, float3 n2, Material material)
+        : n0(n0), n1(n1), n2(n2), material(material) {}
 };
 
 static bool __compare_triangles_x (Triangle a, Triangle b) {
