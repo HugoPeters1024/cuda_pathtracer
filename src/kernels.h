@@ -17,27 +17,24 @@ __device__ inline void swap(T* left, T* right)
     right = tmp;
 }
 
-__device__ float FresnelReflectAmount (float n1, float n2, float3 normal, float3 incident, float reflect)
+__device__ float fresnell(const float3& normal, const float3& incident, const float& ior)
 {
-        // Schlick aproximation
-        float r0 = (n1-n2) / (n1+n2);
-        r0 *= r0;
-        float cosX = -dot(normal, incident);
-        if (n1 > n2)
-        {
-            float n = n1/n2;
-            float sinT2 = n*n*(1.0-cosX*cosX);
-            // Total internal reflection
-            if (sinT2 > 1.0)
-                return 1.0;
-            cosX = sqrt(1.0-sinT2);
-        }
-        float x = 1.0-cosX;
-        float ret = r0+(1.0-r0)*x*x*x*x*x;
- 
-        // adjust reflect multiplier for object reflectivity
-        ret = (reflect + (1.0-reflect) * ret);
-        return ret;
+    float cosi = dot(incident, normal); 
+    float etai = 1, etat = ior; 
+    if (cosi > 0) { swap(&etai, &etat); } 
+    // Compute sini using Snell's law
+    float sint = (etai / etat) * sqrtf(max(0.f, 1 - cosi * cosi)); 
+    // Total internal reflection
+    if (sint >= 1) { 
+        return 1;
+    } 
+    else { 
+        float cost = sqrtf(max(0.f, 1 - sint * sint)); 
+        cosi = fabsf(cosi); 
+        float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost)); 
+        float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost)); 
+        return (Rs * Rs + Rp * Rp) / 2; 
+    } 
 }
 
 // https://developer.download.nvidia.cn/cg/refract.html
@@ -337,16 +334,23 @@ __device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3&
     return Ray(intersectionPos, newDir, ray.pixeli);
 }
 
-__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed)
+__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed, float* reflected)
 {
-    // calcuate the eta based on whether we are inside
-    float eta = inside ? material.refractive_index : 1.0 / material.refractive_index;
-    float reflected = FresnelReflectAmount(1.0 / eta, eta, normal, ray.direction, material.reflect);
-    if (rand(seed) < reflected)
-        return getReflectRay(ray, inside ? -normal : normal, intersectionPos, material, seed);
+    // calculate the eta based on whether we are inside
+    float eta = inside ? 1.0 / material.refractive_index : material.refractive_index;
+
+    float cost1 = dot(normal, -ray.direction);
+    float k = 1 - (eta* eta) * (1 - cost1 * cost1);
+    if (k < 0) *reflected = 1; else *reflected = 0;//TIF
+    float3 refractDir = normalize(eta * ray.direction + normal * (eta * cost1 - sqrt(k)));
 
 
-    float3 newDir = refract(ray.direction, inside ? -normal : normal, eta);
+   // *reflected = fresnell(inside ? -normal : normal, ray.direction, material.refractive_index);
+    if (rand(seed) < *reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
+
+//    float3 newDir = refract(ray.direction, normal, eta);
+    float3 newDir = refractDir; 
+  //  newDir = refract(ray.direction, normal, eta);
     return Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
 }
 
@@ -376,8 +380,7 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
 
 __global__ void kernel_extend(HitInfo* intersections, int n)
 {
-    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n) return;
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
     const Ray& ray = GRayQueue[i];
     HitInfo hitInfo = traverseBVHStack(ray, false, false);
     intersections[i] = hitInfo;
@@ -427,7 +430,9 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
         */
 
         float reflected;
-        secondary = getRefractRay(ray, originalNormal, intersectionPos, material, inside, &seed);
+        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, &seed, &reflected);
+       // printf("%f\n", reflected);
+        //state.correction = (1 - reflected);
         state.correction = 0;
     }
     else

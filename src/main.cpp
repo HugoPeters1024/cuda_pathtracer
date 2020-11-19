@@ -107,7 +107,13 @@ int main(int argc, char** argv) {
     // Add the models
     Scene scene;
     //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
-    //scene.addModel("cube.obj", make_float3(1), 8, make_float3(0), make_float3(0),  0.0, 0.01);
+    Material cubeMat = Material::DIFFUSE(make_float3(1));
+    cubeMat.transmit = 1.0f;
+    cubeMat.refractive_index = 1.5;
+    cubeMat.glossy = 0.1;
+//    cubeMat.transmit = 1.0f;
+//    cubeMat.reflect = 1.0;
+    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMat);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), Material::DIFFUSE(make_float3(1)));
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), Material::DIFFUSE(make_float3(0.722, 0.451, 0.012)));
@@ -165,11 +171,11 @@ int main(int argc, char** argv) {
     Sphere light(make_float3(-8,4,0), 0.05, Material::DIFFUSE(make_float3(150)));
 
     Sphere spheres[1] = {
-            Sphere(make_float3(-8, 1, 1), 1, Material::DIFFUSE(make_float3(1))),
+            Sphere(make_float3(-8, -1, 1), 1, Material::DIFFUSE(make_float3(1))),
     };
-    spheres[0].material.transmit = 0.5;
-    spheres[0].material.refractive_index = 1.1;
-    spheres[0].material.reflect = 0.2;
+
+    spheres[0].material.transmit = 1.0f;
+    spheres[0].material.refractive_index = 1.1f;
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
     HitInfo* intersectionBuf;
