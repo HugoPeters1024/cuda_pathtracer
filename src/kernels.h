@@ -17,35 +17,6 @@ __device__ inline void swap(T* left, T* right)
     right = tmp;
 }
 
-__device__ float fresnell(const float3& normal, const float3& incident, const float& ior)
-{
-    float cosi = dot(incident, normal); 
-    float etai = 1, etat = ior; 
-    if (cosi > 0) { swap(&etai, &etat); } 
-    // Compute sini using Snell's law
-    float sint = (etai / etat) * sqrtf(max(0.f, 1 - cosi * cosi)); 
-    // Total internal reflection
-    if (sint >= 1) { 
-        return 1;
-    } 
-    else { 
-        float cost = sqrtf(max(0.f, 1 - sint * sint)); 
-        cosi = fabsf(cosi); 
-        float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost)); 
-        float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost)); 
-        return (Rs * Rs + Rp * Rp) / 2; 
-    } 
-}
-
-// https://developer.download.nvidia.cn/cg/refract.html
-__device__ float3 refract( float3 i, float3 n, float eta )
-{
-  float cosi = dot(-i, n);
-  float cost2 = 1.0f - eta * eta * (1.0f - cosi*cosi);
-  float3 t = eta*i + ((eta*cosi - sqrt(abs(cost2))) * n);
-  return t * make_float3(cost2 > 0);
-}
-
 __device__ inline float lambert(const float3 &v1, const float3 &v2)
 {
     return max(dot(v1,v2),0.0f);
@@ -102,18 +73,6 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
     *t = tmin;
     if (tmin < 0) *t = tmax;
     return tmax > 0;
-
-
-    /*
-    float3 c = sphere.pos - ray.origin;
-    float t = dot(c, ray.direction);
-    float3 q = c - (t * ray.direction);
-    float p2 = dot(q,q);
-    if (p2 > sphere.radius * sphere.radius) return false;
-    t -= sqrtf(sphere.radius * sphere.radius - p2);
-    *dis = t;
-    return t > 0;
-    */
 }
 
 __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float* maxt)
@@ -148,7 +107,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     return ret && tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect2(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
+__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -167,60 +126,6 @@ __device__ bool rayTriangleIntersect2(const Ray& ray, const TriangleV& triangle,
 
     *t = dot(v0v2, qvec) * invDet;
     return *t > 0;
-}
-
-
-__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
-{
-    bool ret = true;
-    // compute plane's normal
-    float3 v0v1 = triangle.v1 - triangle.v0;
-    float3 v0v2 = triangle.v2 - triangle.v0;
-    // no need to normalize
-    float3 N = cross(v0v1,v0v2); // N
-    float denom = dot(N,N);
-
-    // Step 1: finding P
-
-    // check if ray and plane are parallel ?
-    float NdotRayDirection = dot(N,ray.direction);
-    ret &= abs(NdotRayDirection) > 0.0001f; // almost 0
-        // they are parallel so they don't intersect !
-
-    // compute d parameter using equation 2
-    float d = dot(N,triangle.v0);
-
-    // compute t (equation 3)
-    *t = (dot(-N,ray.origin) + d) / NdotRayDirection;
-    // check if the triangle is in behind the ray or too far away
-    ret &= *t > 0 && *t < currentT;
-
-    // compute the intersection point using equation 1
-    float3 P = ray.origin + *t * ray.direction;
-
-    // Step 2: inside-outside test
-    float3 C; // vector perpendicular to triangle's plane
-
-    // edge 0
-    float3 edge0 = triangle.v1 - triangle.v0;
-    float3 vp0 = P - triangle.v0;
-    C = cross(edge0, vp0);
-    ret &= (dot(N, C) > 0); // P is on the right side
-
-    // edge 1
-    float3 edge1 = triangle.v2 - triangle.v1;
-    float3 vp1 = P - triangle.v1;
-    C = cross(edge1, vp1);
-    ret &= (dot(N,C) > 0); // P is on the right side
-
-    // edge 2
-    float3 edge2 = triangle.v0 - triangle.v2;
-    float3 vp2 = P - triangle.v2;
-    C = cross(edge2, vp2);
-    ret &= (dot(N, C) > 0); // P is on the right side;
-
-    // we hit the triangle.
-    return ret;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -275,7 +180,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
             float t;
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect2(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
                 {
                     hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
@@ -355,11 +260,9 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
     float costt = sqrt(1 - eta * eta * sinti * sinti);
     float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
-    spol = spol * spol;
     float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
-    ppol = ppol * ppol;
 
-    float reflected = 0.5 * spol + ppol;
+    float reflected = 0.5 * (spol * spol + ppol * ppol);
     if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
     return Ray(intersectionPos + 2 * EPS * ray.direction, refractDir, ray.pixeli);
@@ -427,71 +330,42 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (material.transmit > 0)
+    if (rand(&seed) < material.transmit)
     {
-        /*
-        float3 normal = normalize(intersectionPos - GSpheres[0].pos);
-        float cosi = dot(normal, ray.direction);
-        float eta = dot(normal, ray.direction) < 1 ? 1.0f / 1.2f : 1.1f;
-
-        float reflected = FresnelReflectAmount(eta, 1.0 / eta, normal, ray.direction, material.reflect);
-
-        float3 newDir = refract(ray.direction, colliderNormal, eta);
-        secondary = Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
-        */
-
         if (inside)
         {
-            /*
-            state.accucolor = make_float3(hitInfo.t/2);
-            stateBuf[ray.pixeli] = state;
-            return;
-            */
-
-            /*
-            state.accucolor = make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
-            stateBuf[ray.pixeli] = state;
-            return;
-            */
-
+            // Take away any absorpted light using Beer's law.
+            // when leaving the object
             float3 c = material.absorption;
             state.mask = state.mask * make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
         }
 
+        // Ray can turn into a reflection ray due to fresnell
         secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, &seed);
-
-       // printf("%f\n", reflected);
-        //state.correction = (1 - reflected);
+        
+        // Make sure we do not cast shadow rays
         state.correction = 0;
     }
-    else
+    else if (rand(&seed) < material.reflect)
     {
-        if (rand(&seed) < material.reflect)
-        {
-            // reflect case
-            // Interpolate a normal and a random brdf sample with the glossyness
-            //float3 newDirN = reflect(ray.direction, -colliderNormal);
-            //float3 newDirS = BRDF(newDirN, &seed);
-            //float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
-            secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, &seed);
+        secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, &seed);
 
-            // ensure that no shadow ray will be cast
-            state.correction = 0;
-        }
-        else 
-        {
-           // float3 newDir = BRDF(colliderNormal, &seed);
-            //secondary = Ray(intersectionPos, newDir, ray.pixeli);
-            secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, &seed);
-            float lambert = dot(secondary.direction, colliderNormal);
+        // Make sure we do not cast shadow rays
+        state.correction = 0;
+    }
+    else 
+    {
+        secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, &seed);
+        float lambert = dot(secondary.direction, colliderNormal);
 
-            state.mask = state.mask * lambert;
-            state.correction = 1.0f / lambert;
-        }
+        state.mask = state.mask * lambert;
+
+        // Correct for the lambert term, which does not affect the incoming
+        // radiance at this position.
+        state.correction = 1.0f / lambert;
     }
 
     GRayQueueNew.push(secondary);
-
     stateBuf[ray.pixeli] = state;
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)

@@ -44,6 +44,10 @@ layout (location = 0) uniform float time;
 void main() { 
     vec4 c = texture(tex, uv);
     color = vec4(c.xyz / c.w, 1);
+    float gamma = 2;
+    color.x = pow(color.x, 1.0f/gamma);
+    color.y = pow(color.y, 1.0f/gamma);
+    color.z = pow(color.z, 1.0f/gamma);
 }
 )";
 
@@ -115,9 +119,15 @@ int main(int argc, char** argv) {
 //    cubeMat.transmit = 1.0f;
 //    cubeMat.reflect = 1.0;
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMat);
+    Material cubeMat2 = cubeMat;
+    cubeMat.absorption = make_float3(0.8, 0.5, 0.1);
+  //  scene.addModel("cube.obj", 0.5, make_float3(0), make_float3(0), cubeMat2);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), Material::DIFFUSE(make_float3(1)));
-    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), Material::DIFFUSE(make_float3(0.722, 0.451, 0.012)));
+    Material lucyMat = Material::DIFFUSE(make_float3(0.722, 0.451, 0.012));
+    lucyMat.transmit = 1.0f;
+    lucyMat.refractive_index = 1.1;
+    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMat);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
@@ -169,16 +179,19 @@ int main(int argc, char** argv) {
     AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
 
     // add a sphere as light source
-    Sphere light(make_float3(-8,4,0), 0.05, Material::DIFFUSE(make_float3(150)));
+    Sphere light(make_float3(-8,-1,1), 0.05, Material::DIFFUSE(make_float3(150)));
 
-    Sphere spheres[1] = {
-            Sphere(make_float3(-8, -1, 1), 1, Material::DIFFUSE(make_float3(1))),
+    Sphere spheres[2] = {
+            Sphere(make_float3(-8, 2, 1), 1, Material::DIFFUSE(make_float3(1))),
+            Sphere(make_float3(0, 0, 0), 1, Material::DIFFUSE(make_float3(1))),
     };
 
     spheres[0].material.transmit = 1.0f;
-    spheres[0].material.refractive_index = 1.1f;
+    spheres[0].material.refractive_index = 1.9f;
     spheres[0].material.glossy = 0.05f;
-    SizedBuffer<Sphere>(spheres, 1, GSpheres);
+    spheres[0].material.absorption = make_float3(0.01, 0.4, 0.4);
+    spheres[1].material.reflect = 1.0f;
+    SizedBuffer<Sphere>(spheres, 2, GSpheres);
 
     HitInfo* intersectionBuf;
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
