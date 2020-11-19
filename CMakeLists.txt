@@ -28,9 +28,13 @@ target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
 # We want to use c++ inline with cuda, so set nvcc as primary compiler
 set_source_files_properties(${cpu_source_files} PROPERTIES LANGUAGE CUDA)
 
-find_package(glfw3 3.3.2 REQUIRED)
-target_link_libraries(pathtracer glfw)
+add_subdirectory("./glfw")
+include_directories("./glfw/include")
+target_link_libraries(pathtracer glfw ${GLFW_LIBRARIES})
 find_package(OpenGL REQUIRED)
+
+#find_package(glfw3 3.3.2 REQUIRED)
+#target_link_libraries(pathtracer glfw)
 # These variables have been set by the previous command
 target_include_directories(pathtracer PUBLIC ${OPENGL_INCLUDE_DIR})
 target_link_libraries(pathtracer ${OPENGL_LIBRARIES})
