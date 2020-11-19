@@ -334,7 +334,7 @@ __device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3&
     return Ray(intersectionPos, newDir, ray.pixeli);
 }
 
-__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed, float* reflected)
+__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed)
 {
     // calculate the eta based on whether we are inside
     float n1 = 1.0;
@@ -348,7 +348,10 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     if (k < 0) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
     float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
+    float3 noiseDir = BRDF(refractDir, seed);
+    refractDir = refractDir * (1-material.glossy) + material.glossy * noiseDir;
 
+    // fresnell equation for reflection contribution
     float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
     float costt = sqrt(1 - eta * eta * sinti * sinti);
     float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
@@ -356,13 +359,10 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
     ppol = ppol * ppol;
 
-    *reflected = 0.5 * spol + ppol;
-    if (rand(seed) < *reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
+    float reflected = 0.5 * spol + ppol;
+    if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
-//    float3 newDir = refract(ray.direction, normal, eta);
-    float3 newDir = refractDir; 
-  //  newDir = refract(ray.direction, normal, eta);
-    return Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
+    return Ray(intersectionPos + 2 * EPS * ray.direction, refractDir, ray.pixeli);
 }
 
 __device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint* seed)
@@ -440,8 +440,26 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
         secondary = Ray(intersectionPos + 2 * EPS * ray.direction, newDir, ray.pixeli);
         */
 
-        float reflected;
-        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, &seed, &reflected);
+        if (inside)
+        {
+            /*
+            state.accucolor = make_float3(hitInfo.t/2);
+            stateBuf[ray.pixeli] = state;
+            return;
+            */
+
+            /*
+            state.accucolor = make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+            stateBuf[ray.pixeli] = state;
+            return;
+            */
+
+            float3 c = material.absorption;
+            state.mask = state.mask * make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+        }
+
+        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, &seed);
+
        // printf("%f\n", reflected);
         //state.correction = (1 - reflected);
         state.correction = 0;

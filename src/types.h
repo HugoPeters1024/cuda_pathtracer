@@ -25,13 +25,15 @@ struct Material
     float glossy;
     float transmit;
     float refractive_index;
+    float3 absorption;
 
     Material() {}
-    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index)
+    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 absorption)
         : color(color), reflect(reflect), glossy(glossy), 
-          transmit(transmit), refractive_index(refractive_index) {}
+          transmit(transmit), refractive_index(refractive_index),
+          absorption(absorption) {}
 
-    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0); }
+    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0, make_float3(0)); }
 };
 
 struct Sphere

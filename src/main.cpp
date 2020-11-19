@@ -109,8 +109,9 @@ int main(int argc, char** argv) {
     //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
     Material cubeMat = Material::DIFFUSE(make_float3(1));
     cubeMat.transmit = 1.0f;
-    cubeMat.refractive_index = 1.5;
-    cubeMat.glossy = 0.0;
+    cubeMat.refractive_index = 1.1;
+    cubeMat.glossy = 0.02;
+    cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
 //    cubeMat.transmit = 1.0f;
 //    cubeMat.reflect = 1.0;
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMat);
@@ -176,6 +177,7 @@ int main(int argc, char** argv) {
 
     spheres[0].material.transmit = 1.0f;
     spheres[0].material.refractive_index = 1.1f;
+    spheres[0].material.glossy = 0.05f;
     SizedBuffer<Sphere>(spheres, 1, GSpheres);
 
     HitInfo* intersectionBuf;
@@ -185,7 +187,7 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMalloc(&traceBuf, NR_PIXELS * sizeof(TraceState)) );
 
     // Set the initial camera values;
-    Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1);
+    Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);
     double runningAverageFps = 0;
     int tick = 0;
 
