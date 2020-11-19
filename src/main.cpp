@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
     Material cubeMat = Material::DIFFUSE(make_float3(1));
     cubeMat.transmit = 1.0f;
     cubeMat.refractive_index = 1.5;
-    cubeMat.glossy = 0.1;
+    cubeMat.glossy = 0.0;
 //    cubeMat.transmit = 1.0f;
 //    cubeMat.reflect = 1.0;
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMat);

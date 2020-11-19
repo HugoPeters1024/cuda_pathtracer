@@ -337,15 +337,26 @@ __device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3&
 __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed, float* reflected)
 {
     // calculate the eta based on whether we are inside
-    float eta = inside ? 1.0 / material.refractive_index : material.refractive_index;
+    float n1 = 1.0;
+    float n2 = material.refractive_index;
+    if (inside) swap(&n1, &n2);
+    float eta = n1 / n2;
 
-    float cost1 = dot(normal, -ray.direction);
-    float k = 1 - (eta* eta) * (1 - cost1 * cost1);
-    if (k < 0) *reflected = 1; else *reflected = 0;//TIF
-    float3 refractDir = normalize(eta * ray.direction + normal * (eta * cost1 - sqrt(k)));
+    float costi = dot(normal, -ray.direction);
+    float k = 1 - (eta* eta) * (1 - costi * costi);
+    // Total internal reflection
+    if (k < 0) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
+    float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
 
-   // *reflected = fresnell(inside ? -normal : normal, ray.direction, material.refractive_index);
+    float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
+    float costt = sqrt(1 - eta * eta * sinti * sinti);
+    float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
+    spol = spol * spol;
+    float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
+    ppol = ppol * ppol;
+
+    *reflected = 0.5 * spol + ppol;
     if (rand(seed) < *reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
 //    float3 newDir = refract(ray.direction, normal, eta);
