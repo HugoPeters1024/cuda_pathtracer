@@ -164,11 +164,19 @@ void sequentializeBvh(const BVHTree* root, std::vector<Triangle>& newTriangles, 
     }
 }
 
+
 class Scene
 {
 public:
     std::vector<Triangle> triangles;
-    void addModel(std::string filename, float scale, float3 rotation, float3 offset, Material material)
+    std::vector<Material> materials;
+    MATERIAL_ID addMaterial(Material material)
+    {
+        materials.push_back(material);
+        return materials.size() - 1;
+    }
+
+    void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material)
     {
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
@@ -215,7 +223,10 @@ public:
         }
     }
 
-    BVHTree* finalize() const { return createBVH(triangles); }
+    BVHTree* finalize() const 
+    { 
+        return createBVH(triangles); 
+    }
 };
 
 #endif

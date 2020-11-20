@@ -13,7 +13,11 @@ __constant__ TriangleV* GTriangles;
 // the rest in a different buffer
 __constant__ TriangleD* GTriangleData;
 
+__constant__ Material* GMaterials;
+
 __constant__ Sphere GLight;
+
+__constant__ float3 GLight_Color;
 
 // the global application time
 __constant__ float GTime;

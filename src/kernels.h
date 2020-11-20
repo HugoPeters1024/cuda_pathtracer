@@ -31,8 +31,8 @@ __device__ inline Material getColliderMaterial(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return GTriangleData[hitInfo.primitive_id].material;
-        case SPHERE:   return GSpheres[hitInfo.primitive_id].material;
+        case TRIANGLE: return GMaterials[GTriangleData[hitInfo.primitive_id].material];
+        case SPHERE:   return GMaterials[GSpheres[hitInfo.primitive_id].material];
     }
     assert(false);
 }
@@ -322,7 +322,6 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-
     state.mask = state.mask * material.color;
     state.currentNormal = colliderNormal;
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
@@ -413,7 +412,7 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
         float r2 = shadowRay.length * shadowRay.length;
         float SA = 4 * 3.1415926535 * r2;
         float NL = lambert(-shadowRay.direction, state.currentNormal);
-        color = (GLight.material.color / SA) * NL;
+        color = (GLight_Color / SA) * NL;
     }
 
     state.accucolor += state.correction * state.mask * color;

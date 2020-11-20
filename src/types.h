@@ -18,6 +18,7 @@
 // Asserts that the current location is within the space
 #define CUDA_LIMIT(x,y) { if (x >= WINDOW_WIDTH || y >= WINDOW_HEIGHT) return; }
 
+typedef uint MATERIAL_ID;
 struct Material
 {
     float3 color;
@@ -40,10 +41,10 @@ struct Sphere
 {
     float3 pos;
     float radius;
-    Material material;
+    MATERIAL_ID material;
 
     Sphere() {}
-    Sphere(float3 pos, float radius, Material material) 
+    Sphere(float3 pos, float radius, MATERIAL_ID material) 
         : pos(pos), radius(radius), material(material) {}
 
     HYBRID inline float3 centroid() { return pos; }
@@ -116,7 +117,7 @@ struct __align__(16) Triangle
     float3 n0;
     float3 n1;
     float3 n2;
-    Material material;
+    MATERIAL_ID material;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
     HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }
@@ -157,9 +158,9 @@ struct __align__(16) TriangleV
 struct __align__(16) TriangleD
 {
     float3 n0, n1, n2;
-    Material material;
+    MATERIAL_ID material;
 
-    TriangleD(float3 n0, float3 n1, float3 n2, Material material)
+    TriangleD(float3 n0, float3 n1, float3 n2, MATERIAL_ID material)
         : n0(n0), n1(n1), n2(n2), material(material) {}
 };
 

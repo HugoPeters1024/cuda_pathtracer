@@ -108,26 +108,43 @@ int main(int argc, char** argv) {
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
     cudaArray *arrayPtr;
 
-    // Add the models
+    // Create a scene object
     Scene scene;
-    //scene.addModel("teapot.obj", make_float3(0.8, 0.2, 0.2), 1, make_float3(0), make_float3(0), 1, 0.1);
+
+    // create materials
     Material cubeMat = Material::DIFFUSE(make_float3(1));
     cubeMat.transmit = 1.0f;
     cubeMat.refractive_index = 1.1;
     cubeMat.glossy = 0.02;
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
-//    cubeMat.transmit = 1.0f;
-//    cubeMat.reflect = 1.0;
-    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMat);
-    Material cubeMat2 = cubeMat;
-    cubeMat.absorption = make_float3(0.8, 0.5, 0.1);
+    auto cubeMatId = scene.addMaterial(cubeMat);
+
+    Material sibenikMat = Material::DIFFUSE(make_float3(1));
+    auto sibenikMatId = scene.addMaterial(sibenikMat);
+
+    Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
+    lucyMat.absorption = make_float3(1-0.722, 1-0.451, 1-0.012) * 5;
+    lucyMat.transmit = 0.6f;
+    lucyMat.reflect = 0.6f;
+    lucyMat.refractive_index = 1.1;
+    auto lucyMatId = scene.addMaterial(lucyMat);
+
+    Material glassMat = Material::DIFFUSE(make_float3(1));
+    glassMat.transmit = 1.0f;
+    glassMat.refractive_index = 1.9f;
+    glassMat.glossy = 0.05f;
+    glassMat.absorption = make_float3(0.01, 0.4, 0.4);
+    auto glassMatId = scene.addMaterial(glassMat);
+
+    auto mirrorMat = Material::DIFFUSE(make_float3(1));
+    mirrorMat.reflect = 1.0f;
+    auto mirrorMatId = scene.addMaterial(mirrorMat);
+
+    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
   //  scene.addModel("cube.obj", 0.5, make_float3(0), make_float3(0), cubeMat2);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), Material::DIFFUSE(make_float3(1)));
-    Material lucyMat = Material::DIFFUSE(make_float3(0.722, 0.451, 0.012));
-    lucyMat.transmit = 1.0f;
-    lucyMat.refractive_index = 1.1;
-    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMat);
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     BVHTree* bvh = scene.finalize();
@@ -138,6 +155,22 @@ int main(int argc, char** argv) {
     assert(newBvh.size() == bvh->treeSize());
 
     delete bvh;
+
+    // add a sphere as light source
+    Sphere light(make_float3(-4,-1,1), 0.05, -1);
+    float3 lightColor = make_float3(150);
+
+    Sphere spheres[2] = {
+            Sphere(make_float3(-8, 2, 1), 1, glassMatId),
+            Sphere(make_float3(0, 0, 0), 1, mirrorMatId),
+    };
+    SizedBuffer<Sphere>(spheres, 2, GSpheres);
+
+    // Send materials to gpu
+    Material* matBuf;
+    cudaSafe( cudaMalloc(&matBuf, scene.materials.size() * sizeof(Material)));
+    cudaSafe( cudaMemcpy(matBuf, &scene.materials[0], scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyToSymbol(GMaterials, &matBuf, sizeof(matBuf)) );
 
 
     // Split the vertices and other data for better caching
@@ -178,20 +211,6 @@ int main(int argc, char** argv) {
     AtomicQueue<Ray> shadowRayQueue(NR_PIXELS);
     AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
 
-    // add a sphere as light source
-    Sphere light(make_float3(-8,-1,1), 0.05, Material::DIFFUSE(make_float3(150)));
-
-    Sphere spheres[2] = {
-            Sphere(make_float3(-8, 2, 1), 1, Material::DIFFUSE(make_float3(1))),
-            Sphere(make_float3(0, 0, 0), 1, Material::DIFFUSE(make_float3(1))),
-    };
-
-    spheres[0].material.transmit = 1.0f;
-    spheres[0].material.refractive_index = 1.9f;
-    spheres[0].material.glossy = 0.05f;
-    spheres[0].material.absorption = make_float3(0.01, 0.4, 0.4);
-    spheres[1].material.reflect = 1.0f;
-    SizedBuffer<Sphere>(spheres, 2, GSpheres);
 
     HitInfo* intersectionBuf;
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
@@ -241,6 +260,7 @@ int main(int argc, char** argv) {
         float time = glfwGetTime();
         cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
         cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
+        cudaSafe( cudaMemcpyToSymbol(GLight_Color, &lightColor, sizeof(float3)) );
 
         // clear the ray queue and update on gpu
         if (shouldClear)
@@ -257,7 +277,7 @@ int main(int argc, char** argv) {
         assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-        uint max_bounces = shouldClear ? 1 : 5;
+        uint max_bounces = shouldClear ? 1 : 8;
         for(int bounces = 0; bounces < max_bounces; bounces++) {
 
             // Test for intersections with each of the rays,
@@ -301,8 +321,8 @@ int main(int argc, char** argv) {
         // Handle IO and swap the backbuffer
         camera.update(window);
         shouldClear = camera.hasMoved();
-        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { light.material.color *= 0.97; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { light.material.color *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { lightColor *= 0.97; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { lightColor *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
         glfwPollEvents();
