@@ -14,6 +14,7 @@
 #include "use_cuda.h"
 #include "types.h"
 #include "bvhBuilder.h"
+#include "scene.h"
 #include "globals.h"
 #include "kernels.h"
 
@@ -147,14 +148,16 @@ int main(int argc, char** argv) {
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
-    BVHTree* bvh = scene.finalize();
 
-    std::vector<Triangle> newTriangles;
-    std::vector<BVHNode> newBvh;
-    sequentializeBvh(bvh, newTriangles, newBvh);
-    assert(newBvh.size() == bvh->treeSize());
+    TriangleV* d_vertex_buffer;
+    TriangleD* d_data_buffer;
+    BVHNode* d_bvh_buffer;
+    scene.finalize(&d_vertex_buffer, &d_data_buffer, &d_bvh_buffer);
 
-    delete bvh;
+    // Assign to the global binding sites
+    cudaSafe( cudaMemcpyToSymbol(GTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(GTriangleData, &d_data_buffer, sizeof(d_data_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(GBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
 
     // add a sphere as light source
     Sphere light(make_float3(-4,-1,1), 0.05, -1);
@@ -173,37 +176,10 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpyToSymbol(GMaterials, &matBuf, sizeof(matBuf)) );
 
 
-    // Split the vertices and other data for better caching
-    std::vector<TriangleV> triangleVertices;
-    std::vector<TriangleD> triangleData;
-    for(const Triangle& t : newTriangles)
-    {
-        triangleVertices.push_back(TriangleV(t.v0, t.v1, t.v2));
-        triangleData.push_back(TriangleD(t.n0, t.n1, t.n2, t.material));
-    }
-
-    TriangleV* triangleVerticesBuf;
-    cudaSafe( cudaMalloc(&triangleVerticesBuf, triangleVertices.size() * sizeof(TriangleV)) );
-    cudaSafe( cudaMemcpy(triangleVerticesBuf, &triangleVertices[0], triangleVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyToSymbol(GTriangles, &triangleVerticesBuf, sizeof(triangleVerticesBuf)) );
-
-    TriangleD* triangleDataBuf;
-    cudaSafe( cudaMalloc(&triangleDataBuf, triangleData.size() * sizeof(TriangleD)) );
-    cudaSafe( cudaMemcpy(triangleDataBuf, &triangleData[0], triangleData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyToSymbol(GTriangleData, &triangleDataBuf, sizeof(triangleDataBuf)) );
-
-    BVHNode* bvhBuf;
-    printf("BVH Size: %u\n", newBvh.size());
-    cudaSafe( cudaMalloc(&bvhBuf, newBvh.size() * sizeof(BVHNode)) );
-    cudaSafe( cudaMemcpy(bvhBuf, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
     Ray* rayBuf;
     cudaSafe ( cudaMalloc(&rayBuf, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(Ray)) );
 
-    // Set the global bvh buffer pointer
-    // We set this globally instead of kernel parameter, otherwise we would have
-    // to pass the whole array constantly to small functions like sibling.
-    cudaSafe( cudaMemcpyToSymbol(GBVH, &bvhBuf, sizeof(bvhBuf)) );
 
 
     // queue of rays used in wavefront tracing
