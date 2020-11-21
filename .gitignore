@@ -4,3 +4,4 @@ cmake_install.cmake
 pathtracer
 .idea/
 Makefile
+glfw/GLFW.cbp

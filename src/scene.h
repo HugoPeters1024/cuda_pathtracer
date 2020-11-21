@@ -4,6 +4,23 @@
 #include "types.h"
 #include "bvhBuilder.h"
 
+// Final product of the scene
+struct SceneData
+{
+    TriangleV* h_vertex_buffer;
+    TriangleD* h_data_buffer;
+    BVHNode* h_bvh_buffer;
+    uint num_triangles;
+    uint num_bvh_nodes;
+
+    ~SceneData()
+    {
+        delete h_vertex_buffer;
+        delete h_data_buffer;
+        delete h_bvh_buffer;
+    }
+};
+
 class Scene
 {
 public:
@@ -62,33 +79,27 @@ public:
         }
     }
 
-    void finalize(TriangleV** d_vertex_buffer, TriangleD** d_data_buffer, BVHNode** d_bvh_buffer) const 
+    SceneData finalize()
     { 
-        BVHTree* tree =  createBVH(triangles); 
-        std::vector<Triangle> newTriangles;
-        std::vector<BVHNode> newBvh;
-        sequentializeBvh(tree, newTriangles, newBvh);
-        assert(newBvh.size() == tree->treeSize());
-        delete tree;
+        SceneData ret;
+
+        uint bvhSize;
+        ret.h_bvh_buffer = createBVH(triangles, &bvhSize);
+        printf("BVH Size: %u\n", bvhSize);
 
         // Split the vertices and other data for better caching
-        std::vector<TriangleV> triangleVertices;
-        std::vector<TriangleD> triangleData;
-        for(const Triangle& t : newTriangles)
+        ret.h_vertex_buffer = (TriangleV*)malloc(triangles.size() * sizeof(TriangleV));
+        ret.h_data_buffer = (TriangleD*)malloc(triangles.size() * sizeof(TriangleD));
+        for(int i=0; i<triangles.size(); i++)
         {
-            triangleVertices.push_back(TriangleV(t.v0, t.v1, t.v2));
-            triangleData.push_back(TriangleD(t.n0, t.n1, t.n2, t.material));
+            const Triangle& t = triangles[i];
+            ret.h_vertex_buffer[i] = TriangleV(t.v0, t.v1, t.v2);
+            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.material);
         }
 
-        cudaSafe( cudaMalloc(d_vertex_buffer, triangleVertices.size() * sizeof(TriangleV)) );
-        cudaSafe( cudaMemcpy(*d_vertex_buffer, &triangleVertices[0], triangleVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
-
-        cudaSafe( cudaMalloc(d_data_buffer, triangleData.size() * sizeof(TriangleD)) );
-        cudaSafe( cudaMemcpy(*d_data_buffer, &triangleData[0], triangleData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
-
-        printf("BVH Size: %u\n", newBvh.size());
-        cudaSafe( cudaMalloc(d_bvh_buffer, newBvh.size() * sizeof(BVHNode)) );
-        cudaSafe( cudaMemcpy(*d_bvh_buffer, &newBvh[0], newBvh.size() * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+        ret.num_triangles = triangles.size();
+        ret.num_bvh_nodes = bvhSize;
+        return ret;
     }
 };
 #endif

@@ -212,7 +212,7 @@ struct __align__(16) BVHNode
     Box boundingBox;
     // either a leaf or a child
     union {
-        uint child2;
+        uint child1;
         uint t_start;
     };
     uint t_data;
@@ -228,11 +228,11 @@ struct __align__(16) BVHNode
         ret.t_data = t_count;
         return ret;
     }
-    static BVHNode MakeNode(Box boundingBox, uint child2, uint split_plane) 
+    static BVHNode MakeNode(Box boundingBox, uint child1, uint split_plane) 
     {
         BVHNode ret;
         ret.boundingBox = boundingBox;
-        ret.child2 = child2;
+        ret.child1 = child1;
         ret.t_data = split_plane << 30;
         return ret;
     }
@@ -297,7 +297,6 @@ struct SizedBuffer
 
     __device__ T const& operator[](int index) { return values[index]; }
 };
-
 
 class Camera
 {

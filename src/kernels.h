@@ -160,7 +160,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    const uint STACK_SIZE = 10;
+    const uint STACK_SIZE = 30;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
     *stackPtr++ = 0;
@@ -193,13 +193,13 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         else
         {
             bool firstNear = firstIsNear(current, ray);
-            uint near = firstNear ? current_id + 1 : current.child2;
-            uint far = firstNear ? current.child2 : current_id + 1;
+            uint near = firstNear ? current.child1 : current.child1 + 1;
+            uint far = firstNear ? current.child1 + 1 : current.child1;
             // push on the stack, first the far child
             *stackPtr++ = far;
             *stackPtr++ = near;
             size += 2;
-           // assert (size < STACK_SIZE);
+            //assert (size < STACK_SIZE);
         }
     } while (size > 0);
 

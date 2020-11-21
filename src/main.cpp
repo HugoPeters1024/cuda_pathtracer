@@ -45,7 +45,7 @@ layout (location = 0) uniform float time;
 void main() { 
     vec4 c = texture(tex, uv);
     color = vec4(c.xyz / c.w, 1);
-    float gamma = 2;
+    float gamma = 1.8;
     color.x = pow(color.x, 1.0f/gamma);
     color.y = pow(color.y, 1.0f/gamma);
     color.z = pow(color.z, 1.0f/gamma);
@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
 
     Material glassMat = Material::DIFFUSE(make_float3(1));
     glassMat.transmit = 1.0f;
-    glassMat.refractive_index = 1.9f;
+    glassMat.refractive_index = 1.125f;
     glassMat.glossy = 0.05f;
     glassMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto glassMatId = scene.addMaterial(glassMat);
@@ -147,12 +147,22 @@ int main(int argc, char** argv) {
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
-    printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
 
+    printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
+    SceneData sceneData = scene.finalize();
+
+    // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
+    cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV)) );
+    cudaSafe( cudaMemcpy(d_vertex_buffer, sceneData.h_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+
     TriangleD* d_data_buffer;
+    cudaSafe( cudaMalloc(&d_data_buffer, sceneData.num_triangles * sizeof(TriangleD)) );
+    cudaSafe( cudaMemcpy(d_data_buffer, sceneData.h_data_buffer, sceneData.num_triangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+
     BVHNode* d_bvh_buffer;
-    scene.finalize(&d_vertex_buffer, &d_data_buffer, &d_bvh_buffer);
+    cudaSafe( cudaMalloc(&d_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode)) );
+    cudaSafe( cudaMemcpy(d_bvh_buffer, sceneData.h_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
     // Assign to the global binding sites
     cudaSafe( cudaMemcpyToSymbol(GTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
