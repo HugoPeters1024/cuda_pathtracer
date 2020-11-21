@@ -22,9 +22,9 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
     return max(dot(v1,v2),0.0f);
 }
 
-__device__ inline bool firstIsNear(const BVHNode& node, const Ray& ray)
+__device__ inline bool firstIsFar(const BVHNode& node, const Ray& ray)
 {
-    return (ray.direction.x > 0) * (node.split_plane() == 0) + (ray.direction.y > 0) * (node.split_plane() == 1) + (ray.direction.z > 0) * (node.split_plane() == 2);
+    return (ray.direction.x < 0) * (node.split_plane() == 0) + (ray.direction.y < 0) * (node.split_plane() == 1) + (ray.direction.z < 0) * (node.split_plane() == 2);
 }
 
 __device__ inline Material getColliderMaterial(const HitInfo& hitInfo)
@@ -160,13 +160,13 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    const uint STACK_SIZE = 30;
+    const uint STACK_SIZE = 22;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
     *stackPtr++ = 0;
 
     uint size = 1;
-    do
+    while(size > 0)
     {
         uint current_id = *--stackPtr;
         BVHNode current = GBVH[current_id];
@@ -192,16 +192,17 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
         else
         {
-            bool firstNear = firstIsNear(current, ray);
-            uint near = firstNear ? current.child1 : current.child1 + 1;
-            uint far = firstNear ? current.child1 + 1 : current.child1;
+            uint near = current.child1;
+            uint far = near + 1;
+            if (firstIsFar(current, ray)) swap(&near, &far);
+
             // push on the stack, first the far child
             *stackPtr++ = far;
             *stackPtr++ = near;
             size += 2;
-            //assert (size < STACK_SIZE);
+           // assert (size < STACK_SIZE);
         }
-    } while (size > 0);
+    }
 
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
