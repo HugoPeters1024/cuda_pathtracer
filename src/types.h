@@ -97,6 +97,8 @@ struct __align__(16) Ray
     HYBRID Ray() {}
     HYBRID Ray(float3 origin, float3 direction, uint pixeli) : origin(origin), direction(direction), pixeli(pixeli) { length = 9999999; }
     HYBRID Ray(float3 origin, float3 direction, uint px, uint py) : origin(origin), direction(direction), pixeli(px + py * WINDOW_WIDTH) { length = 9999999;}
+
+    __device__ float getSortingKey() const { return (float)pixeli; }
 };
 
 enum PRIMITIVE_TYPE { TRIANGLE, SPHERE };

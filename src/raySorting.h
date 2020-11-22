@@ -3,7 +3,6 @@
 
 #include "use_cuda.h"
 #include "types.h"
-
 #include "cub/device/device_radix_sort.cuh"
 
 __global__ void kernel_generate_sorting_keys_and_indices(const Ray* rays, float* keys, uint* indices, int n)
@@ -48,8 +47,6 @@ void sortRays(Ray** d_rays, int nrRays)
     cub::DeviceRadixSort::SortPairs(d_temp_storage, tmp_size, d_keys, d_values, 10);
 
     cudaDeviceSynchronize();
-
-    uint* keys = inspectCudaBuffer(d_values.Current(), 10);
 
     // Permute the given rays buffer to reflect the sort
     Ray* d_rays_result;

@@ -141,6 +141,59 @@ __device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hi
     return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
+__device__ bool traverseBVHShadows(const Ray& ray)
+{
+    const uint STACK_SIZE = 30;
+    __shared__ uint stack[STACK_SIZE];
+
+    HitInfo hitInfo;
+    hitInfo.intersected = false;
+    hitInfo.t = ray.length;
+
+    stack[0] = 0;
+    uint size = 1;
+
+    while(size > 0)
+    {
+        uint current_id = stack[size-1];
+        size -= 1;
+
+        BVHNode current = GBVH[current_id];
+        bool test = boxtest(current.boundingBox, ray, &hitInfo);
+        if (__all_sync(__activemask(), !test)) continue;
+
+        if (current.isLeaf())
+        {
+            uint start = current.t_start;
+            uint end = start + current.t_count();
+            float t;
+            for(uint i=start; i<end; i++)
+            {
+                if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                {
+                    return true;
+                }
+            }
+        }
+        else
+        {
+
+            size += 2;
+
+            // push on the stack, first the far child
+            uint near = current.child1;
+            uint far = near + 1;
+            if (firstIsFar(current, ray)) swap(&near, &far);
+
+            stack[size - 2]   = far;
+            stack[size - 1]   = near;
+        }
+
+    }
+
+    return false;
+}
+
 __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
     HitInfo hitInfo;
@@ -307,12 +360,16 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
+    const Ray& ray = GRayQueue[i];
+    TraceState& state = stateBuf[ray.pixeli];
+
+    // we can terminate this path
+    if (dot(state.mask, state.mask) < 0.01) return;
+
     uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo& hitInfo = intersections[i];
     if (!hitInfo.intersected) return;
 
-    const Ray& ray = GRayQueue[i];
-    TraceState& state = stateBuf[ray.pixeli];
 
     if (hitInfo.primitive_id == LIGHT_ID) {
         state.accucolor += state.mask;
@@ -403,19 +460,13 @@ __global__ void kernel_connect(int n, TraceState* stateBuf)
 
     const Ray& shadowRay = GShadowRayQueue[i];
     TraceState& state = stateBuf[shadowRay.pixeli];
-    const HitInfo hitInfo = traverseBVHStack(shadowRay, true, true);
     float3 color;
-    if (hitInfo.intersected)
-    {
-        color = make_float3(0);
-    }
-    else
-    {
-        float r2 = shadowRay.length * shadowRay.length;
-        float SA = 4 * 3.1415926535 * r2;
-        float NL = lambert(-shadowRay.direction, state.currentNormal);
-        color = (GLight_Color / SA) * NL;
-    }
+    if (traverseBVHStack(shadowRay, true, true).intersected) return;
+
+    float r2 = shadowRay.length * shadowRay.length;
+    float SA = 4 * 3.1415926535 * r2;
+    float NL = lambert(-shadowRay.direction, state.currentNormal);
+    color = (GLight_Color / SA) * NL;
 
     state.accucolor += state.correction * state.mask * color;
     stateBuf[shadowRay.pixeli] = state;

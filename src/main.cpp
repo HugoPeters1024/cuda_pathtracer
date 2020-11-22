@@ -279,7 +279,7 @@ int main(int argc, char** argv) {
             rayQueueNew.syncFromDevice(GRayQueueNew);
 
             // Sample the light source for every shadow ray
-            kernel_connect<<<shadowRayQueue.size / 256 + 1, 256>>>(shadowRayQueue.size, traceBuf);
+            kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(shadowRayQueue.size, traceBuf);
 
             // swap the ray buffers
             rayQueueNew.syncToDevice(GRayQueue);
