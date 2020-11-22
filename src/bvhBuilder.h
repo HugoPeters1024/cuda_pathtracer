@@ -34,6 +34,8 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
 {
     // bvh size is bounded by 2*triangle_count-1
     BVHNode* ret = (BVHNode*)malloc((2 * triangles.size() - 1) * sizeof(BVHNode));
+    float* leftCosts = (float*)malloc(triangles.size() * sizeof(float));
+    float* rightCosts = (float*)malloc(triangles.size() * sizeof(float));
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
 
@@ -48,7 +50,7 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         uint count = std::get<2>(workItem);
 
         Box boundingBox = buildTriangleBox(&triangles[start], count);
-        float parentSurface = boundingBox.getSurfaceArea();
+        float invParentSurface = 1.0f / boundingBox.getSurfaceArea();
         int min_level = -1;
         int min_split_pos = -1;
         float min_cost = count;
@@ -61,10 +63,7 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
                 case 2: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_z); break;
             }
 
-            float leftCosts[count];
             Box leftBox = triangles[start].getBoundingBox();
-
-            float rightCosts[count];
             Box rightBox = triangles[start+count-1].getBoundingBox();
 
             // first sweep from the left to get the left costs
@@ -75,13 +74,13 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
                 leftBox.consumePoint(tl.v0);
                 leftBox.consumePoint(tl.v1);
                 leftBox.consumePoint(tl.v2);
-                leftCosts[i] = leftBox.getSurfaceArea() / parentSurface;
+                leftCosts[i] = leftBox.getSurfaceArea() * invParentSurface;
 
                 const Triangle& tr = triangles[start + count - i - 1];
                 rightBox.consumePoint(tr.v0);
                 rightBox.consumePoint(tr.v1);
                 rightBox.consumePoint(tr.v2);
-                rightCosts[i] = rightBox.getSurfaceArea() / parentSurface;
+                rightCosts[i] = rightBox.getSurfaceArea() * invParentSurface;
             }
 
             // Find the optimal combined costs index
@@ -138,6 +137,9 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         // Create a node
         ret[index] = BVHNode::MakeNode(boundingBox, child1_index, min_level);
     }
+
+    free(leftCosts);
+    free(rightCosts);
 
     // Reduce the memory allocation to match the final size
     ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));

@@ -160,6 +160,14 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
+    float light_t;
+    if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
+    {
+        hitInfo.t = light_t;
+        hitInfo.intersected = true;
+        hitInfo.primitive_id = LIGHT_ID;
+    }
+
     const uint STACK_SIZE = 22;
     uint stack[STACK_SIZE];
     uint* stackPtr = stack;
@@ -204,13 +212,6 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
     }
 
-    float light_t;
-    if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
-    {
-        hitInfo.t = light_t;
-        hitInfo.intersected = true;
-        hitInfo.primitive_id = LIGHT_ID;
-    }
 
     return hitInfo;
 }
