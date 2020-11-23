@@ -22,9 +22,10 @@ __device__ inline float lambert(const float3 &v1, const float3 &v2)
     return max(dot(v1,v2),0.0f);
 }
 
-__device__ inline bool firstIsFar(const BVHNode& node, const Ray& ray)
+__device__ inline bool firstIsFar(const uint& split_plane, const Ray& ray)
 {
-    return (ray.direction.x < 0) * (node.split_plane() == 0) + (ray.direction.y < 0) * (node.split_plane() == 1) + (ray.direction.z < 0) * (node.split_plane() == 2);
+    // I know it's hacky but damn is it fast
+    return ((float*)&ray.direction)[split_plane] < 0;
 }
 
 __device__ inline Material getColliderMaterial(const HitInfo& hitInfo)
@@ -141,6 +142,7 @@ __device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hi
     return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
 }
 
+/*
 __device__ bool traverseBVHShadows(const Ray& ray)
 {
     const uint STACK_SIZE = 30;
@@ -193,6 +195,7 @@ __device__ bool traverseBVHShadows(const Ray& ray)
 
     return false;
 }
+*/
 
 __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
 {
@@ -223,15 +226,13 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
 
     const uint STACK_SIZE = 22;
     uint stack[STACK_SIZE];
-    uint* stackPtr = stack;
-    *stackPtr++ = 0;
+    uint size = 0;
+    stack[size++] = 0;
 
-    uint size = 1;
     while(size > 0)
     {
-        uint current_id = *--stackPtr;
+        uint current_id = stack[--size];
         BVHNode current = GBVH[current_id];
-        size -= 1;
         if (!boxtest(current.boundingBox, ray, &hitInfo)) continue;
 
         if (current.isLeaf())
@@ -255,12 +256,11 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         {
             uint near = current.child1;
             uint far = near + 1;
-            //if (firstIsFar(current, ray)) swapc(near, far);
+            if (firstIsFar(current.split_plane(), ray)) swapc(near, far);
+            stack[size++] = far;
+            stack[size++] = near;
 
             // push on the stack, first the far child
-            *stackPtr++ = far;
-            *stackPtr++ = near;
-            size += 2;
            // assert (size < STACK_SIZE);
         }
     }
