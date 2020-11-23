@@ -224,16 +224,17 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         hitInfo.primitive_id = LIGHT_ID;
     }
 
-    const uint STACK_SIZE = 22;
+    const uint STACK_SIZE = 18;
     uint stack[STACK_SIZE];
     uint size = 0;
-    stack[size++] = 0;
+
+    const BVHNode& root = GBVH[0];
+    if (boxtest(root.boundingBox, ray, &hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
         uint current_id = stack[--size];
         BVHNode current = GBVH[current_id];
-        if (!boxtest(current.boundingBox, ray, &hitInfo)) continue;
 
         if (current.isLeaf())
         {
@@ -254,14 +255,20 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         }
         else
         {
-            uint near = current.child1;
-            uint far = near + 1;
-            if (firstIsFar(current.split_plane(), ray)) swapc(near, far);
-            stack[size++] = far;
-            stack[size++] = near;
+            uint near_id = current.child1;
+            uint far_id = current.child1 + 1;
+            BVHNode near = GBVH[near_id];
+            BVHNode far = GBVH[far_id];
+            if (firstIsFar(current.split_plane(), ray)) {
+                swapc(near_id, far_id);
+                swapc(near, far);
+            }
 
             // push on the stack, first the far child
-           // assert (size < STACK_SIZE);
+            if (boxtest(far.boundingBox, ray, &hitInfo)) stack[size++] = far_id;
+            if (boxtest(near.boundingBox, ray, &hitInfo)) stack[size++] = near_id;
+
+            //assert (size < STACK_SIZE);
         }
     }
 
