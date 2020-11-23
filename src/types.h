@@ -348,7 +348,7 @@ public:
 
     inline bool hasMoved() const { return has_moved; }
 
-    HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint* seed) const {
+    HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint& seed) const {
         float xf = ((float)x + rand(seed)) / WINDOW_WIDTH;
         float yf = ((float)y + rand(seed)) / WINDOW_HEIGHT;
         float3 point = lt + xf * u + yf * v;

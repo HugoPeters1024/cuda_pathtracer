@@ -42,18 +42,17 @@ HYBRID uint wang_hash(uint seed)
     return seed;
 }
 
-HYBRID inline float rand(uint* seed)
+HYBRID inline float rand(uint& seed)
 {
-    uint m = wang_hash(*seed);
-    *seed = m;
+    seed = wang_hash(seed);
 
     const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
     const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
 
-    m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
-    m |= ieeeOne;                          // Add fractional part to 1.0
+    seed &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
+    seed |= ieeeOne;                          // Add fractional part to 1.0
 
-    float  f = reinterpret_cast<float&>(m);       // Range [1:2]
+    float  f = reinterpret_cast<float&>(seed);       // Range [1:2]
     return f - 1.0;                        // Range [0:1]
 }
 

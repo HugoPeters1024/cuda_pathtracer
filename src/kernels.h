@@ -58,7 +58,7 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ra
     return make_float3(0);
 }
 
-__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* t)
+__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
 {
     float3 OC = ray.origin - sphere.pos;
     float a = dot(ray.direction, ray.direction);
@@ -69,12 +69,12 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float* 
     det = sqrt(det);
     float tmin = (-b - det) / (2*a);
     float tmax = (-b + det) / (2*a);
-    *t = tmin;
-    if (tmin < 0) *t = tmax;
+    t = tmin;
+    if (tmin < 0) t = tmax;
     return tmax > 0;
 }
 
-__device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float* maxt)
+__device__ bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& maxt)
 {
     int signs[3];
     float3 invdir = 1.0 / r.direction;
@@ -101,12 +101,12 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float* mint, float
     tmin = max(tzmin, tmin);
     tmax = min(tzmax, tmax);
 
-    *mint = tmin;
-    *maxt = tmax;
+    mint = tmin;
+    maxt = tmax;
     return ret && tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float* t, float currentT)
+__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -123,21 +123,21 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, 
     float v = dot(ray.direction, qvec) * invDet;
     if(v < 0 || u + v > 1) return false;
 
-    *t = dot(v0v2, qvec) * invDet;
-    return *t > 0;
+    t = dot(v0v2, qvec) * invDet;
+    return t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-__device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo* hitInfo)
+__device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo& hitInfo)
 {
     float tmin, tmax;
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
-    return rayBoxIntersect(ray, box, &tmin, &tmax) && tmin < hitInfo->t;
+    return rayBoxIntersect(ray, box, tmin, tmax) && tmin < hitInfo.t;
 }
 
 /*
@@ -204,7 +204,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     for(int i=0; i<GSpheres.size; i++)
     {
         float t;
-        if (raySphereIntersect(ray, GSpheres[i], &t) && t < hitInfo.t)
+        if (raySphereIntersect(ray, GSpheres[i], t) && t < hitInfo.t)
         {
             hitInfo.intersected = true;
             hitInfo.primitive_id = i;
@@ -215,7 +215,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     }
 
     float light_t;
-    if (!ignoreLight && raySphereIntersect(ray, GLight, &light_t) && light_t < hitInfo.t)
+    if (!ignoreLight && raySphereIntersect(ray, GLight, light_t) && light_t < hitInfo.t)
     {
         hitInfo.t = light_t;
         hitInfo.intersected = true;
@@ -227,7 +227,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     uint size = 0;
 
     const BVHNode root = GBVH[0];
-    if (boxtest(root.boundingBox, ray, &hitInfo)) stack[size++] = 0;
+    if (boxtest(root.boundingBox, ray, hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
@@ -241,7 +241,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
             float t;
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, GTriangles[i], &t, hitInfo.t) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, GTriangles[i], t) && t < hitInfo.t)
                 {
                     hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
@@ -263,8 +263,8 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
             }
 
             // push on the stack, first the far child
-            if (boxtest(far.boundingBox, ray, &hitInfo)) stack[size++] = far_id;
-            if (boxtest(near.boundingBox, ray, &hitInfo)) stack[size++] = near_id;
+            if (boxtest(far.boundingBox, ray, hitInfo)) stack[size++] = far_id;
+            if (boxtest(near.boundingBox, ray, hitInfo)) stack[size++] = near_id;
 
             //assert (size < STACK_SIZE);
         }
@@ -274,7 +274,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     return hitInfo;
 }
 
-__device__ float3 BRDF(const float3& normal, uint* seed)
+__device__ float3 BRDF(const float3& normal, uint& seed)
 {
     float r1 = 2 * 3.1415926535 * rand(seed);
     float r2 = rand(seed);
@@ -289,7 +289,7 @@ __device__ float3 BRDF(const float3& normal, uint* seed)
     return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 }
 
-__device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, uint* seed)
+__device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, uint& seed)
 {
     // reflect case
     // Interpolate a normal and a random brdf sample with the glossyness
@@ -299,7 +299,7 @@ __device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3&
     return Ray(intersectionPos, newDir, ray.pixeli);
 }
 
-__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint* seed)
+__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint& seed)
 {
     // calculate the eta based on whether we are inside
     float n1 = 1.0;
@@ -328,7 +328,7 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     return Ray(intersectionPos + 2 * EPS * ray.direction, refractDir, ray.pixeli);
 }
 
-__device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint* seed)
+__device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint seed)
 {
     float3 newDir = BRDF(normal, seed);
     return Ray(intersectionPos, newDir, ray.pixeli);
@@ -348,7 +348,7 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
     uint seed = getSeed(x,y,time);
-    Ray ray = camera.getRay(x,y,&seed);
+    Ray ray = camera.getRay(x,y,seed);
     GRayQueue.push(ray);
 }
 
@@ -405,7 +405,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (rand(&seed) < material.transmit)
+    if (rand(seed) < material.transmit)
     {
         if (inside)
         {
@@ -416,21 +416,21 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         }
 
         // Ray can turn into a reflection ray due to fresnell
-        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, &seed);
+        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, seed);
         
         // Make sure we do not cast shadow rays
         state.correction = 0;
     }
-    else if (rand(&seed) < material.reflect)
+    else if (rand(seed) < material.reflect)
     {
-        secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, &seed);
+        secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, seed);
 
         // Make sure we do not cast shadow rays
         state.correction = 0;
     }
     else 
     {
-        secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, &seed);
+        secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
         float lambert = dot(secondary.direction, colliderNormal);
 
         state.mask = state.mask * lambert;
@@ -448,7 +448,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     {
         float3 fromLight = normalize(intersectionPos - GLight.pos);
         // Sample the brdf from that point.
-        float3 r = BRDF(fromLight, &seed);
+        float3 r = BRDF(fromLight, seed);
 
         // From the center of the light, go to sample point
         // (by definition of the BRDF on the visible by the origin (if not occluded)
