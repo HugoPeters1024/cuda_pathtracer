@@ -6,8 +6,6 @@
 #include "types.h"
 #include "globals.h"
 
-// Some random large number
-#define LIGHT_ID 29347528
 
 template <typename T>
 __device__ inline void swapc(T& left, T& right)
@@ -221,20 +219,20 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
     {
         hitInfo.t = light_t;
         hitInfo.intersected = true;
-        hitInfo.primitive_id = LIGHT_ID;
+        hitInfo.primitive_type = LIGHT;
     }
 
     const uint STACK_SIZE = 18;
     uint stack[STACK_SIZE];
     uint size = 0;
 
-    const BVHNode& root = GBVH[0];
+    const BVHNode root = GBVH[0];
     if (boxtest(root.boundingBox, ray, &hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
         uint current_id = stack[--size];
-        BVHNode current = GBVH[current_id];
+        const BVHNode current = GBVH[current_id];
 
         if (current.isLeaf())
         {
@@ -354,41 +352,53 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     GRayQueue.push(ray);
 }
 
-__global__ void kernel_extend(HitInfo* intersections, int n)
+__global__ void kernel_extend(HitInfo* intersections)
 {
-    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; if (i >= n) return;
-    const Ray& ray = GRayQueue[i];
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
+    if (i >= GRayQueue.size) return;
+    const Ray ray = GRayQueue[i];
     HitInfo hitInfo = traverseBVHStack(ray, false, false);
     intersections[i] = hitInfo;
 }
 
 
-__global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* stateBuf, float time)
+__global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf, float time, int bounce)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n) return;
-    const Ray& ray = GRayQueue[i];
-    TraceState& state = stateBuf[ray.pixeli];
+    if (i >= GRayQueue.size) return;
+    const Ray ray = GRayQueue[i];
+    TraceState state = stateBuf[ray.pixeli];
 
-    // we can terminate this path
-    if (dot(state.mask, state.mask) < 0.01) return;
 
     uint seed = getSeed(i,wang_hash(i),time);
-    const HitInfo& hitInfo = intersections[i];
+    const HitInfo hitInfo = intersections[i];
     if (!hitInfo.intersected) return;
 
 
-    if (hitInfo.primitive_id == LIGHT_ID) {
-        state.accucolor += state.mask;
+
+    if (hitInfo.primitive_type == LIGHT) {
+        // the light can only be seen by primary bounces.
+        // the rest happens through NEE
+        if (bounce == 0) {
+            state.accucolor = GLight_Color;
+            stateBuf[ray.pixeli] = state;
+        }
         return;
     }
 
-    const Material& material = getColliderMaterial(hitInfo);
+
+
+    const Material material = getColliderMaterial(hitInfo);
     float3 originalNormal = getColliderNormal(hitInfo, ray);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
     state.mask = state.mask * material.color;
+
+
+    // we can terminate this path
+    if (dot(state.mask, state.mask) < 0.01) return;
+
     state.currentNormal = colliderNormal;
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
@@ -460,20 +470,19 @@ __global__ void kernel_shade(const HitInfo* intersections, int n, TraceState* st
 }
 
 // Traces the shadow rays
-__global__ void kernel_connect(int n, TraceState* stateBuf)
+__global__ void kernel_connect(TraceState* stateBuf)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n) return;
+    if (i >= GShadowRayQueue.size) return;
 
     const Ray& shadowRay = GShadowRayQueue[i];
     TraceState& state = stateBuf[shadowRay.pixeli];
-    float3 color;
     if (traverseBVHStack(shadowRay, true, true).intersected) return;
 
     float r2 = shadowRay.length * shadowRay.length;
     float SA = 4 * 3.1415926535 * r2;
     float NL = lambert(-shadowRay.direction, state.currentNormal);
-    color = (GLight_Color / SA) * NL;
+    float3 color = (GLight_Color / SA) * NL;
 
     state.accucolor += state.correction * state.mask * color;
     stateBuf[shadowRay.pixeli] = state;

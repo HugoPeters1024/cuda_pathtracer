@@ -45,7 +45,7 @@ layout (location = 0) uniform float time;
 void main() { 
     vec4 c = texture(tex, uv);
     color = vec4(c.xyz / c.w, 1);
-    float gamma = 1.8;
+    float gamma = 1.5;
     color.x = pow(color.x, 1.0f/gamma);
     color.y = pow(color.y, 1.0f/gamma);
     color.z = pow(color.z, 1.0f/gamma);
@@ -142,10 +142,9 @@ int main(int argc, char** argv) {
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
-  //  scene.addModel("cube.obj", 0.5, make_float3(0), make_float3(0), cubeMat2);
-    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
+   //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
-    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
+   // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
 
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
@@ -264,22 +263,22 @@ int main(int argc, char** argv) {
 
 
         uint max_bounces = shouldClear ? 1 : 8;
-        for(int bounces = 0; bounces < max_bounces; bounces++) {
+        for(int bounce = 0; bounce < max_bounces; bounce++) {
 
             // Test for intersections with each of the rays,
-            kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf, rayQueue.size);
+            kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf);
 
             // Foreach intersection, possibly create shadow rays and secondary rays.
             shadowRayQueue.clear();
             shadowRayQueue.syncToDevice(GShadowRayQueue);
             rayQueueNew.clear();
             rayQueueNew.syncToDevice(GRayQueueNew);
-            kernel_shade<<<rayQueue.size / 1024 + 1, 1024>>>(intersectionBuf, rayQueue.size, traceBuf, glfwGetTime());
+            kernel_shade<<<rayQueue.size / 1024 + 1, 1024>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
             shadowRayQueue.syncFromDevice(GShadowRayQueue);
             rayQueueNew.syncFromDevice(GRayQueueNew);
 
             // Sample the light source for every shadow ray
-            kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(shadowRayQueue.size, traceBuf);
+            kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBuf);
 
             // swap the ray buffers
             rayQueueNew.syncToDevice(GRayQueue);

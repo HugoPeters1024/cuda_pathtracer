@@ -3074,6 +3074,7 @@ bool ObjReader::ParseFromString(const std::string &obj_text,
   return valid_;
 }
 
+
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif

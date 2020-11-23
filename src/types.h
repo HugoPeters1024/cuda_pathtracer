@@ -101,7 +101,7 @@ struct __align__(16) Ray
     __device__ float getSortingKey() const { return (float)pixeli; }
 };
 
-enum PRIMITIVE_TYPE { TRIANGLE, SPHERE };
+enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, LIGHT };
 
 struct __align__(16) HitInfo
 {
