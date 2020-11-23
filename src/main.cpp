@@ -17,6 +17,10 @@
 #include "scene.h"
 #include "globals.h"
 #include "kernels.h"
+#include "application.h"
+#include "pathtracer.h"
+
+#define PATHTRACER
 
 
 static const char* quad_vs = R"(
@@ -95,19 +99,14 @@ int main(int argc, char** argv) {
 
     // Generate screen texture
     // list of GL formats that cuda supports: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__OPENGL.html#group__CUDART__OPENGL_1gd7be3ca8a7a739d57f0b558562c5706e
-    float* screen = (float*)malloc(WINDOW_WIDTH * WINDOW_HEIGHT * 4 * sizeof(float));
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, screen);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Register the texture with cuda
-    cudaGraphicsResource* pGraphicsResource;
-    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
-    cudaArray *arrayPtr;
 
     // Create a scene object
     Scene scene;
@@ -144,29 +143,17 @@ int main(int argc, char** argv) {
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
-   // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
+    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
 
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
 
-    // Upload the host buffers to cuda
-    TriangleV* d_vertex_buffer;
-    cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV)) );
-    cudaSafe( cudaMemcpy(d_vertex_buffer, sceneData.h_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+    // Create the application
+#ifdef PATHTRACER
+    Pathtracer app = Pathtracer(sceneData, texture);
+#endif
 
-    TriangleD* d_data_buffer;
-    cudaSafe( cudaMalloc(&d_data_buffer, sceneData.num_triangles * sizeof(TriangleD)) );
-    cudaSafe( cudaMemcpy(d_data_buffer, sceneData.h_data_buffer, sceneData.num_triangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
-
-    BVHNode* d_bvh_buffer;
-    cudaSafe( cudaMalloc(&d_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode)) );
-    cudaSafe( cudaMemcpy(d_bvh_buffer, sceneData.h_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
-
-    // Assign to the global binding sites
-    cudaSafe( cudaMemcpyToSymbol(GTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(GTriangleData, &d_data_buffer, sizeof(d_data_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(GBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
 
     // add a sphere as light source
     Sphere light(make_float3(-8,5,1), 0.05, -1);
@@ -178,30 +165,6 @@ int main(int argc, char** argv) {
     };
     SizedBuffer<Sphere>(spheres, 2, GSpheres);
 
-    // Send materials to gpu
-    Material* matBuf;
-    cudaSafe( cudaMalloc(&matBuf, scene.materials.size() * sizeof(Material)));
-    cudaSafe( cudaMemcpy(matBuf, &scene.materials[0], scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyToSymbol(GMaterials, &matBuf, sizeof(matBuf)) );
-
-
-
-    Ray* rayBuf;
-    cudaSafe ( cudaMalloc(&rayBuf, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(Ray)) );
-
-
-
-    // queue of rays used in wavefront tracing
-    AtomicQueue<Ray> rayQueue(NR_PIXELS);
-    AtomicQueue<Ray> shadowRayQueue(NR_PIXELS);
-    AtomicQueue<Ray> rayQueueNew(NR_PIXELS);
-
-
-    HitInfo* intersectionBuf;
-    cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
-
-    TraceState* traceBuf;
-    cudaSafe( cudaMalloc(&traceBuf, NR_PIXELS * sizeof(TraceState)) );
 
     // Set the initial camera values;
     Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);
@@ -214,85 +177,19 @@ int main(int argc, char** argv) {
     printf("HitInfo is %i bytes\n", sizeof(HitInfo));
     printf("TraceState is %i bytes\n", sizeof(TraceState));
 
-    bool shouldClear = false;
+    app.Init();
+
+    bool shouldClear = true;
     while (!glfwWindowShouldClose(window))
     {
         tick++;
         double start = glfwGetTime();
 
-        // Unbind the texture from OpenGL
-
-        // Map the resource to Cuda
-        cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
-
-        // Get a pointer to the memory
-        cudaSafe ( cudaGraphicsSubResourceGetMappedArray(&arrayPtr, pGraphicsResource, 0, 0) );
-
-        // Wrap the cudaArray in a surface object
-        cudaResourceDesc resDesc;
-        memset(&resDesc, 0, sizeof(resDesc));
-        resDesc.resType = cudaResourceTypeArray;
-        resDesc.res.array.array = arrayPtr;
-        cudaSurfaceObject_t inputSurfObj = 0;
-        cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
-
-        // Calculate the thread size and warp size
-        int tx = 32;
-        int ty = 32;
-        dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);
-        dim3 dimThreads(tx,ty);
-
-        float time = glfwGetTime();
-        cudaSafe( cudaMemcpyToSymbol(GTime, &time, sizeof(float)) );
         cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
         cudaSafe( cudaMemcpyToSymbol(GLight_Color, &lightColor, sizeof(float3)) );
 
-        // clear the ray queue and update on gpu
-        if (shouldClear)
-            kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
+        app.Draw(camera, glfwGetTime(), shouldClear);
 
-
-        kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBuf);
-
-        // Generate primary rays in the ray queue
-        rayQueue.clear();
-        rayQueue.syncToDevice(GRayQueue);
-        kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, glfwGetTime());
-        rayQueue.syncFromDevice(GRayQueue);
-        assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
-
-
-        uint max_bounces = shouldClear ? 1 : 8;
-        for(int bounce = 0; bounce < max_bounces; bounce++) {
-
-            // Test for intersections with each of the rays,
-            kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf);
-
-            // Foreach intersection, possibly create shadow rays and secondary rays.
-            shadowRayQueue.clear();
-            shadowRayQueue.syncToDevice(GShadowRayQueue);
-            rayQueueNew.clear();
-            rayQueueNew.syncToDevice(GRayQueueNew);
-            kernel_shade<<<rayQueue.size / 1024 + 1, 1024>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
-            shadowRayQueue.syncFromDevice(GShadowRayQueue);
-            rayQueueNew.syncFromDevice(GRayQueueNew);
-
-            // Sample the light source for every shadow ray
-            kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBuf);
-
-            // swap the ray buffers
-            rayQueueNew.syncToDevice(GRayQueue);
-            std::swap(rayQueue, rayQueueNew);
-        }
-
-        // Write the final state accumulator into the texture
-        kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBuf, inputSurfObj);
-
-
-        cudaSafe ( cudaDeviceSynchronize() );
-
-        // Unmap the resource from cuda
-        cudaSafe ( cudaGraphicsUnmapResources(1, &pGraphicsResource) );
 
         // Draw the texture
         glClear(GL_COLOR_BUFFER_BIT);
@@ -319,7 +216,6 @@ int main(int argc, char** argv) {
         double fps = 1.0f / (glfwGetTime() - start);
         runningAverageFps = runningAverageFps * 0.95 + 0.05 * fps;
         if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
-
 
         // Vsync is broken in GLFW for my card, so just hack it in.
         while (glfwGetTime() - start < 1.0 / 60.0) {}

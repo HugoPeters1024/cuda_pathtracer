@@ -19,9 +19,6 @@ __constant__ Sphere GLight;
 
 __constant__ float3 GLight_Color;
 
-// the global application time
-__constant__ float GTime;
-
 __device__ AtomicQueue<Ray> GRayQueue;
 
 __device__ AtomicQueue<Ray> GShadowRayQueue;

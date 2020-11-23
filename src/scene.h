@@ -10,15 +10,12 @@ struct SceneData
     TriangleV* h_vertex_buffer;
     TriangleD* h_data_buffer;
     BVHNode* h_bvh_buffer;
+    Material* h_material_buffer;
+    Sphere* h_sphere_buffer;
     uint num_triangles;
     uint num_bvh_nodes;
-
-    ~SceneData()
-    {
-        delete h_vertex_buffer;
-        delete h_data_buffer;
-        delete h_bvh_buffer;
-    }
+    uint num_materials;
+    uint num_spheres;
 };
 
 class Scene
@@ -97,8 +94,15 @@ public:
             ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.material);
         }
 
+        // copy over the materials
+        ret.h_material_buffer = (Material*)malloc(materials.size() * sizeof(Material));
+        memcpy(ret.h_material_buffer, materials.data(), materials.size() * sizeof(Material));
+
+        // copy over the spheres
+
         ret.num_triangles = triangles.size();
         ret.num_bvh_nodes = bvhSize;
+        ret.num_materials = materials.size();
         return ret;
     }
 };
