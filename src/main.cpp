@@ -132,8 +132,8 @@ int main(int argc, char** argv) {
 
     Material glassMat = Material::DIFFUSE(make_float3(1));
     glassMat.transmit = 1.0f;
-    glassMat.refractive_index = 1.125f;
-    glassMat.glossy = 0.05f;
+    glassMat.refractive_index = 1.544;
+    glassMat.glossy = 0.00f;
     glassMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto glassMatId = scene.addMaterial(glassMat);
 
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     cudaSafe( cudaMemcpyToSymbol(GBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
 
     // add a sphere as light source
-    Sphere light(make_float3(-4,-1,1), 0.05, -1);
+    Sphere light(make_float3(-8,5,1), 0.05, -1);
     float3 lightColor = make_float3(150);
 
     Sphere spheres[2] = {
@@ -311,6 +311,9 @@ int main(int argc, char** argv) {
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { lightColor *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
+
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { light.pos.y += 0.02; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { light.pos.y -= 0.02; shouldClear = true;}
         glfwPollEvents();
         glfwSwapBuffers(window);
 

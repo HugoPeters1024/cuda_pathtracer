@@ -62,7 +62,7 @@ public:
 
             float3 n0, n1, n2;
 
-            if (it0.normal_index == -1 || it1.normal_index == -1 | it2.normal_index == -1)
+            if (it0.normal_index == -1 || it1.normal_index == -1 || it2.normal_index == -1)
             {
                 float3 edge1 = v1 - v0;
                 float3 edge2 = v2 - v0;

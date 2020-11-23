@@ -10,9 +10,9 @@
 #define LIGHT_ID 29347528
 
 template <typename T>
-__device__ inline void swap(T* left, T* right)
+__device__ inline void swapc(T& left, T& right)
 {
-    T* tmp = left;
+    T tmp = left;
     left = right;
     right = tmp;
 }
@@ -183,7 +183,7 @@ __device__ bool traverseBVHShadows(const Ray& ray)
             // push on the stack, first the far child
             uint near = current.child1;
             uint far = near + 1;
-            if (firstIsFar(current, ray)) swap(&near, &far);
+            if (firstIsFar(current, ray)) swapc(near, far);
 
             stack[size - 2]   = far;
             stack[size - 1]   = near;
@@ -255,7 +255,7 @@ __device__ HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIn
         {
             uint near = current.child1;
             uint far = near + 1;
-            if (firstIsFar(current, ray)) swap(&near, &far);
+            //if (firstIsFar(current, ray)) swapc(near, far);
 
             // push on the stack, first the far child
             *stackPtr++ = far;
@@ -299,7 +299,7 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     // calculate the eta based on whether we are inside
     float n1 = 1.0;
     float n2 = material.refractive_index;
-    if (inside) swap(&n1, &n2);
+    if (inside) swapc(n1, n2);
     float eta = n1 / n2;
 
     float costi = dot(normal, -ray.direction);
