@@ -18,7 +18,7 @@
 #include "raytracer.h"
 #include "pathtracer.h"
 
-//#define PATHTRACER
+#define PATHTRACER
 
 
 static const char* quad_vs = R"(
@@ -163,8 +163,7 @@ int main(int argc, char** argv) {
             Sphere(make_float3(-8, 2, 1), 1, glassMatId),
             Sphere(make_float3(0, 0, 0), 1, mirrorMatId),
     };
-    SizedBuffer<Sphere>(spheres, 2, GSpheres);
-
+    DSizedBuffer<Sphere>(spheres, 2, DSpheres);
 
     // Set the initial camera values;
     Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);
@@ -185,8 +184,8 @@ int main(int argc, char** argv) {
         tick++;
         double start = glfwGetTime();
 
-        cudaSafe( cudaMemcpyToSymbol(GLight, &light, sizeof(Sphere)) );
-        cudaSafe( cudaMemcpyToSymbol(GLight_Color, &lightColor, sizeof(float3)) );
+        cudaSafe( cudaMemcpyToSymbol(DLight, &light, sizeof(Sphere)) );
+        cudaSafe( cudaMemcpyToSymbol(DLight_Color, &lightColor, sizeof(float3)) );
 
         app.Draw(camera, glfwGetTime(), shouldClear);
 

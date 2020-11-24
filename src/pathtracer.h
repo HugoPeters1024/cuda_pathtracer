@@ -45,10 +45,10 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpy(matBuf, sceneData.h_material_buffer, sceneData.num_materials * sizeof(Material), cudaMemcpyHostToDevice) );
 
     // Assign to the global binding sites
-    cudaSafe( cudaMemcpyToSymbol(GTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(GTriangleData, &d_data_buffer, sizeof(d_data_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(GBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(GMaterials, &matBuf, sizeof(matBuf)) );
+    cudaSafe( cudaMemcpyToSymbol(DTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(DTriangleData, &d_data_buffer, sizeof(d_data_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(DBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );
 
     // queue of rays for wavefront tracing
     rayQueue = AtomicQueue<Ray>(NR_PIXELS);
@@ -91,9 +91,9 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     // Generate primary rays in the ray queue
     rayQueue.clear();
-    rayQueue.syncToDevice(GRayQueue);
+    rayQueue.syncToDevice(DRayQueue);
     kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, currentTime);
-    rayQueue.syncFromDevice(GRayQueue);
+    rayQueue.syncFromDevice(DRayQueue);
     assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
@@ -105,18 +105,18 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
         shadowRayQueue.clear();
-        shadowRayQueue.syncToDevice(GShadowRayQueue);
+        shadowRayQueue.syncToDevice(DShadowRayQueue);
         rayQueueNew.clear();
-        rayQueueNew.syncToDevice(GRayQueueNew);
+        rayQueueNew.syncToDevice(DRayQueueNew);
         kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
-        shadowRayQueue.syncFromDevice(GShadowRayQueue);
-        rayQueueNew.syncFromDevice(GRayQueueNew);
+        shadowRayQueue.syncFromDevice(DShadowRayQueue);
+        rayQueueNew.syncFromDevice(DRayQueueNew);
 
         // Sample the light source for every shadow ray
         kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBuf);
 
         // swap the ray buffers
-        rayQueueNew.syncToDevice(GRayQueue);
+        rayQueueNew.syncToDevice(DRayQueue);
         std::swap(rayQueue, rayQueueNew);
     }
 

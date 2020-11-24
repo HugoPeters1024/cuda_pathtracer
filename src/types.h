@@ -288,20 +288,34 @@ struct AtomicQueue
 };
 
 template <class T>
-struct SizedBuffer
+struct DSizedBuffer
 {
     T* values;
     uint size;
 
-    SizedBuffer() {}
-    SizedBuffer(T* src, int size, const SizedBuffer<T>& dest) : size(size)
+    DSizedBuffer() {}
+    DSizedBuffer(T* src, int size, const DSizedBuffer<T>& dest) : size(size)
     {
         cudaSafe( cudaMalloc(&values, size * sizeof(T)));
         cudaSafe( cudaMemcpy(values, src, size * sizeof(T), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpyToSymbol(dest, this, sizeof(SizedBuffer<T>)) );
+        cudaSafe( cudaMemcpyToSymbol(dest, this, sizeof(DSizedBuffer<T>)) );
     }
 
     __device__ T const& operator[](int index) { return values[index]; }
+};
+
+template <class T>
+struct HSizedBuffer
+{
+    T* values;
+    uint size;
+
+    HSizedBuffer() {}
+    HSizedBuffer(T* src, int size) : values(src), size(size)
+    {
+    }
+
+    T const& operator[](int index) { return values[index]; }
 };
 
 class Camera
