@@ -58,7 +58,6 @@ void error_callback(int error, const char* description) { fprintf(stderr, "ERROR
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
 
-
 int main(int argc, char** argv) {
     if (!glfwInit()) return 2;
 
@@ -143,7 +142,11 @@ int main(int argc, char** argv) {
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
+    //
 
+    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
+    scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
+        
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
 
@@ -159,11 +162,6 @@ int main(int argc, char** argv) {
     Sphere light(make_float3(-8,5,1), 0.05, -1);
     float3 lightColor = make_float3(150);
 
-    Sphere spheres[2] = {
-            Sphere(make_float3(-8, 2, 1), 1, glassMatId),
-            Sphere(make_float3(0, 0, 0), 1, mirrorMatId),
-    };
-    DSizedBuffer<Sphere>(spheres, 2, DSpheres);
 
     // Set the initial camera values;
     Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);

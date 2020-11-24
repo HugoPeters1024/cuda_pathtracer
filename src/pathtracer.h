@@ -28,6 +28,8 @@ void Pathtracer::Init()
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
 
+    DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, DSpheres);
+
     // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
     cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV)) );

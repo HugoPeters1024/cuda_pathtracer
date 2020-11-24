@@ -5,19 +5,19 @@
 #include "types.h"
 
 // global pointer to the bvh buffer
-__constant__ BVHNode* DBVH;
+__device__ __constant__ BVHNode* DBVH;
 
 // global pointer to triangle buffer, one for just vertices
-__constant__ TriangleV* DTriangles;
+__device__ __constant__ TriangleV* DTriangles;
 
 // the rest in a different buffer
-__constant__ TriangleD* DTriangleData;
+__device__ __constant__ TriangleD* DTriangleData;
 
-__constant__ Material* DMaterials;
+__device__ __constant__ Material* DMaterials;
 
-__constant__ Sphere DLight;
+__device__ __constant__ Sphere DLight;
 
-__constant__ float3 DLight_Color;
+__device__ __constant__ float3 DLight_Color;
 
 __device__ AtomicQueue<Ray> DRayQueue;
 

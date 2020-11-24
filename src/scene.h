@@ -23,10 +23,17 @@ class Scene
 public:
     std::vector<Triangle> triangles;
     std::vector<Material> materials;
+    std::vector<Sphere> spheres;
+
     MATERIAL_ID addMaterial(Material material)
     {
         materials.push_back(material);
         return materials.size() - 1;
+    }
+
+    void addSphere(Sphere sphere)
+    {
+        spheres.push_back(sphere);
     }
 
     void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material)
@@ -99,10 +106,13 @@ public:
         memcpy(ret.h_material_buffer, materials.data(), materials.size() * sizeof(Material));
 
         // copy over the spheres
+        ret.h_sphere_buffer = (Sphere*)malloc(spheres.size() * sizeof(Sphere));
+        memcpy(ret.h_sphere_buffer, spheres.data(), spheres.size() * sizeof(Sphere));
 
         ret.num_triangles = triangles.size();
         ret.num_bvh_nodes = bvhSize;
         ret.num_materials = materials.size();
+        ret.num_spheres = spheres.size();
         return ret;
     }
 };
