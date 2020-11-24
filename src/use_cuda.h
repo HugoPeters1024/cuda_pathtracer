@@ -32,7 +32,7 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
    }
 }
 
-HYBRID uint wang_hash(uint seed)
+HYBRID inline uint wang_hash(uint seed)
 {
     seed = (seed ^ 61) ^ (seed >> 16);
     seed *= 9;

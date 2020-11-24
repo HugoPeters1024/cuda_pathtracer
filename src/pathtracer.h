@@ -108,7 +108,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         shadowRayQueue.syncToDevice(GShadowRayQueue);
         rayQueueNew.clear();
         rayQueueNew.syncToDevice(GRayQueueNew);
-        kernel_shade<<<rayQueue.size / 1024 + 1, 1024>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
+        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
         shadowRayQueue.syncFromDevice(GShadowRayQueue);
         rayQueueNew.syncFromDevice(GRayQueueNew);
 

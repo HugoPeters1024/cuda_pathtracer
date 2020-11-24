@@ -36,22 +36,17 @@ __device__ inline Material getColliderMaterial(const HitInfo& hitInfo)
     assert(false);
 }
 
-__device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const Ray& ray)
+__device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint)
 {
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
             float3 normal = GTriangleData[hitInfo.primitive_id].n0;
-            // ensure front facing normal
-            //if (dot(normal, ray.direction) >= 0) normal = -normal;
             return normal;
         }
         case SPHERE: {
             const Sphere& sphere = GSpheres[hitInfo.primitive_id];
-            float3 position = ray.origin + hitInfo.t * ray.direction;
-            return normalize(position - sphere.pos);
-            //float3 OP = ray.origin - sphere.pos;
-            //return dot(OP, OP) < sphere.radius * sphere.radius ? -normal : normal;
+            return normalize(intersectionPoint - sphere.pos);
         }
     }
     assert(false);
@@ -388,8 +383,9 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
 
 
+    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
     const Material material = getColliderMaterial(hitInfo);
-    float3 originalNormal = getColliderNormal(hitInfo, ray);
+    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
@@ -400,7 +396,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     if (dot(state.mask, state.mask) < 0.01) return;
 
     state.currentNormal = colliderNormal;
-    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
 
     // Create a secondary ray either diffuse or reflected

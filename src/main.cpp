@@ -123,10 +123,8 @@ int main(int argc, char** argv) {
     auto sibenikMatId = scene.addMaterial(sibenikMat);
 
     Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
-    lucyMat.absorption = make_float3(1-0.722, 1-0.451, 1-0.012) * 5;
-    lucyMat.transmit = 0.6f;
-    lucyMat.reflect = 0.6f;
-    lucyMat.refractive_index = 1.1;
+    lucyMat.reflect = 1.0f;
+    lucyMat.glossy = 0.04;
     auto lucyMatId = scene.addMaterial(lucyMat);
 
     Material glassMat = Material::DIFFUSE(make_float3(1));
@@ -137,6 +135,8 @@ int main(int argc, char** argv) {
     auto glassMatId = scene.addMaterial(glassMat);
 
     auto mirrorMat = Material::DIFFUSE(make_float3(1));
+    mirrorMat.transmit = 1.0f;
+    mirrorMat.refractive_index = 1.4f;
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
