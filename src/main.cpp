@@ -6,21 +6,19 @@
 #include <iostream>
 #include <chrono>
 
-#define GL_GLEXT_PROTOTYPES 1
-#define GL3_PROTOTYPES      1
-#include <GLFW/glfw3.h>
+#include "types.h"
 #include "gl_shader_utils.h"
 
 #include "use_cuda.h"
-#include "types.h"
 #include "bvhBuilder.h"
 #include "scene.h"
 #include "globals.h"
 #include "kernels.h"
 #include "application.h"
+#include "raytracer.h"
 #include "pathtracer.h"
 
-#define PATHTRACER
+//#define PATHTRACER
 
 
 static const char* quad_vs = R"(
@@ -152,6 +150,8 @@ int main(int argc, char** argv) {
     // Create the application
 #ifdef PATHTRACER
     Pathtracer app = Pathtracer(sceneData, texture);
+#else
+    Raytracer app = Raytracer(sceneData, texture);
 #endif
 
 

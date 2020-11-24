@@ -53,7 +53,7 @@ __device__ inline float3 getColliderNormal(const HitInfo& hitInfo, const float3&
     return make_float3(0);
 }
 
-__device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
+HYBRID bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
 {
     float3 OC = ray.origin - sphere.pos;
     float a = dot(ray.direction, ray.direction);
@@ -69,7 +69,7 @@ __device__ bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& 
     return tmax > 0;
 }
 
-__device__ bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& maxt)
+HYBRID bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& maxt)
 {
     int signs[3];
     float3 invdir = 1.0 / r.direction;
@@ -101,7 +101,7 @@ __device__ bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float
     return ret && tmax > 0;
 }
 
-__device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t)
+HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -126,7 +126,7 @@ __device__ bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, 
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-__device__ inline bool boxtest(const Box& box, const Ray& ray, const HitInfo& hitInfo)
+HYBRID inline bool boxtest(const Box& box, const Ray& ray, const HitInfo& hitInfo)
 {
     float tmin, tmax;
     // Constrain that the closest point of the box must be closer than a known intersection.

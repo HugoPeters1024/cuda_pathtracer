@@ -5,6 +5,10 @@
 #include <algorithm>
 #include <stack>
 
+#define GL_GLEXT_PROTOTYPES 1
+#define GL3_PROTOTYPES      1
+#include <GLFW/glfw3.h>
+
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_object_loader.h"
 #include "use_cuda.h"
