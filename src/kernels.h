@@ -318,6 +318,12 @@ __device__ float3 BRDF(const float3& normal, uint& seed)
     return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 }
 
+__device__ float3 BRDFUniform(const float3& normal, uint& seed)
+{
+    float3 r = normalize(make_float3(rand(seed) * 2 - 1, rand(seed) * 2 -1, rand(seed) * 2 - 1));
+    return dot(r, normal) < 0 ? -r : r;
+}
+
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
     float3 newDir = reflect(ray.direction, -normal);
@@ -379,12 +385,13 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     DRayQueue.push(ray);
 }
 
-__global__ void kernel_extend(HitInfo* intersections)
+__global__ void kernel_extend(HitInfo* intersections, uint bounce)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i];
-    HitInfo hitInfo = traverseBVHStack(ray, false, false);
+    // we want to see the light in our primary bounce
+    HitInfo hitInfo = traverseBVHStack(ray, bounce != 0, false);
     intersections[i] = hitInfo;
 }
 
@@ -489,7 +496,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     {
         float3 fromLight = normalize(intersectionPos - DLight.pos);
         // Sample the brdf from that point.
-        float3 r = BRDF(fromLight, seed);
+        float3 r = BRDFUniform(fromLight, seed);
 
         // From the center of the light, go to sample point
         // (by definition of the BRDF on the visible by the origin (if not occluded)

@@ -104,7 +104,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,
-        kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf);
+        kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
         shadowRayQueue.clear();

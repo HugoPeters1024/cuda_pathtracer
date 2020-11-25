@@ -140,9 +140,9 @@ int main(int argc, char** argv) {
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
-    //scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    //scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //
@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
     scene.addSphere(Sphere(make_float3(0, 2, 1), 1, glassMatId));
     scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
 
-    scene.addPointLight(PointLight(make_float3(-8,12,1), make_float3(90)));
+    scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
         
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();

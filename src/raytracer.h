@@ -98,7 +98,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             shadowRay.length = dis2light;
             HitInfo shadowHit = traverseBVHStack(shadowRay, true, true);
             if (!shadowHit.intersected) {
-                diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;
+                diffuse_color += light.color * dot(-fromLight, colliderNormal) / (dis2light2 * 3.1415926 * 4);
             }
         }
     }
@@ -106,11 +106,20 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
 
     if (transmission > 0)
     {
+
         float changed_reflection = 0;
         Ray refractRay = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, changed_reflection);
         transmission -= changed_reflection;
         reflect += changed_reflection;
-        if (transmission > 0) refract_color = radiance(refractRay, iteration+1);
+        if (transmission > 0) {
+            refract_color = radiance(refractRay, iteration+1);
+            if (inside)
+            {
+                // Take away any absorpted light using Beer's law. when leaving the object
+                float3 c = material.absorption;
+                refract_color = refract_color * make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+            }
+        }
     }
 
     if (reflect > 0)
