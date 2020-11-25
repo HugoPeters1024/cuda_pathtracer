@@ -401,8 +401,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     const HitInfo hitInfo = intersections[i];
     if (!hitInfo.intersected) return;
 
-
-
     if (hitInfo.primitive_type == LIGHT) {
 #ifdef NEE
         // the light can only be seen by primary bounces.

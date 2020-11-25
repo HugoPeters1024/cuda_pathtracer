@@ -17,9 +17,7 @@
 #include "application.h"
 #include "raytracer.h"
 #include "pathtracer.h"
-
-//#define PATHTRACER
-
+#include "keyboard.h"
 
 static const char* quad_vs = R"(
 #version 460
@@ -123,9 +121,9 @@ int main(int argc, char** argv) {
     auto sibenikMatId = scene.addMaterial(sibenikMat);
 
     Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
-    lucyMat.transmit = 1.0f;
-    lucyMat.reflect = 0.0;
-    lucyMat.glossy = 0.04;
+    lucyMat.transmit = 0.0f;
+    lucyMat.reflect = 0.8;
+    lucyMat.glossy = 0.09;
     lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto lucyMatId = scene.addMaterial(lucyMat);
 
@@ -158,12 +156,11 @@ int main(int argc, char** argv) {
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
 
+    bool PATHRACER = true;
+
     // Create the application
-#ifdef PATHTRACER
-    Pathtracer app = Pathtracer(sceneData, texture);
-#else
-    Raytracer app = Raytracer(sceneData, texture);
-#endif
+    Pathtracer pathtracerApp = Pathtracer(sceneData, texture);
+    Raytracer raytracerApp = Raytracer(sceneData, texture);
 
 
     // add a sphere as light source
@@ -182,7 +179,10 @@ int main(int argc, char** argv) {
     printf("HitInfo is %i bytes\n", sizeof(HitInfo));
     printf("TraceState is %i bytes\n", sizeof(TraceState));
 
-    app.Init();
+    pathtracerApp.Init();
+    raytracerApp.Init();
+
+    Keyboard keyboard(window);
 
     bool shouldClear = true;
     while (!glfwWindowShouldClose(window))
@@ -193,7 +193,10 @@ int main(int argc, char** argv) {
         cudaSafe( cudaMemcpyToSymbol(DLight, &light, sizeof(Sphere)) );
         cudaSafe( cudaMemcpyToSymbol(DLight_Color, &lightColor, sizeof(float3)) );
 
-        app.Draw(camera, glfwGetTime(), shouldClear);
+        if (PATHRACER)
+            pathtracerApp.Draw(camera, glfwGetTime(), shouldClear);
+        else
+            raytracerApp.Draw(camera, glfwGetTime(), shouldClear);
 
 
         // Draw the texture
@@ -223,8 +226,10 @@ int main(int argc, char** argv) {
 
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { light.pos.y += 0.02; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { light.pos.y -= 0.02; shouldClear = true;}
+        if (keyboard.isPressed(SWITCH)) { PATHRACER = !PATHRACER; shouldClear = true; }
         glfwPollEvents();
         glfwSwapBuffers(window);
+        keyboard.swapBuffers();
 
         double fps = 1.0f / (glfwGetTime() - start);
         runningAverageFps = runningAverageFps * 0.95 + 0.05 * fps;
