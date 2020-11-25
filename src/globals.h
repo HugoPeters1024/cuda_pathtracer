@@ -25,26 +25,33 @@ __device__ AtomicQueue<Ray> DShadowRayQueue;
 
 __device__ AtomicQueue<Ray> DRayQueueNew;
 
-__device__ DSizedBuffer<Sphere> DSpheres;
+__device__ __constant__ DSizedBuffer<Sphere> DSpheres;
+
+__device__ __constant__ DSizedBuffer<Plane> DPlanes;
 
 static TriangleV* HTriangles;
 static TriangleD* HTriangleData;
 static Material* HMaterials;
 static HSizedBuffer<Sphere> HSpheres;
+static HSizedBuffer<Plane> HPlanes;
 static BVHNode* HBVH;
 
 #ifdef __CUDA_ARCH__
 #define _GTriangles DTriangles
 #define _GTriangleData DTriangleData
 #define _GSpheres DSpheres
+#define _GPlanes DPlanes
 #define _GMaterials DMaterials
 #define _GBVH DBVH
 #else
 #define _GTriangles HTriangles
 #define _GTriangleData HTriangleData
 #define _GSpheres HSpheres
+#define _GPlanes HPlanes
 #define _GMaterials HMaterials
 #define _GBVH HBVH
 #endif
+
+#define NEE
 
 #endif

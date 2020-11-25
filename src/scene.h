@@ -12,10 +12,14 @@ struct SceneData
     BVHNode* h_bvh_buffer;
     Material* h_material_buffer;
     Sphere* h_sphere_buffer;
+    Plane* h_plane_buffer;
+    PointLight* h_point_light_buffer;
     uint num_triangles;
     uint num_bvh_nodes;
     uint num_materials;
     uint num_spheres;
+    uint num_planes;
+    uint num_point_lights;
 };
 
 class Scene
@@ -24,6 +28,8 @@ public:
     std::vector<Triangle> triangles;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
+    std::vector<Plane> planes;
+    std::vector<PointLight> pointLights;
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -31,10 +37,9 @@ public:
         return materials.size() - 1;
     }
 
-    void addSphere(Sphere sphere)
-    {
-        spheres.push_back(sphere);
-    }
+    void addSphere(Sphere sphere) { spheres.push_back(sphere); }
+    void addPlane(Plane plane) { planes.push_back(plane); }
+    void addPointLight(PointLight light) { pointLights.push_back(light); }
 
     void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material)
     {
@@ -109,10 +114,20 @@ public:
         ret.h_sphere_buffer = (Sphere*)malloc(spheres.size() * sizeof(Sphere));
         memcpy(ret.h_sphere_buffer, spheres.data(), spheres.size() * sizeof(Sphere));
 
+        // copy over the planes
+        ret.h_plane_buffer = (Plane*)malloc(planes.size() * sizeof(Plane));
+        memcpy(ret.h_plane_buffer, planes.data(), planes.size() * sizeof(Plane));
+
+        // copy over the point lights
+        ret.h_point_light_buffer = (PointLight*)malloc(pointLights.size() * sizeof(PointLight));
+        memcpy(ret.h_point_light_buffer, pointLights.data(), pointLights.size() * sizeof(PointLight));
+
         ret.num_triangles = triangles.size();
         ret.num_bvh_nodes = bvhSize;
         ret.num_materials = materials.size();
         ret.num_spheres = spheres.size();
+        ret.num_planes = planes.size();
+        ret.num_point_lights = pointLights.size();
         return ret;
     }
 };

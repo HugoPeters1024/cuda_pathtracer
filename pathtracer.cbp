@@ -5,7 +5,7 @@
 		<Option title="pathtracer"/>
 		<Option makefile_is_custom="1"/>
 		<Option compiler="gcc"/>
-		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;"/>
+		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;CMake Files\glfw\docs\;"/>
 		<Build>
 			<Target title="all">
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
@@ -159,6 +159,16 @@
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/src/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
+			<Target title="docs">
+				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw/docs"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 docs"/>
+					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
 		</Build>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/include/GLFW/glfw3.h">
 			<Option target="glfw"/>
@@ -270,6 +280,12 @@
 		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/src/glfw_config.h.in">
 			<Option virtualFolder="CMake Files\glfw\src\"/>
+		</Unit>
+		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\glfw\docs\"/>
+		</Unit>
+		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/Doxyfile.in">
+			<Option virtualFolder="CMake Files\glfw\docs\"/>
 		</Unit>
 	</Project>
 </CodeBlocks_project_file>

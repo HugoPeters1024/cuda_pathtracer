@@ -54,6 +54,25 @@ struct Sphere
     HYBRID inline float3 centroid() { return pos; }
 };
 
+struct Plane
+{
+    float3 normal;
+    float d;
+    MATERIAL_ID material;
+
+    Plane() {}
+    Plane(float3 normal, float d, MATERIAL_ID material)
+        : normal(normal), d(d), material(material) {}
+};
+
+struct PointLight
+{
+    float3 pos;
+    float3 color;
+
+    PointLight(float3 pos, float3 color) : pos(pos), color(color) {}
+};
+
 struct Box
 {
     float3 vmin;
@@ -105,7 +124,7 @@ struct __align__(16) Ray
     __device__ float getSortingKey() const { return (float)pixeli; }
 };
 
-enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, LIGHT };
+enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, PLANE, LIGHT };
 
 struct __align__(16) HitInfo
 {
@@ -369,6 +388,15 @@ public:
     HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint& seed) const {
         float xf = ((float)x + rand(seed)) / WINDOW_WIDTH;
         float yf = ((float)y + rand(seed)) / WINDOW_HEIGHT;
+        float3 point = lt + xf * u + yf * v;
+
+        float3 direction = normalize(point - eye);
+        return Ray(eye, direction, x,y);
+    }
+
+    HYBRID inline Ray getRay(unsigned int x, unsigned int y) const {
+        float xf = ((float)x) / WINDOW_WIDTH;
+        float yf = ((float)y) / WINDOW_HEIGHT;
         float3 point = lt + xf * u + yf * v;
 
         float3 direction = normalize(point - eye);

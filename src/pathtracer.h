@@ -29,6 +29,7 @@ void Pathtracer::Init()
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
 
     DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, DSpheres);
+    DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, DPlanes);
 
     // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
@@ -99,7 +100,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-    uint max_bounces = shouldClear ? 1 : 8;
+    uint max_bounces = shouldClear ? 1 : 4;
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,

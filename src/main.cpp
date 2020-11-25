@@ -18,7 +18,7 @@
 #include "raytracer.h"
 #include "pathtracer.h"
 
-#define PATHTRACER
+//#define PATHTRACER
 
 
 static const char* quad_vs = R"(
@@ -109,6 +109,9 @@ int main(int argc, char** argv) {
     Scene scene;
 
     // create materials
+    Material white = Material::DIFFUSE(make_float3(1));
+    auto whiteId = scene.addMaterial(white);
+
     Material cubeMat = Material::DIFFUSE(make_float3(1));
     cubeMat.transmit = 1.0f;
     cubeMat.refractive_index = 1.1;
@@ -120,8 +123,10 @@ int main(int argc, char** argv) {
     auto sibenikMatId = scene.addMaterial(sibenikMat);
 
     Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
-    lucyMat.reflect = 1.0f;
+    lucyMat.transmit = 1.0f;
+    lucyMat.reflect = 0.0;
     lucyMat.glossy = 0.04;
+    lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto lucyMatId = scene.addMaterial(lucyMat);
 
     Material glassMat = Material::DIFFUSE(make_float3(1));
@@ -132,20 +137,23 @@ int main(int argc, char** argv) {
     auto glassMatId = scene.addMaterial(glassMat);
 
     auto mirrorMat = Material::DIFFUSE(make_float3(1));
-    mirrorMat.transmit = 1.0f;
+    mirrorMat.transmit = 0.0f;
     mirrorMat.refractive_index = 1.4f;
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
-    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+    //scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    //scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //
+    scene.addPlane(Plane(make_float3(0,-1,0),-4, whiteId));
 
-    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
+    scene.addSphere(Sphere(make_float3(0, 2, 1), 1, glassMatId));
     scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
+
+    scene.addPointLight(PointLight(make_float3(-8,12,1), make_float3(90)));
         
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
@@ -200,8 +208,16 @@ int main(int argc, char** argv) {
         // Handle IO and swap the backbuffer
         camera.update(window);
         shouldClear = camera.hasMoved();
-        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { lightColor *= 0.97; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { lightColor *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { 
+            lightColor *= 0.97; 
+            sceneData.h_point_light_buffer[0].color *= 0.97;
+            shouldClear = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { 
+            lightColor *= 1.03; 
+            sceneData.h_point_light_buffer[0].color *= 1.03;
+            shouldClear = true;
+        }
         if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
 

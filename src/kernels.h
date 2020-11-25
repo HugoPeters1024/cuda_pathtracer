@@ -41,6 +41,7 @@ HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo)
     {
         case TRIANGLE: return _GMaterials[_GTriangleData[hitInfo.primitive_id].material];
         case SPHERE:   return _GMaterials[_GSpheres[hitInfo.primitive_id].material];
+        case PLANE:    return _GMaterials[_GPlanes[hitInfo.primitive_id].material];
     }
     assert(false);
 }
@@ -56,6 +57,9 @@ HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& int
         case SPHERE: {
             const Sphere& sphere = _GSpheres[hitInfo.primitive_id];
             return normalize(intersectionPoint - sphere.pos);
+        }
+        case PLANE: {
+            return _GPlanes[hitInfo.primitive_id].normal;
         }
     }
     assert(false);
@@ -76,6 +80,14 @@ HYBRID bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
     t = tmin;
     if (tmin < 0) t = tmax;
     return tmax > 0;
+}
+
+HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
+{
+    float q = dot(normalize(ray.direction), plane.normal);
+    if (abs(q)<EPS) return false;
+    t = -(dot(ray.origin, plane.normal) + plane.d)/q;
+    return t>0;
 }
 
 HYBRID bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& maxt)
@@ -218,6 +230,19 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyInters
         }
     }
 
+    for(int i=0; i<_GPlanes.size; i++)
+    {
+        float t;
+        if (rayPlaneIntersect(ray, _GPlanes[i], t) && t < hitInfo.t)
+        {
+            hitInfo.intersected = true;
+            hitInfo.primitive_id = i;
+            hitInfo.primitive_type = PLANE;
+            hitInfo.t = t;
+            if (anyIntersection) return hitInfo;
+        }
+    }
+
     float light_t;
     if (!ignoreLight && raySphereIntersect(ray, DLight, light_t) && light_t < hitInfo.t)
     {
@@ -293,17 +318,13 @@ __device__ float3 BRDF(const float3& normal, uint& seed)
     return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
 }
 
-__device__ Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, uint& seed)
+HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
-    // reflect case
-    // Interpolate a normal and a random brdf sample with the glossyness
-    float3 newDirN = reflect(ray.direction, -normal);
-    float3 newDirS = BRDF(newDirN, seed);
-    float3 newDir = newDirN * (1-material.glossy) + material.glossy * newDirS;
+    float3 newDir = reflect(ray.direction, -normal);
     return Ray(intersectionPos, newDir, ray.pixeli);
 }
 
-__device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, uint& seed)
+HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, float& reflected)
 {
     // calculate the eta based on whether we are inside
     float n1 = 1.0;
@@ -314,11 +335,13 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     float costi = dot(normal, -ray.direction);
     float k = 1 - (eta* eta) * (1 - costi * costi);
     // Total internal reflection
-    if (k < 0) return getReflectRay(ray, normal, intersectionPos, material, seed);
+    if (k < 0) {
+        reflected = 1;
+        return Ray(make_float3(0), make_float3(0), 0);
+//        return getReflectRay(ray, normal, intersectionPos, material, seed);
+    }
 
     float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
-    float3 noiseDir = BRDF(refractDir, seed);
-    refractDir = refractDir * (1-material.glossy) + material.glossy * noiseDir;
 
     // fresnell equation for reflection contribution
     float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
@@ -326,8 +349,8 @@ __device__ Ray getRefractRay(const Ray& ray, const float3& normal, const float3&
     float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
     float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
-    float reflected = 0.5 * (spol * spol + ppol * ppol);
-    if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
+    reflected = 0.5 * (spol * spol + ppol * ppol);
+    //if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
     return Ray(intersectionPos + 2 * EPS * ray.direction, refractDir, ray.pixeli);
 }
@@ -381,14 +404,20 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
 
     if (hitInfo.primitive_type == LIGHT) {
+#ifdef NEE
         // the light can only be seen by primary bounces.
         // the rest happens through NEE
         if (bounce == 0) {
             state.accucolor = DLight_Color;
             stateBuf[ray.pixeli] = state;
         }
+#else
+        state.accucolor += state.mask * DLight_Color;
+        stateBuf[ray.pixeli] = state;
+#endif
         return;
     }
+
 
 
 
@@ -409,7 +438,8 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    if (rand(seed) < material.transmit)
+    float random = rand(seed);
+    if (random < material.transmit)
     {
         if (inside)
         {
@@ -420,14 +450,22 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         }
 
         // Ray can turn into a reflection ray due to fresnell
-        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, seed);
-        
+        float reflected;
+        secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, reflected);
+        if (rand(seed) < reflected) {
+            secondary = getReflectRay(ray, colliderNormal, intersectionPos);
+        }
+        float3 noiseDir = BRDF(secondary.direction, seed);
+        secondary.direction = secondary.direction * (1 - material.glossy) + material.glossy * noiseDir;
+
         // Make sure we do not cast shadow rays
         state.correction = 0;
     }
-    else if (rand(seed) < material.reflect)
+    else if (random - material.transmit < material.reflect)
     {
-        secondary = getReflectRay(ray, colliderNormal, intersectionPos, material, seed);
+        secondary = getReflectRay(ray, colliderNormal, intersectionPos);
+        float3 noiseDir = BRDF(secondary.direction, seed);
+        secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
 
         // Make sure we do not cast shadow rays
         state.correction = 0;
@@ -448,6 +486,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     stateBuf[ray.pixeli] = state;
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
+#ifdef NEE
     if (state.correction > 0.05)
     {
         float3 fromLight = normalize(intersectionPos - DLight.pos);
@@ -471,6 +510,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
             DShadowRayQueue.push(shadowRay);
         }
     }
+#endif
 }
 
 // Traces the shadow rays
