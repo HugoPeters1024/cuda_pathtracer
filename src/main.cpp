@@ -122,8 +122,8 @@ int main(int argc, char** argv) {
 
     Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
     lucyMat.transmit = 0.0f;
-    lucyMat.reflect = 0.8;
-    lucyMat.glossy = 0.09;
+    lucyMat.reflect = 0.0;
+    lucyMat.glossy = 0.00;
     lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto lucyMatId = scene.addMaterial(lucyMat);
 
@@ -142,7 +142,8 @@ int main(int argc, char** argv) {
 
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    scene.addModel("teapot.obj", 0.1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    //scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //

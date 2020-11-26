@@ -43,7 +43,7 @@ void Raytracer::Init()
 
 void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
-    max_depth = shouldClear ? 1 : 5;
+    max_depth = 5;
 #pragma omp parallel for schedule (dynamic)
     for(uint i=0; i<NR_PIXELS; i++)
     {
@@ -66,7 +66,7 @@ void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 float3 Raytracer::radiance(const Ray& ray, int iteration)
 {
     if (iteration >= max_depth) return make_float3(0);
-    HitInfo hitInfo = traverseBVHStack(ray, true, false);
+    HitInfo hitInfo = traverseBVHStack(ray, false);
     if (!hitInfo.intersected) return make_float3(0.2, 0.3, 0.6);
 
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
@@ -94,9 +94,9 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             float dis2light2 = dot(fromLight, fromLight);
             float dis2light = sqrt(dis2light2);
             fromLight /= dis2light;
-            Ray shadowRay(light.pos, fromLight, 0);
-            shadowRay.length = dis2light;
-            HitInfo shadowHit = traverseBVHStack(shadowRay, true, true);
+            Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
+            shadowRay.length = dis2light - EPS;
+            HitInfo shadowHit = traverseBVHStack(shadowRay, true);
             if (!shadowHit.intersected) {
                 diffuse_color += light.color * dot(-fromLight, colliderNormal) / (dis2light2 * 3.1415926 * 4);
             }

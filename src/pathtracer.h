@@ -100,7 +100,11 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
+#ifdef NEE
     uint max_bounces = shouldClear ? 1 : 4;
+#else
+    uint max_bounces = shouldClear ? 2 : 4;
+#endif
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,

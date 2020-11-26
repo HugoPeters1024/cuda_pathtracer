@@ -211,7 +211,7 @@ __device__ bool traverseBVHShadows(const Ray& ray)
 }
 */
 
-HYBRID HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyIntersection)
+HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 {
     HitInfo hitInfo;
     hitInfo.intersected = false;
@@ -244,7 +244,8 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool ignoreLight, bool anyInters
     }
 
     float light_t;
-    if (!ignoreLight && raySphereIntersect(ray, DLight, light_t) && light_t < hitInfo.t)
+    // Any intersection is being used by shadow rays, but they can't intersect the light source
+    if (!anyIntersection && raySphereIntersect(ray, DLight, light_t) && light_t < hitInfo.t)
     {
         hitInfo.t = light_t;
         hitInfo.intersected = true;
@@ -390,8 +391,7 @@ __global__ void kernel_extend(HitInfo* intersections, uint bounce)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i];
-    // we want to see the light in our primary bounce
-    HitInfo hitInfo = traverseBVHStack(ray, bounce != 0, false);
+    HitInfo hitInfo = traverseBVHStack(ray, false);
     intersections[i] = hitInfo;
 }
 
@@ -411,7 +411,9 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     if (hitInfo.primitive_type == LIGHT) {
 #ifdef NEE
         // the light can only be seen by primary bounces.
-        // the rest happens through NEE
+        // the rest happens through NEE. If we do encounter a light
+        // in this ray we simply add nothing to the contribution and
+        // terminate
         if (bounce == 0) {
             state.accucolor = DLight_Color;
             stateBuf[ray.pixeli] = state;
@@ -424,8 +426,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
 
 
-
-
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
     const Material material = getColliderMaterial(hitInfo);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
@@ -433,13 +433,9 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
     state.mask = state.mask * material.color;
-
-
     // we can terminate this path
     if (dot(state.mask, state.mask) < 0.01) return;
-
     state.currentNormal = colliderNormal;
-
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -482,9 +478,11 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
         state.mask = state.mask * lambert;
 
+#ifdef NEE
         // Correct for the lambert term, which does not affect the incoming
-        // radiance at this position.
+        // radiance at this position for the direct light sample.
         state.correction = 1.0f / lambert;
+#endif
     }
 
     DRayQueueNew.push(secondary);
@@ -492,7 +490,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
 #ifdef NEE
-    if (state.correction > 0.05)
+    if (state.correction > EPS)
     {
         float3 fromLight = normalize(intersectionPos - DLight.pos);
         // Sample the brdf from that point.
@@ -500,7 +498,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
         // From the center of the light, go to sample point
         // (by definition of the BRDF on the visible by the origin (if not occluded)
-        float3 samplePoint = DLight.pos + DLight.radius * r;
+        float3 samplePoint = DLight.pos + (DLight.radius + EPS) * r;
 
         float3 shadowDir = intersectionPos - samplePoint;
         float shadowLength = length(shadowDir);
@@ -511,7 +509,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         {
             // We invert the shadowrays to get coherent origins.
             Ray shadowRay(samplePoint, shadowDir, ray.pixeli);
-            shadowRay.length = shadowLength - EPS;
+            shadowRay.length = shadowLength - 2 * EPS;
             DShadowRayQueue.push(shadowRay);
         }
     }
@@ -526,7 +524,7 @@ __global__ void kernel_connect(TraceState* stateBuf)
 
     const Ray& shadowRay = DShadowRayQueue[i];
     TraceState& state = stateBuf[shadowRay.pixeli];
-    if (traverseBVHStack(shadowRay, true, true).intersected) return;
+    if (traverseBVHStack(shadowRay, true).intersected) return;
 
     float r2 = shadowRay.length * shadowRay.length;
     float SA = 4 * 3.1415926535 * r2;

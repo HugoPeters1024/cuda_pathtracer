@@ -52,6 +52,6 @@ static BVHNode* HBVH;
 #define _GBVH HBVH
 #endif
 
-#define NEE
+//#define NEE
 
 #endif
