@@ -328,7 +328,7 @@ __device__ float3 BRDFUniform(const float3& normal, uint& seed)
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
     float3 newDir = reflect(ray.direction, -normal);
-    return Ray(intersectionPos, newDir, ray.pixeli);
+    return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
 HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, float& reflected)
@@ -359,13 +359,13 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     reflected = 0.5 * (spol * spol + ppol * ppol);
     //if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
 
-    return Ray(intersectionPos + 2 * EPS * ray.direction, refractDir, ray.pixeli);
+    return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
 __device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint seed)
 {
     float3 newDir = BRDF(normal, seed);
-    return Ray(intersectionPos, newDir, ray.pixeli);
+    return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
 
@@ -373,7 +373,7 @@ __global__ void kernel_clear_state(TraceState* state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
-    state[i] = { make_float3(1.0f), make_float3(0.0f) };
+    state[i] = { make_float3(1.0f), make_float3(0.0f), make_float3(0), 0, false };
 }
 
 __global__ void kernel_generate_primary_rays(Camera camera, float time)
@@ -406,27 +406,36 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
     uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo hitInfo = intersections[i];
-    if (!hitInfo.intersected) return;
+    if (!hitInfo.intersected) {
+        // We consider the skydome a lightsource in the set of random bounces
+        state.accucolor += state.mask * make_float3(0.2, 0.3, 0.6);
+        stateBuf[ray.pixeli] = state;
+        return;
+    }
 
     if (hitInfo.primitive_type == LIGHT) {
-#ifdef NEE
-        // the light can only be seen by primary bounces.
-        // the rest happens through NEE. If we do encounter a light
-        // in this ray we simply add nothing to the contribution and
-        // terminate
-        if (bounce == 0) {
-            state.accucolor = DLight_Color;
+        if (_NEE)
+        {
+            if (state.fromSpecular || bounce == 0)
+            {
+                // the light can only be seen by primary bounces.
+                // the rest happens through NEE. If we do encounter a light
+                // in this ray we simply add nothing to the contribution and
+                // terminate.
+                state.accucolor += state.mask * DLight_Color;
+                stateBuf[ray.pixeli] = state;
+            }
+        }
+        else
+        {
+            state.accucolor += state.mask * DLight_Color;
             stateBuf[ray.pixeli] = state;
         }
-#else
-        state.accucolor += state.mask * DLight_Color;
-        stateBuf[ray.pixeli] = state;
-#endif
         return;
     }
 
 
-    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     const Material material = getColliderMaterial(hitInfo);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
@@ -442,6 +451,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     float random = rand(seed);
     if (random < material.transmit)
     {
+        state.fromSpecular = true;
         if (inside)
         {
             // Take away any absorpted light using Beer's law.
@@ -464,6 +474,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
     else if (random - material.transmit < material.reflect)
     {
+        state.fromSpecular = true;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
@@ -473,32 +484,34 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
     else 
     {
+        state.fromSpecular = false;
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
+
+        // incoming direction of the light.
         float lambert = dot(secondary.direction, colliderNormal);
+        state.mask = state.mask * 2.0f * lambert;
 
-        state.mask = state.mask * lambert;
-
-#ifdef NEE
-        // Correct for the lambert term, which does not affect the incoming
-        // radiance at this position for the direct light sample.
-        state.correction = 1.0f / lambert;
-#endif
+        if (_NEE)
+        {
+            // Correct for the lambert term, which does not affect the direct light
+            // at this point radiance at this position for the direct light sample.
+            state.correction = 1.0f / (2.0f * lambert);
+        }
     }
 
     DRayQueueNew.push(secondary);
     stateBuf[ray.pixeli] = state;
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
-#ifdef NEE
-    if (state.correction > EPS)
+    if (_NEE && !state.fromSpecular && state.correction > EPS)
     {
         float3 fromLight = normalize(intersectionPos - DLight.pos);
-        // Sample the brdf from that point.
+        // Sample the hemisphere from that point.
         float3 r = BRDFUniform(fromLight, seed);
 
         // From the center of the light, go to sample point
         // (by definition of the BRDF on the visible by the origin (if not occluded)
-        float3 samplePoint = DLight.pos + (DLight.radius + EPS) * r;
+        float3 samplePoint = DLight.pos + DLight.radius * r;
 
         float3 shadowDir = intersectionPos - samplePoint;
         float shadowLength = length(shadowDir);
@@ -508,12 +521,11 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         if (dot(colliderNormal, shadowDir) < 0)
         {
             // We invert the shadowrays to get coherent origins.
-            Ray shadowRay(samplePoint, shadowDir, ray.pixeli);
+            Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
             shadowRay.length = shadowLength - 2 * EPS;
             DShadowRayQueue.push(shadowRay);
         }
     }
-#endif
 }
 
 // Traces the shadow rays
@@ -523,18 +535,18 @@ __global__ void kernel_connect(TraceState* stateBuf)
     if (i >= DShadowRayQueue.size) return;
 
     const Ray& shadowRay = DShadowRayQueue[i];
-    TraceState& state = stateBuf[shadowRay.pixeli];
-    if (traverseBVHStack(shadowRay, true).intersected) return;
+    TraceState state = stateBuf[shadowRay.pixeli];
+    HitInfo hitInfo = traverseBVHStack(shadowRay, true);
+    if (hitInfo.intersected) return;
 
     float r2 = shadowRay.length * shadowRay.length;
     float3 lightNormal = normalize(shadowRay.origin - DLight.pos);
     float cost1 = dot(lightNormal, shadowRay.direction);
     float cost2 = dot(state.currentNormal, -shadowRay.direction);
-    float SA = 4 * 3.1415926 * DLight.radius * DLight.radius / r2;
-    float NL = lambert(-shadowRay.direction, state.currentNormal);
-    float3 color = DLight_Color * SA * NL;
+    float SA = (3.1415926 * DLight.radius * DLight.radius * cost1 * cost2) / r2;
+    //float NL = lambert(-shadowRay.direction, state.currentNormal);
 
-    state.accucolor += state.correction * state.mask * color;
+    state.accucolor += state.mask * state.correction * DLight_Color * SA;
     stateBuf[shadowRay.pixeli] = state;
 }
 

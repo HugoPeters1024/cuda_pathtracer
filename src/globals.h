@@ -4,6 +4,9 @@
 #include "use_cuda.h"
 #include "types.h"
 
+// global NEE switch
+__device__ __constant__ bool DNEE;
+
 // global pointer to the bvh buffer
 __device__ __constant__ BVHNode* DBVH;
 
@@ -29,6 +32,7 @@ __device__ __constant__ DSizedBuffer<Sphere> DSpheres;
 
 __device__ __constant__ DSizedBuffer<Plane> DPlanes;
 
+static bool HNEE;
 static TriangleV* HTriangles;
 static TriangleD* HTriangleData;
 static Material* HMaterials;
@@ -37,6 +41,7 @@ static HSizedBuffer<Plane> HPlanes;
 static BVHNode* HBVH;
 
 #ifdef __CUDA_ARCH__
+#define _NEE DNEE
 #define _GTriangles DTriangles
 #define _GTriangleData DTriangleData
 #define _GSpheres DSpheres
@@ -44,6 +49,7 @@ static BVHNode* HBVH;
 #define _GMaterials DMaterials
 #define _GBVH DBVH
 #else
+#define _NEE HNEE
 #define _GTriangles HTriangles
 #define _GTriangleData HTriangleData
 #define _GSpheres HSpheres

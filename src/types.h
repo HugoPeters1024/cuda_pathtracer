@@ -271,6 +271,7 @@ struct __align__(16) TraceState
     // contains the inverse of the last applied mask
     // multiplication.
     float correction;
+    bool fromSpecular;
 };
 
 template <class T>

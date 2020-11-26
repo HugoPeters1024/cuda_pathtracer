@@ -140,17 +140,17 @@ int main(int argc, char** argv) {
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
-    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+  //  scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("teapot.obj", 0.1, make_float3(0), make_float3(0,12,0), sibenikMatId);
-    //scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //
     scene.addPlane(Plane(make_float3(0,-1,0),-4, whiteId));
 
-    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
-    scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
+//    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
+ //   scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
         
@@ -227,7 +227,8 @@ int main(int argc, char** argv) {
 
         if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { light.pos.y += 0.02; shouldClear = true;}
         if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { light.pos.y -= 0.02; shouldClear = true;}
-        if (keyboard.isPressed(SWITCH)) { PATHRACER = !PATHRACER; shouldClear = true; }
+        if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
+        if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
         glfwPollEvents();
         glfwSwapBuffers(window);
         keyboard.swapBuffers();

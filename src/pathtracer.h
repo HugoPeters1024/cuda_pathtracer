@@ -60,10 +60,16 @@ void Pathtracer::Init()
 
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
     cudaSafe( cudaMalloc(&traceBuf, NR_PIXELS * sizeof(TraceState)) );
+
+    // Enable NEE by default
+    HNEE = true;
 }
 
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
+    // sync NEE settings
+    cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
+
     // Map the resource to Cuda
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
 
@@ -100,11 +106,12 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
-#ifdef NEE
-    uint max_bounces = shouldClear ? 1 : 4;
-#else
-    uint max_bounces = shouldClear ? 2 : 4;
-#endif
+    uint max_bounces;
+    if (_NEE)
+        max_bounces = shouldClear ? 1 : 4;
+    else
+        max_bounces = shouldClear ? 2 : 4;
+
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,

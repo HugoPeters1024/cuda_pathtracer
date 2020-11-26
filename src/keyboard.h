@@ -17,7 +17,8 @@ enum ACTION {
     LOOK_LEFT,
     LOOK_RIGHT,
 
-    SWITCH,
+    SWITCH_MODE,
+    SWITCH_NEE,
 };
 
 class Keyboard
@@ -100,6 +101,7 @@ void Keyboard::generateActionMap()
     action_map[LOOK_LEFT]     = GLFW_KEY_LEFT;
     action_map[LOOK_RIGHT]    = GLFW_KEY_RIGHT;
 
-    action_map[SWITCH]          = GLFW_KEY_SPACE;
+    action_map[SWITCH_MODE]          = GLFW_KEY_SPACE;
+    action_map[SWITCH_NEE]           = GLFW_KEY_N;
 }
 #endif
