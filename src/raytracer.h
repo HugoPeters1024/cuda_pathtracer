@@ -67,7 +67,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
 {
     if (iteration >= max_depth) return make_float3(0);
     HitInfo hitInfo = traverseBVHStack(ray, false);
-    if (!hitInfo.intersected) return make_float3(0.2, 0.3, 0.6);
+    if (!hitInfo.intersected) return make_float3(0);
 
     float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
 
@@ -98,7 +98,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             shadowRay.length = dis2light - EPS;
             HitInfo shadowHit = traverseBVHStack(shadowRay, true);
             if (!shadowHit.intersected) {
-                diffuse_color += light.color * dot(-fromLight, colliderNormal) / (dis2light2 * 3.1415926 * 4);
+                diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;
             }
         }
     }

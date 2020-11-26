@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
     //
     scene.addPlane(Plane(make_float3(0,-1,0),-4, whiteId));
 
-    scene.addSphere(Sphere(make_float3(0, 2, 1), 1, glassMatId));
+    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
     scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));

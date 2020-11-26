@@ -527,9 +527,12 @@ __global__ void kernel_connect(TraceState* stateBuf)
     if (traverseBVHStack(shadowRay, true).intersected) return;
 
     float r2 = shadowRay.length * shadowRay.length;
-    float SA = 4 * 3.1415926535 * r2;
+    float3 lightNormal = normalize(shadowRay.origin - DLight.pos);
+    float cost1 = dot(lightNormal, shadowRay.direction);
+    float cost2 = dot(state.currentNormal, -shadowRay.direction);
+    float SA = 4 * 3.1415926 * DLight.radius * DLight.radius / r2;
     float NL = lambert(-shadowRay.direction, state.currentNormal);
-    float3 color = (DLight_Color / SA) * NL;
+    float3 color = DLight_Color * SA * NL;
 
     state.accucolor += state.correction * state.mask * color;
     stateBuf[shadowRay.pixeli] = state;
