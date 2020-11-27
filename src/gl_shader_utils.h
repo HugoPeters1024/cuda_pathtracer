@@ -1,6 +1,9 @@
 #ifndef SHADERS_H
 #define SHADERS_H
 
+#include "types.h"
+
+
 #include <array>
 #include <string>
 #include <sstream>

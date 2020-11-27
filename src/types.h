@@ -11,6 +11,7 @@
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_object_loader.h"
+
 #include "use_cuda.h"
 #include <limits>
 #include <vector_functions.h>

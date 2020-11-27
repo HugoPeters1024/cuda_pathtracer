@@ -45,7 +45,7 @@ layout (location = 0) uniform float time;
 void main() { 
     vec4 c = texture(tex, uv);
     color = vec4(c.xyz / c.w, 1);
-    float gamma = 1.5;
+    float gamma = 1.0;
     color.x = pow(color.x, 1.0f/gamma);
     color.y = pow(color.y, 1.0f/gamma);
     color.z = pow(color.z, 1.0f/gamma);
@@ -117,13 +117,19 @@ int main(int argc, char** argv) {
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
     auto cubeMatId = scene.addMaterial(cubeMat);
 
-    Material sibenikMat = Material::DIFFUSE(make_float3(0.8));
+    Material sibenikMat = Material::DIFFUSE(make_float3(0.4));
     auto sibenikMatId = scene.addMaterial(sibenikMat);
 
-    Material lucyMat = Material::DIFFUSE(make_float3(0.822, 0.751, 0.412));
+    Material teapotMat = Material::DIFFUSE(make_float3(1));
+    teapotMat.reflect = 0.6;
+    teapotMat.glossy = 0.08;
+    auto teapotMatId = scene.addMaterial(teapotMat);
+
+    Material lucyMat = Material::DIFFUSE(make_float3(0.5, 0.2, 0.3));
     lucyMat.transmit = 0.0f;
-    lucyMat.reflect = 1.0;
-    lucyMat.glossy = 0.00;
+    lucyMat.refractive_index = 1.2;
+    lucyMat.reflect = 0.0;
+    lucyMat.glossy = 0.15;
     lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto lucyMatId = scene.addMaterial(lucyMat);
 
@@ -142,7 +148,7 @@ int main(int argc, char** argv) {
 
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("teapot.obj", 0.1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
 //    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
@@ -166,7 +172,7 @@ int main(int argc, char** argv) {
 
     // add a sphere as light source
     Sphere light(make_float3(-8,5,1), 0.05, -1);
-    float3 lightColor = make_float3(80, 150, 40);
+    float3 lightColor = make_float3(150);
 
 
     // Set the initial camera values;

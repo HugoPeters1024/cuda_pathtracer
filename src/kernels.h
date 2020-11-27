@@ -35,6 +35,13 @@ HYBRID inline bool firstIsFar(const uint& split_plane, const Ray& ray)
     return ((float*)&ray.direction)[split_plane] < 0;
 }
 
+HYBRID inline float2 normalToUv(const float3& normal)
+{
+    float u = atan2(normal.x, normal.z) / (2*3.1415926) + 0.5;
+    float v = normal.y * 0.5 + 0.5;
+    return make_float2(u,v);
+}
+
 HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
@@ -316,7 +323,7 @@ __device__ float3 BRDF(const float3& normal, uint& seed)
 
     // compute random ray direction on hemisphere using polar coordinates
     // cosine weighted importance sampling (favours ray directions closer to normal direction)
-    return normalize(u*cos(r1)*r2s + v*sin(r1)*r2s + w*sqrtf(1 - r2));
+    return normalize(u*cosf(r1)*r2s + v*sinf(r1)*r2s + w*sqrtf(1 - r2));
 }
 
 __device__ float3 BRDFUniform(const float3& normal, uint& seed)
@@ -396,7 +403,7 @@ __global__ void kernel_extend(HitInfo* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf, float time, int bounce)
+__global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf, float time, int bounce, cudaTextureObject_t skydome)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -408,7 +415,9 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     const HitInfo hitInfo = intersections[i];
     if (!hitInfo.intersected) {
         // We consider the skydome a lightsource in the set of random bounces
-        state.accucolor += state.mask * make_float3(0.2, 0.3, 0.6);
+        float2 uvCoords = normalToUv(ray.direction);
+        float4 sk = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
+        state.accucolor += state.mask * make_float3(sk.x,sk.y,sk.z);
         stateBuf[ray.pixeli] = state;
         return;
     }
@@ -435,11 +444,18 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
 
 
+
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    const Material material = getColliderMaterial(hitInfo);
+    Material material = getColliderMaterial(hitInfo);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
+
+    if (hitInfo.primitive_type == PLANE) {
+        uint px = (uint)(fabs(intersectionPos.x));
+        uint py = (uint)(fabs(intersectionPos.z));
+        material.color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
+    }
 
     state.mask = state.mask * material.color;
     // we can terminate this path
@@ -489,6 +505,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
         // incoming direction of the light.
         float lambert = dot(secondary.direction, colliderNormal);
+        // Using 2 renders way to much indirect light
         state.mask = state.mask * 2.0f * lambert;
 
         if (_NEE)

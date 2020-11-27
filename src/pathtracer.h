@@ -15,6 +15,7 @@ private:
     AtomicQueue<Ray> rayQueueNew;
     HitInfo* intersectionBuf;
     TraceState* traceBuf;
+    cudaTextureObject_t dSkydomeTex;
 
 public:
     Pathtracer(SceneData sceneData, GLuint texture) : Application(sceneData, texture) {}
@@ -25,6 +26,8 @@ public:
 
 void Pathtracer::Init()
 {
+    dSkydomeTex = loadTexture("skydome.jpg");
+
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
 
@@ -60,6 +63,7 @@ void Pathtracer::Init()
 
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
     cudaSafe( cudaMalloc(&traceBuf, NR_PIXELS * sizeof(TraceState)) );
+
 
     // Enable NEE by default
     HNEE = true;
@@ -122,7 +126,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         shadowRayQueue.syncToDevice(DShadowRayQueue);
         rayQueueNew.clear();
         rayQueueNew.syncToDevice(DRayQueueNew);
-        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce);
+        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce, dSkydomeTex);
         shadowRayQueue.syncFromDevice(DShadowRayQueue);
         rayQueueNew.syncFromDevice(DRayQueueNew);
 
