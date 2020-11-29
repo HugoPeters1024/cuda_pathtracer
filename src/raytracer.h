@@ -43,7 +43,7 @@ void Raytracer::Init()
 
 void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
-    max_depth = 5;
+    max_depth = shouldClear ? 2 : 7;
 #pragma omp parallel for schedule (dynamic)
     for(uint i=0; i<NR_PIXELS; i++)
     {

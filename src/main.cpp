@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
     auto cubeMatId = scene.addMaterial(cubeMat);
 
-    Material sibenikMat = Material::DIFFUSE(make_float3(0.4));
+    Material sibenikMat = Material::DIFFUSE(make_float3(0.8));
     auto sibenikMatId = scene.addMaterial(sibenikMat);
 
     Material teapotMat = Material::DIFFUSE(make_float3(1));
@@ -146,10 +146,10 @@ int main(int argc, char** argv) {
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
-//    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //

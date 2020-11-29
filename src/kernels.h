@@ -218,6 +218,12 @@ __device__ bool traverseBVHShadows(const Ray& ray)
 }
 */
 
+struct LeafWork
+{
+    uint start;
+    uint end;
+};
+
 HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 {
     HitInfo hitInfo;
@@ -416,8 +422,17 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     if (!hitInfo.intersected) {
         // We consider the skydome a lightsource in the set of random bounces
         float2 uvCoords = normalToUv(ray.direction);
-        float4 sk = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
-        state.accucolor += state.mask * make_float3(sk.x,sk.y,sk.z);
+        float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
+        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        // Artificially increase contrast to make the sun a more apparent light source
+        // without affecting the direct view of the image.
+        if (bounce > 0)
+        {
+            // normalized brightness.
+            float brightness = dot(sk, sk) / 3.0f;
+            sk *= pow(brightness, 6) * 60;
+        }
+        state.accucolor += state.mask * sk;
         stateBuf[ray.pixeli] = state;
         return;
     }
