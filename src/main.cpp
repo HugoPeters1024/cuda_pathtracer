@@ -94,6 +94,7 @@ int main(int argc, char** argv) {
 
     // Generate screen texture
     // list of GL formats that cuda supports: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__OPENGL.html#group__CUDART__OPENGL_1gd7be3ca8a7a739d57f0b558562c5706e
+    float* screenBuf = (float*)malloc(NR_PIXELS * 4 * sizeof(float));
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -204,6 +205,20 @@ int main(int argc, char** argv) {
             pathtracerApp.Draw(camera, glfwGetTime(), shouldClear);
         else
             raytracerApp.Draw(camera, glfwGetTime(), shouldClear);
+
+        // Verify the texture to check for outliers
+        /*
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, screenBuf);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        float maxv = 0;
+        for(int i=0; i<NR_PIXELS; i++)
+        {
+            maxv = std::max(screenBuf[i] / tick, maxv);
+        }
+
+        printf("brightest pixel: %f\n", maxv);
+        */
 
 
         // Draw the texture
