@@ -375,7 +375,7 @@ public:
         float3 oldEye = eye;
         float3 oldViewDir = viewDir;
 
-        float speed = 0.03f;
+        float speed = 0.08f;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) eye += speed * viewDir;
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) eye -= speed * viewDir;
         float3 side = normalize(cross(make_float3(0,1,0), viewDir));

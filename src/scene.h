@@ -26,14 +26,13 @@ struct SceneData
 
 class Scene
 {
-private:
+public:
     std::vector<Triangle> triangles;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
     std::vector<PointLight> pointLights;
     std::vector<SphereLight> sphereLights;
-public:
 
     MATERIAL_ID addMaterial(Material material)
     {

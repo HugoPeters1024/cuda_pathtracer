@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
 
     // Generate screen texture
     // list of GL formats that cuda supports: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__OPENGL.html#group__CUDART__OPENGL_1gd7be3ca8a7a739d57f0b558562c5706e
-    float* screenBuf = (float*)malloc(NR_PIXELS * 4 * sizeof(float));
+    //float* screenBuf = (float*)malloc(NR_PIXELS * 4 * sizeof(float));
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -152,7 +152,8 @@ int main(int argc, char** argv) {
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
-//    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+    //scene.addModel("sibenik.obj", 3, make_float3(0), make_float3(0,42,0), sibenikMatId);
+    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
@@ -165,10 +166,12 @@ int main(int argc, char** argv) {
     //scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
     scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
     scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
+    scene.addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(-8,5,1), 0.3, make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(-5,5,-3), 0.3, make_float3(150, 0, 0)));
+    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(150)));
+    scene.addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(150, 0, 0)));
+    scene.addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 150, 0)));
         
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
