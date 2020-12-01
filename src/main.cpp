@@ -107,8 +107,8 @@ int main(int argc, char** argv) {
     // Create a scene object
     Scene scene;
 
-    // create materials
-    Material white = Material::DIFFUSE(make_float3(1));
+    // create material
+    Material white = Material::DIFFUSE(make_float3(0.4));
     auto whiteId = scene.addMaterial(white);
 
     Material cubeMat = Material::DIFFUSE(make_float3(1));
@@ -141,23 +141,30 @@ int main(int argc, char** argv) {
     glassMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto glassMatId = scene.addMaterial(glassMat);
 
+    Material whiteGlass = Material::DIFFUSE(make_float3(1));
+    whiteGlass.transmit = 1.0f;
+    whiteGlass.refractive_index = 1.5;
+    auto whiteGlassId = scene.addMaterial(whiteGlass);
+
     auto mirrorMat = Material::DIFFUSE(make_float3(1));
     mirrorMat.transmit = 0.0f;
     mirrorMat.refractive_index = 1.4f;
     mirrorMat.reflect = 1.0f;
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
-    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
+//    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
     scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
+    //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
     scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
+    scene.addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
     //
-    scene.addPlane(Plane(make_float3(0,-1,0),-4, whiteId));
+    scene.addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 
-    scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
+    //scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
     scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
+    scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
         

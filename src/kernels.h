@@ -424,6 +424,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        /*
         // Artificially increase contrast to make the sun a more apparent light source
         // without affecting the direct view of the image.
         if (bounce > 0)
@@ -432,6 +433,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
             float brightness = dot(sk, sk) / 3.0f;
             sk *= pow(brightness, 6) * 60;
         }
+        */
         state.accucolor += state.mask * sk;
         stateBuf[ray.pixeli] = state;
         return;
@@ -467,8 +469,8 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
     if (hitInfo.primitive_type == PLANE) {
-        uint px = (uint)(fabs(intersectionPos.x));
-        uint py = (uint)(fabs(intersectionPos.z));
+        uint px = (uint)(fabs(intersectionPos.x/4));
+        uint py = (uint)(fabs(intersectionPos.z/4));
         material.color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
