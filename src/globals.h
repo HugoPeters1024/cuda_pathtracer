@@ -18,10 +18,6 @@ __device__ __constant__ TriangleD* DTriangleData;
 
 __device__ __constant__ Material* DMaterials;
 
-__device__ __constant__ Sphere DLight;
-
-__device__ __constant__ float3 DLight_Color;
-
 __device__ AtomicQueue<Ray> DRayQueue;
 
 __device__ AtomicQueue<Ray> DShadowRayQueue;
@@ -32,6 +28,8 @@ __device__ __constant__ DSizedBuffer<Sphere> DSpheres;
 
 __device__ __constant__ DSizedBuffer<Plane> DPlanes;
 
+__device__ __constant__ DSizedBuffer<SphereLight> DSphereLights;
+
 static bool HNEE;
 static TriangleV* HTriangles;
 static TriangleD* HTriangleData;
@@ -39,6 +37,7 @@ static Material* HMaterials;
 static HSizedBuffer<Sphere> HSpheres;
 static HSizedBuffer<Plane> HPlanes;
 static BVHNode* HBVH;
+static HSizedBuffer<SphereLight> HSphereLights;
 
 #ifdef __CUDA_ARCH__
 #define _NEE DNEE
@@ -48,6 +47,7 @@ static BVHNode* HBVH;
 #define _GPlanes DPlanes
 #define _GMaterials DMaterials
 #define _GBVH DBVH
+#define _GSphereLights DSphereLights
 #else
 #define _NEE HNEE
 #define _GTriangles HTriangles
@@ -56,6 +56,7 @@ static BVHNode* HBVH;
 #define _GPlanes HPlanes
 #define _GMaterials HMaterials
 #define _GBVH HBVH
+#define _GSphereLights HSphereLights
 #endif
 
 #define NEE

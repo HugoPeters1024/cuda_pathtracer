@@ -18,7 +18,7 @@ private:
     cudaTextureObject_t dSkydomeTex;
 
 public:
-    Pathtracer(SceneData sceneData, GLuint texture) : Application(sceneData, texture) {}
+    Pathtracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
 
     virtual void Init() override;
     virtual void Draw(const Camera& camera, float currentTime, bool shouldClear) override;
@@ -33,6 +33,7 @@ void Pathtracer::Init()
 
     DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, DSpheres);
     DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, DPlanes);
+    DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, DSphereLights);
 
     // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
@@ -71,6 +72,9 @@ void Pathtracer::Init()
 
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
+    // Update the sphere area lights
+    DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, DSphereLights);
+
     // sync NEE settings
     cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
 

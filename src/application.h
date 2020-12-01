@@ -7,11 +7,11 @@
 class Application
 {
 protected:
-    SceneData sceneData;
+    SceneData& sceneData;
     GLuint texture;
 
 public:
-    Application(SceneData sceneData, GLuint texture) : sceneData(sceneData), texture(texture) {}
+    Application(SceneData& sceneData, GLuint texture) : sceneData(sceneData), texture(texture) {}
     virtual void Init() = 0;
     virtual void Draw(const Camera& camera, float currentTime, bool shouldClera) = 0;
 };

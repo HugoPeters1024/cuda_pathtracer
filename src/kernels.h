@@ -258,11 +258,15 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 
     float light_t;
     // Any intersection is being used by shadow rays, but they can't intersect the light source
-    if (!anyIntersection && raySphereIntersect(ray, DLight, light_t) && light_t < hitInfo.t)
+    for(int i=0;i<_GSphereLights.size; i++)
     {
-        hitInfo.t = light_t;
-        hitInfo.intersected = true;
-        hitInfo.primitive_type = LIGHT;
+        if (!anyIntersection && raySphereIntersect(ray, _GSphereLights[i], light_t) && light_t < hitInfo.t)
+        {
+            hitInfo.t = light_t;
+            hitInfo.intersected = true;
+            hitInfo.primitive_id = i;
+            hitInfo.primitive_type = LIGHT;
+        }
     }
 
     const uint STACK_SIZE = 18;
@@ -448,13 +452,13 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
                 // the rest happens through NEE. If we do encounter a light
                 // in this ray we simply add nothing to the contribution and
                 // terminate.
-                state.accucolor += state.mask * DLight_Color;
+                state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
                 stateBuf[ray.pixeli] = state;
             }
         }
         else
         {
-            state.accucolor += state.mask * DLight_Color;
+            state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
             stateBuf[ray.pixeli] = state;
         }
         return;
@@ -534,18 +538,20 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
 
     DRayQueueNew.push(secondary);
-    stateBuf[ray.pixeli] = state;
 
     // Create a shadow ray if it isn't corrected away (by being a mirror for example)
     if (_NEE && !state.fromSpecular && state.correction > EPS)
     {
-        float3 fromLight = normalize(intersectionPos - DLight.pos);
+        // Choose an area light at random
+        state.lightSource = wang_hash(seed) % DSphereLights.size;
+        const SphereLight& light = DSphereLights[state.lightSource];
+        float3 fromLight = normalize(intersectionPos - light.pos);
         // Sample the hemisphere from that point.
         float3 r = BRDFUniform(fromLight, seed);
 
         // From the center of the light, go to sample point
         // (by definition of the BRDF on the visible by the origin (if not occluded)
-        float3 samplePoint = DLight.pos + DLight.radius * r;
+        float3 samplePoint = light.pos + light.radius * r;
 
         float3 shadowDir = intersectionPos - samplePoint;
         float shadowLength = length(shadowDir);
@@ -560,6 +566,8 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
             DShadowRayQueue.push(shadowRay);
         }
     }
+
+    stateBuf[ray.pixeli] = state;
 }
 
 // Traces the shadow rays
@@ -572,15 +580,16 @@ __global__ void kernel_connect(TraceState* stateBuf)
     TraceState state = stateBuf[shadowRay.pixeli];
     HitInfo hitInfo = traverseBVHStack(shadowRay, true);
     if (hitInfo.intersected) return;
+    const SphereLight& light = DSphereLights[state.lightSource];
 
     float r2 = shadowRay.length * shadowRay.length;
-    float3 lightNormal = normalize(shadowRay.origin - DLight.pos);
+    float3 lightNormal = normalize(shadowRay.origin - light.pos);
     float cost1 = dot(lightNormal, shadowRay.direction);
     float cost2 = dot(state.currentNormal, -shadowRay.direction);
-    float SA = (3.1415926 * DLight.radius * DLight.radius * cost1 * cost2) / r2;
+    float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) / r2;
     //float NL = lambert(-shadowRay.direction, state.currentNormal);
 
-    state.accucolor += state.mask * state.correction * DLight_Color * SA;
+    state.accucolor += state.mask * state.correction * light.color * SA;
     stateBuf[shadowRay.pixeli] = state;
 }
 

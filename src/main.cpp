@@ -167,6 +167,8 @@ int main(int argc, char** argv) {
     scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
+    scene.addSphereLight(SphereLight(make_float3(-8,5,1), 0.3, make_float3(150)));
+    scene.addSphereLight(SphereLight(make_float3(-5,5,-3), 0.3, make_float3(150, 0, 0)));
         
     printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
     SceneData sceneData = scene.finalize();
@@ -176,11 +178,6 @@ int main(int argc, char** argv) {
     // Create the application
     Pathtracer pathtracerApp = Pathtracer(sceneData, texture);
     Raytracer raytracerApp = Raytracer(sceneData, texture);
-
-
-    // add a sphere as light source
-    Sphere light(make_float3(-8,5,1), 0.05, -1);
-    float3 lightColor = make_float3(150);
 
 
     // Set the initial camera values;
@@ -204,9 +201,6 @@ int main(int argc, char** argv) {
     {
         tick++;
         double start = glfwGetTime();
-
-        cudaSafe( cudaMemcpyToSymbol(DLight, &light, sizeof(Sphere)) );
-        cudaSafe( cudaMemcpyToSymbol(DLight_Color, &lightColor, sizeof(float3)) );
 
         if (PATHRACER)
             pathtracerApp.Draw(camera, glfwGetTime(), shouldClear);
@@ -241,20 +235,20 @@ int main(int argc, char** argv) {
         camera.update(window);
         shouldClear = camera.hasMoved();
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { 
-            lightColor *= 0.97; 
+            sceneData.h_sphere_light_buffer[0].color *= 0.97; 
             sceneData.h_point_light_buffer[0].color *= 0.97;
             shouldClear = true;
         }
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { 
-            lightColor *= 1.03; 
+            sceneData.h_sphere_light_buffer[0].color *= 1.03;
             sceneData.h_point_light_buffer[0].color *= 1.03;
             shouldClear = true;
         }
-        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { light.radius *= 1.03; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { light.radius *= 0.97; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].radius *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].radius *= 0.97; shouldClear = true;}
 
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { light.pos.y += 0.02; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { light.pos.y -= 0.02; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].pos.y += 0.02; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].pos.y -= 0.02; shouldClear = true;}
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
         glfwPollEvents();

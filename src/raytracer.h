@@ -22,7 +22,7 @@ private:
     float3 radiance(const Ray& ray, int iteration = 0);
 
 public:
-    Raytracer(SceneData sceneData, GLuint texture) : Application(sceneData, texture) {}
+    Raytracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
     virtual void Init() override;
     virtual void Draw(const Camera& camera, float currentTime, bool shouldClear) override;
 };
@@ -36,6 +36,7 @@ void Raytracer::Init()
     HPlanes = HSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes);
     HMaterials = sceneData.h_material_buffer;
     HBVH = sceneData.h_bvh_buffer;
+    HSphereLights = HSizedBuffer<SphereLight>(nullptr, 0);
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
     omp_set_num_threads(8);

@@ -82,6 +82,14 @@ because of Next Event Estimation is it necessary to know whether the previous bo
 indication that all we can do is fall back to just one standard ray. In the future MIS might play a role here but more research
 is needed.
 
+### Wishlist for the future
+
+- Barrel distortion
+- MIS 
+- Spotlights
+- Faster, Faster
+- Loading screen
+
 ### References
 
 [^ref1]: [Triangle intersection](https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/moller-trumbore-ray-triangle-intersection)

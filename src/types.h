@@ -55,6 +55,13 @@ struct Sphere
     HYBRID inline float3 centroid() { return pos; }
 };
 
+struct SphereLight : public Sphere
+{
+    float3 color;
+    SphereLight(float3 pos, float radius, float3 color)
+        : Sphere(pos, radius, 0), color(color) {}
+};
+
 struct Plane
 {
     float3 normal;
@@ -273,6 +280,7 @@ struct __align__(16) TraceState
     // multiplication.
     float correction;
     bool fromSpecular;
+    uint lightSource;
 };
 
 template <class T>

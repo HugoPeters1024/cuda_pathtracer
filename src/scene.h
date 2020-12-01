@@ -14,22 +14,26 @@ struct SceneData
     Sphere* h_sphere_buffer;
     Plane* h_plane_buffer;
     PointLight* h_point_light_buffer;
+    SphereLight* h_sphere_light_buffer;
     uint num_triangles;
     uint num_bvh_nodes;
     uint num_materials;
     uint num_spheres;
     uint num_planes;
     uint num_point_lights;
+    uint num_sphere_lights;
 };
 
 class Scene
 {
-public:
+private:
     std::vector<Triangle> triangles;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
     std::vector<PointLight> pointLights;
+    std::vector<SphereLight> sphereLights;
+public:
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -40,6 +44,7 @@ public:
     void addSphere(Sphere sphere) { spheres.push_back(sphere); }
     void addPlane(Plane plane) { planes.push_back(plane); }
     void addPointLight(PointLight light) { pointLights.push_back(light); }
+    void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
 
     void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material)
     {
@@ -93,6 +98,7 @@ public:
 
     SceneData finalize()
     { 
+        assert(sphereLights.size() > 0);
         SceneData ret;
 
         uint bvhSize;
@@ -125,12 +131,17 @@ public:
         ret.h_point_light_buffer = (PointLight*)malloc(pointLights.size() * sizeof(PointLight));
         memcpy(ret.h_point_light_buffer, pointLights.data(), pointLights.size() * sizeof(PointLight));
 
+        // copy over the sphere lights
+        ret.h_sphere_light_buffer = (SphereLight*)malloc(sphereLights.size() * sizeof(SphereLight));
+        memcpy(ret.h_sphere_light_buffer, sphereLights.data(), sphereLights.size() * sizeof(SphereLight));
+
         ret.num_triangles = triangles.size();
         ret.num_bvh_nodes = bvhSize;
         ret.num_materials = materials.size();
         ret.num_spheres = spheres.size();
         ret.num_planes = planes.size();
         ret.num_point_lights = pointLights.size();
+        ret.num_sphere_lights = sphereLights.size();
         return ret;
     }
 };
