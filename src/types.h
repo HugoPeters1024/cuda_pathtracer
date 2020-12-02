@@ -398,7 +398,7 @@ public:
     HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint& seed) const {
         float xf = ((float)x + rand(seed)) / WINDOW_WIDTH;
         float yf = ((float)y + rand(seed)) / WINDOW_HEIGHT;
-        float3 point = lt + xf * u + yf * v;
+        float3 point = distort(lt + xf * u + yf * v);
 
         float3 direction = normalize(point - eye);
         return Ray(eye, direction, x,y);
@@ -407,10 +407,19 @@ public:
     HYBRID inline Ray getRay(unsigned int x, unsigned int y) const {
         float xf = ((float)x) / WINDOW_WIDTH;
         float yf = ((float)y) / WINDOW_HEIGHT;
-        float3 point = lt + xf * u + yf * v;
+        float3 point = distort(lt + xf * u + yf * v);
 
         float3 direction = normalize(point - eye);
         return Ray(eye, direction, x,y);
+    }
+
+    HYBRID float3 distort(const float3& p) const
+    {
+        float3 center = eye + d * viewDir;
+        float3 fromCenter = p - center;
+        float r = length(p - center);
+        float rd = r + 0.2 * r * r * r;
+        return center + fromCenter * (rd/r);
     }
 };
 

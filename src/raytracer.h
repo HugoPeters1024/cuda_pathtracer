@@ -75,16 +75,23 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
         return make_float3(1);
     }
 
-    float3 intersectionPos = ray.origin + (hitInfo.t - EPS) * ray.direction;
+    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
 
     const float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    const Material& material = getColliderMaterial(hitInfo);
+    Material material = getColliderMaterial(hitInfo);
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);
+
+    if (hitInfo.primitive_type == PLANE)
+    {
+        uint px = (uint)(fabs(intersectionPos.x/4));
+        uint py = (uint)(fabs(intersectionPos.z/4));
+        material.color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
+    }
 
     float transmission = material.transmit;
     float reflect = material.reflect;
@@ -101,7 +108,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             float dis2light = sqrt(dis2light2);
             fromLight /= dis2light;
             Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
-            shadowRay.length = dis2light - EPS;
+            shadowRay.length = dis2light - 2 * EPS;
             HitInfo shadowHit = traverseBVHStack(shadowRay, true);
             if (!shadowHit.intersected) {
                 diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;

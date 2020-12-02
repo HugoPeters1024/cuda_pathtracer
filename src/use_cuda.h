@@ -70,22 +70,21 @@ inline cudaTextureObject_t loadTexture(const char* filename)
 {
   int width, height, nrChannels;
 
-  unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
-  if (!data) {
+  float* data3 = stbi_loadf(filename, &width, &height, &nrChannels, 0);
+  if (!data3) {
     fprintf(stderr, "Could not load texture: %s", filename);
     exit(8);
-  } else { fprintf(stderr, "Loaded texture %s (%ix%i)", filename, width, height);
+  } else { printf("Loaded texture %s (%ix%i)\n", filename, width, height);
   }
 
-  // Convert the byte data to 4 component float
+  // Convert the float data to 4 component float
   float* fdata = (float*)malloc(width*height*4*sizeof(float));
-  float corr = 1.0f/256.0f;
   for(int y=0; y<height; y++)
   {
     for(int x=0; x<width; x++) {
-      fdata[x*4+(height-y-1)*4*width+0] = (float)data[x*nrChannels+y*nrChannels*width+0] * corr;
-      fdata[x*4+(height-y-1)*4*width+1] = (float)data[x*nrChannels+y*nrChannels*width+1] * corr;
-      fdata[x*4+(height-y-1)*4*width+2] = (float)data[x*nrChannels+y*nrChannels*width+2] * corr;
+      fdata[x*4+(height-y-1)*4*width+0] = data3[x*nrChannels+y*nrChannels*width+0];
+      fdata[x*4+(height-y-1)*4*width+1] = data3[x*nrChannels+y*nrChannels*width+1];
+      fdata[x*4+(height-y-1)*4*width+2] = data3[x*nrChannels+y*nrChannels*width+2];
       fdata[x*4+(height-y-1)*4*width+3] = 1;
     }
   }
@@ -114,6 +113,9 @@ inline cudaTextureObject_t loadTexture(const char* filename)
 
   cudaTextureObject_t ret = 0;
   cudaSafe(cudaCreateTextureObject(&ret, &resDesc, &texDesc, nullptr));
+
+  stbi_image_free(data3);
+  free(fdata);
   return ret;
 }
 

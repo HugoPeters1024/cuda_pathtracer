@@ -75,10 +75,10 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     // Update the sphere area lights
     DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, DSphereLights);
 
-    // sync NEE settings
+    // sync NEE toggle
     cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
 
-    // Map the resource to Cuda
+    // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
 
     // Get a pointer to the memory
@@ -93,6 +93,8 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
 
     // Calculate the thread size and warp size
+    // These are used by simply kernels only, so we max
+    // out the block size.
     int tx = 32;
     int ty = 32;
     dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);

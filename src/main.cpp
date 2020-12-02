@@ -6,12 +6,15 @@
 #include <iostream>
 #include <chrono>
 
+#include "cxxopts.hpp"
+
 #include "types.h"
 #include "gl_shader_utils.h"
 
 #include "use_cuda.h"
 #include "bvhBuilder.h"
 #include "scene.h"
+#include "sceneBuilder.h"
 #include "globals.h"
 #include "kernels.h"
 #include "application.h"
@@ -29,7 +32,9 @@ out vec2 uv;
 void main()
 {
     gl_Position = vec4(pos, 0, 1);
-    uv = (pos + vec2(1)) * 0.5;
+    // slightly zoom in to hide artificats
+    // from chrommatic abberation at the edges
+    uv = (pos * 0.97 + vec2(1)) * 0.5;
 }
 )";
 
@@ -43,12 +48,17 @@ uniform sampler2D tex;
 layout (location = 0) uniform float time;
 
 void main() { 
-    vec4 c = texture(tex, uv);
-    color = vec4(c.xyz / c.w, 1);
-    float gamma = 1.0;
-    color.x = pow(color.x, 1.0f/gamma);
-    color.y = pow(color.y, 1.0f/gamma);
-    color.z = pow(color.z, 1.0f/gamma);
+    vec2 fromCenter = uv - vec2(0.5);
+    vec4 sampleR = texture(tex, uv + 0.018 * fromCenter);
+    vec4 sampleG = texture(tex, uv + 0.011 * fromCenter);
+    vec4 sampleB = texture(tex, uv + 0.003 * fromCenter);
+    float gamma = 1.8f;
+    color.x = pow(sampleR.x / sampleR.w, 1.0f/gamma);
+    color.y = pow(sampleG.y / sampleG.w, 1.0f/gamma);
+    color.z = pow(sampleB.z / sampleB.w, 1.0f/gamma);
+
+    // vignetting
+    color *= 1 - dot(fromCenter, fromCenter);
 }
 )";
 
@@ -57,6 +67,14 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
 
 int main(int argc, char** argv) {
+    cxxopts::Options options("AVGR 2020-2021 by Hugo Peters", "Raytracer/Pathtracer demo program");
+
+    options.add_options()
+        ("s,scene", "Scene to run", cxxopts::value<std::string>()->default_value("outside"))
+    ;
+
+    auto cmdArgs = options.parse(argc, argv);
+
     if (!glfwInit()) return 2;
 
     glfwSetErrorCallback(error_callback);
@@ -104,81 +122,21 @@ int main(int argc, char** argv) {
     glBindTexture(GL_TEXTURE_2D, 0);
 
 
-    // Create a scene object
-    Scene scene;
-
-    // create material
-    Material white = Material::DIFFUSE(make_float3(0.4));
-    auto whiteId = scene.addMaterial(white);
-
-    Material cubeMat = Material::DIFFUSE(make_float3(1));
-    cubeMat.transmit = 1.0f;
-    cubeMat.refractive_index = 1.1;
-    cubeMat.glossy = 0.02;
-    cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
-    auto cubeMatId = scene.addMaterial(cubeMat);
-
-    Material sibenikMat = Material::DIFFUSE(make_float3(0.8));
-    auto sibenikMatId = scene.addMaterial(sibenikMat);
-
-    Material teapotMat = Material::DIFFUSE(make_float3(1));
-    teapotMat.reflect = 0.6;
-    teapotMat.glossy = 0.08;
-    auto teapotMatId = scene.addMaterial(teapotMat);
-
-    Material lucyMat = Material::DIFFUSE(make_float3(0.5, 0.2, 0.3));
-    lucyMat.transmit = 0.0f;
-    lucyMat.refractive_index = 1.2;
-    lucyMat.reflect = 0.0;
-    lucyMat.glossy = 0.15;
-    lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
-    auto lucyMatId = scene.addMaterial(lucyMat);
-
-    Material glassMat = Material::DIFFUSE(make_float3(1));
-    glassMat.transmit = 1.0f;
-    glassMat.refractive_index = 1.544;
-    glassMat.glossy = 0.00f;
-    glassMat.absorption = make_float3(0.01, 0.4, 0.4);
-    auto glassMatId = scene.addMaterial(glassMat);
-
-    Material whiteGlass = Material::DIFFUSE(make_float3(1));
-    whiteGlass.transmit = 1.0f;
-    whiteGlass.refractive_index = 1.5;
-    auto whiteGlassId = scene.addMaterial(whiteGlass);
-
-    auto mirrorMat = Material::DIFFUSE(make_float3(1));
-    mirrorMat.transmit = 0.0f;
-    mirrorMat.refractive_index = 1.4f;
-    mirrorMat.reflect = 1.0f;
-    auto mirrorMatId = scene.addMaterial(mirrorMat);
-
-    //scene.addModel("sibenik.obj", 3, make_float3(0), make_float3(0,42,0), sibenikMatId);
-    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
-    scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
-   //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
-    scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
-    scene.addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
-    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1300);
-    //
-    scene.addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
-
-    //scene.addSphere(Sphere(make_float3(-8, 2, 1), 1, glassMatId));
-    scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
-    scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
-    scene.addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
-
-    scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(150, 0, 0)));
-    scene.addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 150, 0)));
-        
-    printf("Generating a BVH using the SAH heuristic, this might take a moment...\n");
-    SceneData sceneData = scene.finalize();
+    SceneData sceneData;
+    const char* sceneName = cmdArgs["scene"].as<std::string>().c_str();
+    printf("Loading scene '%s', this might take a moment\n", sceneName);
+    if (strcmp(sceneName, "outside") == 0)
+        sceneData = getOutsideScene();
+    else if (strcmp(sceneName, "sibenik") == 0)
+        sceneData = getSibenikScene();
+    else{
+        printf("Scene '%s' does not exist!\n", sceneName);
+        return -5;
+    }
 
     bool PATHRACER = true;
 
-    // Create the application
+    // Create the applications
     Pathtracer pathtracerApp = Pathtracer(sceneData, texture);
     Raytracer raytracerApp = Raytracer(sceneData, texture);
 
@@ -188,15 +146,17 @@ int main(int argc, char** argv) {
     double runningAverageFps = 0;
     int tick = 0;
 
-    printf("BVHNode is %i bytes\n", sizeof(BVHNode));
-    printf("Triangle is %i bytes\n", sizeof(BVHNode));
-    printf("Ray is %i bytes\n", sizeof(Ray));
-    printf("HitInfo is %i bytes\n", sizeof(HitInfo));
-    printf("TraceState is %i bytes\n", sizeof(TraceState));
+    // Show off
+    printf("BVHNode is %lu bytes\n", sizeof(BVHNode));
+    printf("Triangle is %lu bytes\n", sizeof(BVHNode));
+    printf("Ray is %lu bytes\n", sizeof(Ray));
+    printf("HitInfo is %lu bytes\n", sizeof(HitInfo));
+    printf("TraceState is %lu bytes\n", sizeof(TraceState));
 
     pathtracerApp.Init();
     raytracerApp.Init();
 
+    // Input utility
     Keyboard keyboard(window);
 
     bool shouldClear = true;
