@@ -18,6 +18,7 @@ newmtl staklo
 	Ns 256.000000
 	Ni 1.000000
 	Tf 0.5 0.5 0.5
+	d 0.000000
 	illum 6
 	Ka 0.000000 0.000000 0.000000
 	Kd 0.0 0.0 0.0
@@ -174,7 +175,7 @@ newmtl rozeta
 newmtl staklo_zeleno
 	Ns 256.000000
 	Ni 1.000000
-	d 1.000000
+	d 0.000000
 	Tr 0.00000
 	Tf  0.066667 0.631373 0.074510
 	illum 4
@@ -187,6 +188,7 @@ newmtl staklo_zeleno
 newmtl staklo_plavo
 	Ns 256.000000
 	Ni 1.000000
+	d 0.000000
 	Tf 0.082353 0.145098 0.784314
 	illum 4
 	Ka 0.000000 0.000000 0.000000

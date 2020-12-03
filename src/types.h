@@ -26,7 +26,8 @@
 typedef uint MATERIAL_ID;
 struct Material
 {
-    float3 color;
+    float3 diffuse_color;
+    float3 specular_color;
     float reflect;
     float glossy;
     float transmit;
@@ -36,12 +37,12 @@ struct Material
     bool hasTexture = false;
 
     Material() {}
-    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 absorption)
-        : color(color), reflect(reflect), glossy(glossy), 
+    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 specular_color, float3 absorption)
+        : diffuse_color(color), reflect(reflect), glossy(glossy), 
           transmit(transmit), refractive_index(refractive_index),
-          absorption(absorption) {}
+          specular_color(specular_color), absorption(absorption) {}
 
-    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0, make_float3(0)); }
+    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0, make_float3(0), make_float3(0)); }
 };
 
 struct Sphere

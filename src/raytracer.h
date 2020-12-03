@@ -90,7 +90,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     {
         uint px = (uint)(fabs(intersectionPos.x/4));
         uint py = (uint)(fabs(intersectionPos.z/4));
-        material.color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
+        material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
     float transmission = material.transmit;
@@ -141,7 +141,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
         reflect_color = radiance(reflectRay, iteration+1);
     }
 
-    return material.color * (diffuse * diffuse_color + transmission * refract_color + reflect * reflect_color);
+    return material.diffuse_color * (diffuse * diffuse_color + transmission * refract_color + reflect * reflect_color);
 }
 
 #endif

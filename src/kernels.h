@@ -424,6 +424,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        if (bounce > 0) sk = sk * 10;
         /*
         // Artificially increase contrast to make the sun a more apparent light source
         // without affecting the direct view of the image.
@@ -469,30 +470,13 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    // sample the texture of the material by redoing the intersection
-    if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
-    {
-        float t, u, v;
-        assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
-        const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
-        // Calculate the exact texture location by interpolating the three vertices' texture coords
-        float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
-        float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
-        // According to the mtl spec texture should be multiplied by the diffuse color
-        // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
-        material.color = material.color * make_float3(texColor.x, texColor.y, texColor.z);
-    }
 
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
         uint py = (uint)(fabs(intersectionPos.z/4));
-        material.color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
+        material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
-    state.mask = state.mask * material.color;
-    // we can terminate this path
-    if (dot(state.mask, state.mask) < 0.01) return;
-    state.currentNormal = colliderNormal;
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -532,7 +516,27 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
     else 
     {
+        // sample the texture of the material by redoing the intersection
+        if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
+        {
+            float t, u, v;
+            assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
+            const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
+            // Calculate the exact texture location by interpolating the three vertices' texture coords
+            float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
+            float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
+            // According to the mtl spec texture should be multiplied by the diffuse color
+            // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
+            material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
+        }
+
+        // Color is only a diffuse color
+        state.mask = state.mask * material.diffuse_color;
+        // we can terminate this path
+        if (dot(state.mask, state.mask) < 0.01) return;
+        state.currentNormal = colliderNormal;
         state.fromSpecular = false;
+
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
 
         // incoming direction of the light.

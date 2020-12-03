@@ -56,7 +56,7 @@ public:
 
         Matrix4 transform = Matrix4::FromTranslation(offset.x, offset.y, offset.z) * Matrix4::FromScale(scale) * Matrix4::FromAxisRotations(rotation.x, rotation.y, rotation.z);
 
-        MATERIAL_ID materials[objReader.GetMaterials().size()];
+        MATERIAL_ID material_ids[objReader.GetMaterials().size()];
 
         if (useMtl)
         {
@@ -65,10 +65,10 @@ public:
             {
                 auto mat = objReader.GetMaterials()[m];
                 Material material = Material::DIFFUSE(make_float3(1));
-                // TODO: Make transmittance color dependent
-                //material.transmit = mat.transmittance[0];
+                material.diffuse_color = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                material.specular_color = make_float3(mat.specular[0], mat.specular[1], mat.specular[2]);
+                material.transmit = 1-mat.dissolve;
                 material.refractive_index = mat.ior;
-                material.color = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
                 if (mat.diffuse_texname != "")
                 {
                     material.texture = loadTexture(mat.diffuse_texname.c_str());
@@ -76,7 +76,7 @@ public:
                 }
 
 
-                materials[m] = addMaterial(material);
+                material_ids[m] = addMaterial(material);
             }
         }
 
@@ -132,7 +132,7 @@ public:
                     uv2 = uv2 + offset;
                 }
 
-                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? materials[mit] : material});
+                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material});
             }
         }
     }
