@@ -47,10 +47,22 @@ HYBRID inline uint wang_hash(uint seed)
     return seed;
 }
 
+inline HYBRID uint rand_xorshift(uint& seed)
+{
+    // Xorshift algorithm from George Marsaglia's paper
+    seed ^= (seed << 13);
+    seed ^= (seed >> 17);
+    seed ^= (seed << 5);
+    return seed;
+}
+
 HYBRID inline float rand(uint& seed)
 {
-    seed = wang_hash(seed);
+    seed = rand_xorshift(seed);
+    // Faster on cuda probably
+    return seed * 2.3283064365387e-10f;
 
+    /*
     const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
     const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
 
@@ -59,11 +71,12 @@ HYBRID inline float rand(uint& seed)
 
     float  f = reinterpret_cast<float&>(seed);       // Range [1:2]
     return f - 1.0;                        // Range [0:1]
+    */
 }
 
 HYBRID inline uint getSeed(uint x, uint y, float time)
 {
-    return (x + WINDOW_WIDTH * y) * (uint)(time * 100);
+    return wang_hash((x + WINDOW_WIDTH * y) * (uint)(time * 100));
 }
 
 inline cudaTextureObject_t loadTexture(const char* filename)

@@ -45,15 +45,40 @@ public:
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
 
-    void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material)
+    void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
         objConfig.vertex_color = false;
+        objConfig.triangulate = true;
         tinyobj::ObjReader objReader;
         objReader.ParseFromFile(filename, objConfig);
 
         Matrix4 transform = Matrix4::FromTranslation(offset.x, offset.y, offset.z) * Matrix4::FromScale(scale) * Matrix4::FromAxisRotations(rotation.x, rotation.y, rotation.z);
+
+        MATERIAL_ID materials[objReader.GetMaterials().size()];
+
+        if (useMtl)
+        {
+            printf("Loading %lu materials\n", objReader.GetMaterials().size());
+            for(int m=0; m<objReader.GetMaterials().size(); m++)
+            {
+                auto mat = objReader.GetMaterials()[m];
+                Material material = Material::DIFFUSE(make_float3(1));
+                // TODO: Make transmittance color dependent
+                //material.transmit = mat.transmittance[0];
+                material.refractive_index = mat.ior;
+                material.color = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                if (mat.diffuse_texname != "")
+                {
+                    material.texture = loadTexture(mat.diffuse_texname.c_str());
+                    material.hasTexture = true;
+                }
+
+
+                materials[m] = addMaterial(material);
+            }
+        }
 
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
@@ -62,10 +87,17 @@ public:
                 auto it0 = objReader.GetShapes()[s].mesh.indices[i+0];
                 auto it1 = objReader.GetShapes()[s].mesh.indices[i+1];
                 auto it2 = objReader.GetShapes()[s].mesh.indices[i+2];
+                auto mit = objReader.GetShapes()[s].mesh.material_ids[i/3];
                 auto vertices = objReader.GetAttrib().vertices;
-                float3 v0 = make_float3(vertices[it0.vertex_index * 3 + 0], vertices[it0.vertex_index * 3 + 1], vertices[it0.vertex_index * 3 + 2]);
-                float3 v1 = make_float3(vertices[it1.vertex_index * 3 + 0], vertices[it1.vertex_index * 3 + 1], vertices[it1.vertex_index * 3 + 2]);
-                float3 v2 = make_float3(vertices[it2.vertex_index * 3 + 0], vertices[it2.vertex_index * 3 + 1], vertices[it2.vertex_index * 3 + 2]);
+                auto uvs = objReader.GetAttrib().texcoords;
+                bool hasUvs = uvs.size() > 0;
+                float3 v0 = make_float3(vertices[it0.vertex_index*3+0], vertices[it0.vertex_index*3+1], vertices[it0.vertex_index*3+2]);
+                float3 v1 = make_float3(vertices[it1.vertex_index*3+0], vertices[it1.vertex_index*3+1], vertices[it1.vertex_index*3+2]);
+                float3 v2 = make_float3(vertices[it2.vertex_index*3+0], vertices[it2.vertex_index*3+1], vertices[it2.vertex_index*3+2]);
+
+                float2 uv0 = hasUvs ? make_float2(uvs[it0.texcoord_index*2+0], uvs[it0.texcoord_index*2+1]) : make_float2(0);
+                float2 uv1 = hasUvs ? make_float2(uvs[it1.texcoord_index*2+0], uvs[it1.texcoord_index*2+1]) : make_float2(0);
+                float2 uv2 = hasUvs ? make_float2(uvs[it2.texcoord_index*2+0], uvs[it2.texcoord_index*2+1]) : make_float2(0);
 
                 Vector4 v0_tmp = transform * Vector4(v0.x, v0.y, v0.z, 1);
                 Vector4 v1_tmp = transform * Vector4(v1.x, v1.y, v1.z, 1);
@@ -85,12 +117,22 @@ public:
                 }
                 else {
                     auto normals = objReader.GetAttrib().normals;
-                    n0 = make_float3(normals[it0.normal_index * 3 + 0], normals[it0.normal_index * 3 + 1], normals[it0.normal_index * 3 + 2]);
-                    n1 = make_float3(normals[it1.normal_index * 3 + 0], normals[it1.normal_index * 3 + 1], normals[it1.normal_index * 3 + 2]);
-                    n2 = make_float3(normals[it2.normal_index * 3 + 0], normals[it2.normal_index * 3 + 1], normals[it2.normal_index * 3 + 2]);
+                    n0 = make_float3(normals[it0.normal_index*3+0], normals[it0.normal_index*3+1], normals[it0.normal_index*3+2]);
+                    n1 = make_float3(normals[it1.normal_index*3+0], normals[it1.normal_index*3+1], normals[it1.normal_index*3+2]);
+                    n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
                 }
 
-                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, material});
+                if (useMtl)
+                {
+                    // MTL files suck!!!!
+                    auto mat = objReader.GetMaterials()[mit];
+                    float2 offset = make_float2(mat.diffuse_texopt.origin_offset[0], mat.diffuse_texopt.origin_offset[1]);
+                    uv0 = uv0 + offset;
+                    uv1 = uv1 + offset;
+                    uv2 = uv2 + offset;
+                }
+
+                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? materials[mit] : material});
             }
         }
     }
@@ -111,7 +153,7 @@ public:
         {
             const Triangle& t = triangles[i];
             ret.h_vertex_buffer[i] = TriangleV(t.v0, t.v1, t.v2);
-            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.material);
+            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.uv0, t.uv1, t.uv2, t.material);
         }
 
         // copy over the materials

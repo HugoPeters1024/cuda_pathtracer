@@ -127,8 +127,9 @@ inline SceneData getSibenikScene()
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
     // Add all the objects
-    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId);
-    scene.addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
+    scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId, true);
+    //scene.addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
+//    scene.addModel("cube_brian.obj", 1, make_float3(0), make_float3(-4, 6, 0), 0, true);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
    // scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
@@ -146,6 +147,19 @@ inline SceneData getSibenikScene()
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
     scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(60)));
         
+    return scene.finalize();
+}
+
+inline SceneData getConferenceScene()
+{
+    Scene scene;
+    Material white = Material::DIFFUSE(make_float3(0.4));
+    auto whiteId = scene.addMaterial(white);
+
+    scene.addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
+
+    scene.addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
+
     return scene.finalize();
 }
 

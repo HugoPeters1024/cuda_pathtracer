@@ -10,7 +10,7 @@
 #include <GLFW/glfw3.h>
 
 #define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_object_loader.h"
+#include "tiny_obj_loader.h"
 
 #include "use_cuda.h"
 #include <limits>
@@ -32,6 +32,8 @@ struct Material
     float transmit;
     float refractive_index;
     float3 absorption;
+    cudaTextureObject_t texture;
+    bool hasTexture = false;
 
     Material() {}
     Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 absorption)
@@ -150,6 +152,9 @@ struct __align__(16) Triangle
     float3 n0;
     float3 n1;
     float3 n2;
+    float2 uv0;
+    float2 uv1;
+    float2 uv2;
     MATERIAL_ID material;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
@@ -191,10 +196,11 @@ struct __align__(16) TriangleV
 struct __align__(16) TriangleD
 {
     float3 n0, n1, n2;
+    float2 uv0, uv1, uv2;
     MATERIAL_ID material;
 
-    TriangleD(float3 n0, float3 n1, float3 n2, MATERIAL_ID material)
-        : n0(n0), n1(n1), n2(n2), material(material) {}
+    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
+        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
 };
 
 static bool __compare_triangles_x (Triangle a, Triangle b) {

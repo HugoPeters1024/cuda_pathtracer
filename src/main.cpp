@@ -129,6 +129,8 @@ int main(int argc, char** argv) {
         sceneData = getOutsideScene();
     else if (strcmp(sceneName, "sibenik") == 0)
         sceneData = getSibenikScene();
+    else if (strcmp(sceneName, "conference") == 0)
+        sceneData = getConferenceScene();
     else{
         printf("Scene '%s' does not exist!\n", sceneName);
         return -5;

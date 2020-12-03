@@ -22,7 +22,8 @@ target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        --use_fast_math
                        --relocatable-device-code=true
                        #--gpu-architecture=sm_62
-                       -arch=sm_30
+                       -arch=sm_50
+                       --device-link
                        -O3
                        -g
                        -Xcompiler

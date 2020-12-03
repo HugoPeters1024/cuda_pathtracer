@@ -129,7 +129,7 @@ HYBRID bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& ma
     return ret && tmax > 0;
 }
 
-HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t)
+HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -139,11 +139,11 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
     float invDet = 1 / det;
 
     float3 tvec = ray.origin - triangle.v0;
-    float u = dot(tvec, pvec) * invDet;
+    u = dot(tvec, pvec) * invDet;
     if (u < 0 || u > 1) return false;
 
     float3 qvec = cross(tvec, v0v1);
-    float v = dot(ray.direction, qvec) * invDet;
+    v = dot(ray.direction, qvec) * invDet;
     if(v < 0 || u + v > 1) return false;
 
     t = dot(v0v2, qvec) * invDet;
@@ -229,10 +229,10 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     HitInfo hitInfo;
     hitInfo.intersected = false;
     hitInfo.t = ray.length;
+    float t, u, v;
 
     for(int i=0; i<_GSpheres.size; i++)
     {
-        float t;
         if (raySphereIntersect(ray, _GSpheres[i], t) && t < hitInfo.t)
         {
             hitInfo.intersected = true;
@@ -245,7 +245,6 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 
     for(int i=0; i<_GPlanes.size; i++)
     {
-        float t;
         if (rayPlaneIntersect(ray, _GPlanes[i], t) && t < hitInfo.t)
         {
             hitInfo.intersected = true;
@@ -256,13 +255,12 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
         }
     }
 
-    float light_t;
     // Any intersection is being used by shadow rays, but they can't intersect the light source
     for(int i=0;i<_GSphereLights.size; i++)
     {
-        if (!anyIntersection && raySphereIntersect(ray, _GSphereLights[i], light_t) && light_t < hitInfo.t)
+        if (!anyIntersection && raySphereIntersect(ray, _GSphereLights[i], t) && t < hitInfo.t)
         {
-            hitInfo.t = light_t;
+            hitInfo.t = t;
             hitInfo.intersected = true;
             hitInfo.primitive_id = i;
             hitInfo.primitive_type = LIGHT;
@@ -279,16 +277,15 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     while(size > 0)
     {
         uint current_id = stack[--size];
-        const BVHNode current = _GBVH[current_id];
+        const BVHNode& current = _GBVH[current_id];
 
         if (current.isLeaf())
         {
             uint start = current.t_start;
             uint end = start + current.t_count();
-            float t;
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, _GTriangles[i], t) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, _GTriangles[i], t, u, v) && t < hitInfo.t)
                 {
                     hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
@@ -362,7 +359,6 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     if (k < 0) {
         reflected = 1;
         return Ray(make_float3(0), make_float3(0), 0);
-//        return getReflectRay(ray, normal, intersectionPos, material, seed);
     }
 
     float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
@@ -466,11 +462,26 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
 
 
+
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     Material material = getColliderMaterial(hitInfo);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
+
+    // sample the texture of the material by redoing the intersection
+    if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
+    {
+        float t, u, v;
+        assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
+        const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
+        // Calculate the exact texture location by interpolating the three vertices' texture coords
+        float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
+        float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
+        // According to the mtl spec texture should be multiplied by the diffuse color
+        // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
+        material.color = material.color * make_float3(texColor.x, texColor.y, texColor.z);
+    }
 
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
@@ -589,7 +600,7 @@ __global__ void kernel_connect(TraceState* stateBuf)
     float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) / r2;
     //float NL = lambert(-shadowRay.direction, state.currentNormal);
 
-    state.accucolor += state.mask * state.correction * light.color * SA;
+    state.accucolor += state.mask * state.correction * light.color * SA * DSphereLights.size;
     stateBuf[shadowRay.pixeli] = state;
 }
 
