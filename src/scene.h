@@ -54,6 +54,8 @@ public:
         tinyobj::ObjReader objReader;
         objReader.ParseFromFile(filename, objConfig);
 
+        std::map<std::string, cudaTextureObject_t> textureItems;
+
         Matrix4 transform = Matrix4::FromTranslation(offset.x, offset.y, offset.z) * Matrix4::FromScale(scale) * Matrix4::FromAxisRotations(rotation.x, rotation.y, rotation.z);
 
         MATERIAL_ID material_ids[objReader.GetMaterials().size()];
@@ -71,7 +73,18 @@ public:
                 material.refractive_index = mat.ior;
                 if (mat.diffuse_texname != "")
                 {
-                    material.texture = loadTexture(mat.diffuse_texname.c_str());
+                    if (textureItems.find(mat.diffuse_texname) == textureItems.end())
+                    {
+                        // not found, load and add to map
+                        cudaTextureObject_t texture = loadTexture(mat.diffuse_texname.c_str());
+                        material.texture = texture;
+                        textureItems[mat.diffuse_texname] = texture;
+                    }
+                    else
+                    {
+                        // already loaded
+                        material.texture = textureItems.at(mat.diffuse_texname);
+                    }
                     material.hasTexture = true;
                 }
 
