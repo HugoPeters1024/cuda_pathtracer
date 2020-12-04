@@ -17,7 +17,7 @@ private:
     DSizedBuffer<Plane> dPlaneBuffer;
     DSizedBuffer<SphereLight> dSphereLightBuffer;
     HitInfo* intersectionBuf;
-    TraceState* traceBuf;
+    TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
 
 public:
@@ -65,8 +65,12 @@ void Pathtracer::Init()
     shadowRayQueue = AtomicQueue<Ray>(NR_PIXELS);
     rayQueueNew = AtomicQueue<Ray>(NR_PIXELS);
 
+    // Allocate trace state SOA
+    cudaSafe( cudaMalloc(&traceBufSOA.masks, NR_PIXELS * sizeof(float4)) );
+    cudaSafe( cudaMalloc(&traceBufSOA.accucolors, NR_PIXELS * sizeof(float4)) );
+    cudaSafe( cudaMalloc(&traceBufSOA.lights, NR_PIXELS * sizeof(float4)) );
+
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
-    cudaSafe( cudaMalloc(&traceBuf, NR_PIXELS * sizeof(TraceState)) );
 
 
     // Enable NEE by default
@@ -109,7 +113,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
 
 
-    kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBuf);
+    kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
 
     // Generate primary rays in the ray queue
     rayQueue.clear();
@@ -135,12 +139,12 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         shadowRayQueue.syncToDevice(DShadowRayQueue);
         rayQueueNew.clear();
         rayQueueNew.syncToDevice(DRayQueueNew);
-        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBuf, glfwGetTime(), bounce, dSkydomeTex);
+        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
         shadowRayQueue.syncFromDevice(DShadowRayQueue);
         rayQueueNew.syncFromDevice(DRayQueueNew);
 
         // Sample the light source for every shadow ray
-        kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBuf);
+        kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBufSOA);
 
         // swap the ray buffers
         rayQueueNew.syncToDevice(DRayQueue);
@@ -148,7 +152,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     }
 
     // Write the final state accumulator into the texture
-    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBuf, inputSurfObj);
+    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
 
 
     cudaSafe ( cudaDeviceSynchronize() );

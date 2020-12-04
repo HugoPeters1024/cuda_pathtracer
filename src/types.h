@@ -286,6 +286,37 @@ struct __align__(16) TraceState
     bool fromSpecular;
 };
 
+struct TraceStateSOA
+{
+    float4* masks;
+    float4* accucolors;
+    float4* lights;
+
+    __device__ TraceState getState(uint i) const
+    {
+        float4 mask = masks[i];
+        float4 accucolor = accucolors[i];
+        float4 light = lights[i];
+
+        // For some reason this is much much faster than a constructor...
+        return TraceState
+        {
+            get3f(mask),
+            get3f(accucolor),
+            get3f(light),
+            __float_as_int(mask.w),
+        };
+    }
+
+    __device__ void setState(uint i, const TraceState& state)
+    {
+        masks[i] = make_float4(state.mask, __int_as_float(state.fromSpecular));
+        accucolors[i] = make_float4(state.accucolor, 0);
+        lights[i] = make_float4(state.light, 0);
+    }
+};
+
+
 template <class T>
 struct AtomicQueue
 {

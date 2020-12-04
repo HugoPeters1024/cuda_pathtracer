@@ -466,6 +466,11 @@ inline __host__ __device__ float4 make_float4(int4 a)
     return make_float4(float(a.x), float(a.y), float(a.z), float(a.w));
 }
 
+inline __host__ __device__ float3 get3f(float4 a)
+{
+    return make_float3(a.x, a.y, a.z);
+}
+
 // negate
 inline __host__ __device__ float4 operator-(float4 &a)
 {

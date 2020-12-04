@@ -363,11 +363,12 @@ __device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 i
 }
 
 
-__global__ void kernel_clear_state(TraceState* state)
+__global__ void kernel_clear_state(TraceStateSOA state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
-    state[i] = { make_float3(1.0f), make_float3(0.0f), make_float3(0), false };
+    state.accucolors[i] = make_float4(0.0f);
+    state.masks[i] = make_float4(1.0f,1.0f,1.0f,__int_as_float(1));
 }
 
 __global__ void kernel_generate_primary_rays(Camera camera, float time)
@@ -390,13 +391,12 @@ __global__ void kernel_extend(HitInfo* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf, float time, int bounce, cudaTextureObject_t skydome)
+__global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i];
-    TraceState state = stateBuf[ray.pixeli];
-
+    TraceState state = stateBuf.getState(ray.pixeli);
 
     uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo hitInfo = intersections[i];
@@ -417,7 +417,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         }
         */
         state.accucolor += state.mask * sk;
-        stateBuf[ray.pixeli] = state;
+        stateBuf.setState(ray.pixeli, state);
         return;
     }
 
@@ -431,19 +431,16 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
                 // in this ray we simply add nothing to the contribution and
                 // terminate.
                 state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
-                stateBuf[ray.pixeli] = state;
+                stateBuf.setState(ray.pixeli, state);
             }
         }
         else
         {
             state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
-            stateBuf[ray.pixeli] = state;
+            stateBuf.setState(ray.pixeli, state);
         }
         return;
     }
-
-
-
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     Material material = getColliderMaterial(hitInfo);
@@ -470,9 +467,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
         material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
     }
-
-
-
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -550,7 +544,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
                 float cost2 = dot(colliderNormal, -shadowDir);
                 float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) * invShadowLength * invShadowLength;
 
-                state.light = light.color * SA * DSphereLights.size;
+                state.light = state.mask * light.color * SA * DSphereLights.size;
 
                 // We invert the shadowrays to get coherent origins.
                 Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
@@ -561,34 +555,32 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     }
 
     DRayQueueNew.push(secondary);
-
-
-    stateBuf[ray.pixeli] = state;
+    stateBuf.setState(ray.pixeli, state);
 }
 
 // Traces the shadow rays
-__global__ void kernel_connect(TraceState* stateBuf)
+__global__ void kernel_connect(TraceStateSOA stateBuf)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DShadowRayQueue.size) return;
 
     const Ray& shadowRay = DShadowRayQueue[i];
-    TraceState state = stateBuf[shadowRay.pixeli];
     HitInfo hitInfo = traverseBVHStack(shadowRay, true);
     if (hitInfo.intersected) return;
 
-    state.accucolor += state.mask * state.light;
-    stateBuf[shadowRay.pixeli] = state;
+    float3 light = get3f(stateBuf.lights[shadowRay.pixeli]);
+    stateBuf.accucolors[shadowRay.pixeli] += make_float4(light,0);
 }
 
-__global__ void kernel_add_to_screen(const TraceState* stateBuf, cudaSurfaceObject_t texRef)
+__global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceObject_t texRef)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
     const uint x = i % WINDOW_WIDTH;
     const uint y = i / WINDOW_WIDTH;
 
-    float3 color = stateBuf[i].accucolor;
+    TraceState state = stateBuf.getState(i);
+    float3 color = state.accucolor;
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);
