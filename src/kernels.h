@@ -275,16 +275,16 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
         {
             uint near_id = current.child1;
             uint far_id = current.child1 + 1;
-            BVHNode near = _GBVH[near_id];
-            BVHNode far = _GBVH[far_id];
+            bool bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, hitInfo);
+            bool bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, hitInfo);
             if (firstIsFar(current.split_plane(), ray)) {
                 swapc(near_id, far_id);
-                swapc(near, far);
+                swapc(bnear, bfar);
             }
 
             // push on the stack, first the far child
-            if (boxtest(far.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = far_id;
-            if (boxtest(near.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = near_id;
+            if (bfar) stack[size++] = far_id;
+            if (bnear)  stack[size++] = near_id;
 
             //assert (size < STACK_SIZE);
         }
