@@ -311,8 +311,15 @@ __device__ float3 BRDF(const float3& normal, uint& seed)
 
 __device__ float3 BRDFUniform(const float3& normal, uint& seed)
 {
-    float3 r = normalize(make_float3(rand(seed) * 2 - 1, rand(seed) * 2 -1, rand(seed) * 2 - 1));
-    return dot(r, normal) < 0 ? -r : r;
+    float r1 = 2 * 3.1415926535 * rand(seed);
+    float r2 = rand(seed);
+    float r2s = sqrtf(r2);
+
+    float3 w = normal;
+    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 v = cross(w,u);
+
+    return normalize(u*r1*r2s + v*sinf(r1)*r2s + w*sqrtf(1 - r2));
 }
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
@@ -444,12 +451,27 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
         uint py = (uint)(fabs(intersectionPos.z/4));
         material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
+
+    // sample the texture of the material by redoing the intersection
+    if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
+    {
+        float t, u, v;
+        assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
+        const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
+        // Calculate the exact texture location by interpolating the three vertices' texture coords
+        float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
+        float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
+        // According to the mtl spec texture should be multiplied by the diffuse color
+        // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
+        material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
+    }
+
+
 
 
     // Create a secondary ray either diffuse or reflected
@@ -471,6 +493,9 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, reflected);
         if (rand(seed) < reflected) {
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
+            // Color is only a diffuse color
+            state.mask = state.mask * material.diffuse_color;
+            if (dot(state.mask, state.mask) < 0.01) return;
         }
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1 - material.glossy) + material.glossy * noiseDir;
@@ -481,27 +506,17 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
-    }
-    else 
-    {
-        // sample the texture of the material by redoing the intersection
-        if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
-        {
-            float t, u, v;
-            assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
-            const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
-            // Calculate the exact texture location by interpolating the three vertices' texture coords
-            float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
-            float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
-            // According to the mtl spec texture should be multiplied by the diffuse color
-            // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
-            material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
-        }
 
         // Color is only a diffuse color
         state.mask = state.mask * material.diffuse_color;
-        // we can terminate this path
         if (dot(state.mask, state.mask) < 0.01) return;
+    }
+    else 
+    {
+        // Color is only a diffuse color
+        state.mask = state.mask * material.diffuse_color;
+        if (dot(state.mask, state.mask) < 0.01) return;
+
         state.currentNormal = colliderNormal;
         state.fromSpecular = false;
 
@@ -562,7 +577,6 @@ __global__ void kernel_connect(TraceState* stateBuf)
     float cost1 = dot(lightNormal, shadowRay.direction);
     float cost2 = dot(state.currentNormal, -shadowRay.direction);
     float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) / r2;
-    //float NL = lambert(-shadowRay.direction, state.currentNormal);
 
     state.accucolor += state.mask * light.color * SA * DSphereLights.size;
     stateBuf[shadowRay.pixeli] = state;

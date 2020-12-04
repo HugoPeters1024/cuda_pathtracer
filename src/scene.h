@@ -70,6 +70,22 @@ public:
                 material.diffuse_color = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
                 material.specular_color = make_float3(mat.specular[0], mat.specular[1], mat.specular[2]);
                 material.transmit = 1-mat.dissolve;
+                material.reflect = (mat.specular[0]+mat.specular[1]+mat.specular[2])/3.0f;
+                material.glossy = mat.shininess / 1000.0f;
+
+                // Ensure that we don't get crazy values by normalizing the
+                // different components
+                printf("reflect: %f\n", material.reflect);
+
+                float sum = material.transmit + material.reflect;
+                if (sum > 1)
+                {
+                    float scaleFactor = 1.0f / sum;
+                    material.transmit *= scaleFactor;
+                    material.reflect *= scaleFactor;
+                }
+
+                assert(material.transmit + material.reflect <= 1);
                 material.refractive_index = mat.ior;
                 if (mat.diffuse_texname != "")
                 {
