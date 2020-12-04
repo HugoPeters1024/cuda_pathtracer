@@ -34,9 +34,9 @@ void Pathtracer::Init()
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
 
-    DSizedBuffer<Sphere> dSphereBuffer (sceneData.h_sphere_buffer, sceneData.num_spheres, &DSpheres);
-    DSizedBuffer<Plane> dPlaneBuffer(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
-    DSizedBuffer<SphereLight> dSphereLightBuffer (sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, &DSphereLights);
+    dSphereBuffer = DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, &DSpheres);
+    dPlaneBuffer = DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
+    dSphereLightBuffer = DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, &DSphereLights);
 
     // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
