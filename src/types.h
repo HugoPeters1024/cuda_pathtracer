@@ -282,9 +282,8 @@ struct __align__(16) TraceState
 {
     float3 mask;
     float3 accucolor;
-    float3 currentNormal;
+    float3 light;
     bool fromSpecular;
-    uint lightSource;
 };
 
 template <class T>

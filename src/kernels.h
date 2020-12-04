@@ -367,7 +367,7 @@ __global__ void kernel_clear_state(TraceState* state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
-    state[i] = { make_float3(1.0f), make_float3(0.0f), make_float3(0), 0, false };
+    state[i] = { make_float3(1.0f), make_float3(0.0f), make_float3(0), false };
 }
 
 __global__ void kernel_generate_primary_rays(Camera camera, float time)
@@ -516,8 +516,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         // Color is only a diffuse color
         state.mask = state.mask * material.diffuse_color;
         if (dot(state.mask, state.mask) < 0.01) return;
-
-        state.currentNormal = colliderNormal;
         state.fromSpecular = false;
 
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
@@ -526,11 +524,11 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         // for the new sampled direction.
 
         // Create a shadow ray for diffuse objects
-        if (_NEE && !state.fromSpecular)
+        if (_NEE)
         {
             // Choose an area light at random
-            state.lightSource = wang_hash(seed) % DSphereLights.size;
-            const SphereLight& light = DSphereLights[state.lightSource];
+            uint lightSource = wang_hash(seed) % DSphereLights.size;
+            const SphereLight& light = DSphereLights[lightSource];
             float3 fromLight = normalize(intersectionPos - light.pos);
             // Sample the hemisphere from that point.
             float3 r = BRDFUniform(fromLight, seed);
@@ -541,11 +539,19 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
             float3 shadowDir = intersectionPos - samplePoint;
             float shadowLength = length(shadowDir);
-            shadowDir /= shadowLength;
+            float invShadowLength = 1.0f / shadowLength;
+            shadowDir *= invShadowLength;
+
 
             // otherwise we are our own occluder
             if (dot(colliderNormal, shadowDir) < 0)
             {
+                float cost1 = dot(r, shadowDir);
+                float cost2 = dot(colliderNormal, -shadowDir);
+                float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) * invShadowLength * invShadowLength;
+
+                state.light = light.color * SA * DSphereLights.size;
+
                 // We invert the shadowrays to get coherent origins.
                 Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
                 shadowRay.length = shadowLength - 2 * EPS;
@@ -570,15 +576,8 @@ __global__ void kernel_connect(TraceState* stateBuf)
     TraceState state = stateBuf[shadowRay.pixeli];
     HitInfo hitInfo = traverseBVHStack(shadowRay, true);
     if (hitInfo.intersected) return;
-    const SphereLight& light = DSphereLights[state.lightSource];
 
-    float r2 = shadowRay.length * shadowRay.length;
-    float3 lightNormal = normalize(shadowRay.origin - light.pos);
-    float cost1 = dot(lightNormal, shadowRay.direction);
-    float cost2 = dot(state.currentNormal, -shadowRay.direction);
-    float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) / r2;
-
-    state.accucolor += state.mask * light.color * SA * DSphereLights.size;
+    state.accucolor += state.mask * state.light;
     stateBuf[shadowRay.pixeli] = state;
 }
 
