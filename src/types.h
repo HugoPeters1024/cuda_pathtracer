@@ -283,9 +283,6 @@ struct __align__(16) TraceState
     float3 mask;
     float3 accucolor;
     float3 currentNormal;
-    // contains the inverse of the last applied mask
-    // multiplication.
-    float correction;
     bool fromSpecular;
     uint lightSource;
 };

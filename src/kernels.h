@@ -474,9 +474,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         }
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1 - material.glossy) + material.glossy * noiseDir;
-
-        // Make sure we do not cast shadow rays
-        state.correction = 0;
     }
     else if (random - material.transmit < material.reflect)
     {
@@ -484,9 +481,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
-
-        // Make sure we do not cast shadow rays
-        state.correction = 0;
     }
     else 
     {
@@ -513,48 +507,40 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceState* stateBuf,
 
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
 
-        // incoming direction of the light.
-        float lambert = dot(secondary.direction, colliderNormal);
-        // Using 2 renders way to much indirect light
-        state.mask = state.mask * 2.0f * lambert;
+        // Lambert term is not applied because it is implicit due to the cosine weights
+        // for the new sampled direction.
 
-        if (_NEE)
+        // Create a shadow ray for diffuse objects
+        if (_NEE && !state.fromSpecular)
         {
-            // Correct for the lambert term, which does not affect the direct light
-            // at this point radiance at this position for the direct light sample.
-            state.correction = 1.0f / (2.0f * lambert);
+            // Choose an area light at random
+            state.lightSource = wang_hash(seed) % DSphereLights.size;
+            const SphereLight& light = DSphereLights[state.lightSource];
+            float3 fromLight = normalize(intersectionPos - light.pos);
+            // Sample the hemisphere from that point.
+            float3 r = BRDFUniform(fromLight, seed);
+
+            // From the center of the light, go to sample point
+            // (by definition of the BRDF on the visible by the origin (if not occluded)
+            float3 samplePoint = light.pos + light.radius * r;
+
+            float3 shadowDir = intersectionPos - samplePoint;
+            float shadowLength = length(shadowDir);
+            shadowDir /= shadowLength;
+
+            // otherwise we are our own occluder
+            if (dot(colliderNormal, shadowDir) < 0)
+            {
+                // We invert the shadowrays to get coherent origins.
+                Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
+                shadowRay.length = shadowLength - 2 * EPS;
+                DShadowRayQueue.push(shadowRay);
+            }
         }
     }
 
     DRayQueueNew.push(secondary);
 
-    // Create a shadow ray if it isn't corrected away (by being a mirror for example)
-    if (_NEE && !state.fromSpecular && state.correction > EPS)
-    {
-        // Choose an area light at random
-        state.lightSource = wang_hash(seed) % DSphereLights.size;
-        const SphereLight& light = DSphereLights[state.lightSource];
-        float3 fromLight = normalize(intersectionPos - light.pos);
-        // Sample the hemisphere from that point.
-        float3 r = BRDFUniform(fromLight, seed);
-
-        // From the center of the light, go to sample point
-        // (by definition of the BRDF on the visible by the origin (if not occluded)
-        float3 samplePoint = light.pos + light.radius * r;
-
-        float3 shadowDir = intersectionPos - samplePoint;
-        float shadowLength = length(shadowDir);
-        shadowDir /= shadowLength;
-
-        // otherwise we are our own occluder
-        if (dot(colliderNormal, shadowDir) < 0)
-        {
-            // We invert the shadowrays to get coherent origins.
-            Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
-            shadowRay.length = shadowLength - 2 * EPS;
-            DShadowRayQueue.push(shadowRay);
-        }
-    }
 
     stateBuf[ray.pixeli] = state;
 }
@@ -578,7 +564,7 @@ __global__ void kernel_connect(TraceState* stateBuf)
     float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) / r2;
     //float NL = lambert(-shadowRay.direction, state.currentNormal);
 
-    state.accucolor += state.mask * state.correction * light.color * SA * DSphereLights.size;
+    state.accucolor += state.mask * light.color * SA * DSphereLights.size;
     stateBuf[shadowRay.pixeli] = state;
 }
 
