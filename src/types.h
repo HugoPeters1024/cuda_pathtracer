@@ -325,13 +325,19 @@ struct DSizedBuffer
 {
     T* values;
     uint size;
+    const DSizedBuffer<T>* dest;
 
     DSizedBuffer() {}
-    DSizedBuffer(T* src, int size, const DSizedBuffer<T>& dest) : size(size)
+    DSizedBuffer(T* src, int size, const DSizedBuffer<T>* dest) : size(size), dest(dest)
     {
         cudaSafe( cudaMalloc(&values, size * sizeof(T)));
         cudaSafe( cudaMemcpy(values, src, size * sizeof(T), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpyToSymbol(dest, this, sizeof(DSizedBuffer<T>)) );
+        cudaSafe( cudaMemcpyToSymbol(*dest, this, sizeof(DSizedBuffer<T>)) );
+    }
+
+    void update(T* newsrc)
+    {
+        cudaSafe( cudaMemcpy(values, newsrc, size * sizeof(T), cudaMemcpyHostToDevice) );
     }
 
     __device__ T const& operator[](int index) { return values[index]; }

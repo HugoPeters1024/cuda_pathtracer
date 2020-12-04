@@ -13,6 +13,9 @@ private:
     AtomicQueue<Ray> rayQueue;
     AtomicQueue<Ray> shadowRayQueue;
     AtomicQueue<Ray> rayQueueNew;
+    DSizedBuffer<Sphere> dSphereBuffer;
+    DSizedBuffer<Plane> dPlaneBuffer;
+    DSizedBuffer<SphereLight> dSphereLightBuffer;
     HitInfo* intersectionBuf;
     TraceState* traceBuf;
     cudaTextureObject_t dSkydomeTex;
@@ -31,9 +34,9 @@ void Pathtracer::Init()
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
 
-    DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, DSpheres);
-    DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, DPlanes);
-    DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, DSphereLights);
+    DSizedBuffer<Sphere> dSphereBuffer (sceneData.h_sphere_buffer, sceneData.num_spheres, &DSpheres);
+    DSizedBuffer<Plane> dPlaneBuffer(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
+    DSizedBuffer<SphereLight> dSphereLightBuffer (sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, &DSphereLights);
 
     // Upload the host buffers to cuda
     TriangleV* d_vertex_buffer;
@@ -73,7 +76,7 @@ void Pathtracer::Init()
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
     // Update the sphere area lights
-    DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, DSphereLights);
+    dSphereLightBuffer.update(sceneData.h_sphere_light_buffer);
 
     // sync NEE toggle
     cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
