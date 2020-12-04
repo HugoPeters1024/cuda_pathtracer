@@ -139,4 +139,5 @@ more neat little tricks to make this project even better.
 [^ref2]: [Wavefront pathtracing](https://research.nvidia.com/sites/default/files/pubs/2013-07_Megakernels-Considered-Harmful/laine2013hpg_paper.pdf)
 [^ref3]: [Iterative tracing](http://raytracey.blogspot.com/2015/12/gpu-path-tracing-tutorial-2-interactive.html)
 [^ref4]: [Barrel distortion](https://www.imatest.com/docs/distortion_instructions/)
+[^ref5]: [Optix Slab Test](http://jcgt.org/published/0007/03/04/)
 

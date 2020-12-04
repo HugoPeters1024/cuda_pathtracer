@@ -97,36 +97,15 @@ HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
     return t>0;
 }
 
-HYBRID bool rayBoxIntersect(const Ray& r, const Box& box, float& mint, float& maxt)
+HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
 {
-    int signs[3];
-    float3 invdir = 1.0 / r.direction;
-    signs[0] = (int)(invdir.x < 0);
-    signs[1] = (int)(invdir.y < 0);
-    signs[2] = (int)(invdir.z < 0);
-    float3 bounds[2] { box.vmin, box.vmax };
-    float tmin, tmax, tymin, tymax, tzmin, tzmax;
-    bool ret = true;
-
-    tmin = (bounds[signs[0]].x - r.origin.x) * invdir.x;
-    tmax = (bounds[1-signs[0]].x - r.origin.x) * invdir.x;
-    tymin = (bounds[signs[1]].y - r.origin.y) * invdir.y;
-    tymax = (bounds[1-signs[1]].y - r.origin.y) * invdir.y;
-
-    ret &= !((tmin > tymax) || (tymin > tmax));
-    tmin = max(tymin, tmin);
-    tmax = min(tymax, tmax);
-
-    tzmin = (bounds[signs[2]].z - r.origin.z) * invdir.z;
-    tzmax = (bounds[1-signs[2]].z - r.origin.z) * invdir.z;
-
-    ret &= !((tmin > tzmax) || (tzmin > tmax));
-    tmin = max(tzmin, tmin);
-    tmax = min(tzmax, tmax);
-
-    mint = tmin;
-    maxt = tmax;
-    return ret && tmax > 0;
+    float3 t0 = (box.vmin - rayOrigin) * invRayDir;
+    float3 t1 = (box.vmax - rayOrigin) * invRayDir;
+    float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
+    tmin = fmaxcompf(tmin3);
+    float tmax = fmincompf(tmax3);
+    
+    return tmin <= tmax && tmax > 0;
 }
 
 HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
@@ -154,13 +133,13 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-HYBRID inline bool boxtest(const Box& box, const Ray& ray, const HitInfo& hitInfo)
+HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, const HitInfo& hitInfo)
 {
-    float tmin, tmax;
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
-    return rayBoxIntersect(ray, box, tmin, tmax) && tmin < hitInfo.t;
+    float tmin;
+    return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
 /*
@@ -218,12 +197,6 @@ __device__ bool traverseBVHShadows(const Ray& ray)
 }
 */
 
-struct LeafWork
-{
-    uint start;
-    uint end;
-};
-
 HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 {
     HitInfo hitInfo;
@@ -271,8 +244,11 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     uint stack[STACK_SIZE];
     uint size = 0;
 
+    // Precompute inv ray direction for better slab tests
+    float3 invRayDir = 1.0f / ray.direction;
+
     const BVHNode root = _GBVH[0];
-    if (boxtest(root.boundingBox, ray, hitInfo)) stack[size++] = 0;
+    if (boxtest(root.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
@@ -307,8 +283,8 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
             }
 
             // push on the stack, first the far child
-            if (boxtest(far.boundingBox, ray, hitInfo)) stack[size++] = far_id;
-            if (boxtest(near.boundingBox, ray, hitInfo)) stack[size++] = near_id;
+            if (boxtest(far.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = far_id;
+            if (boxtest(near.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = near_id;
 
             //assert (size < STACK_SIZE);
         }
@@ -370,8 +346,6 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
     reflected = 0.5 * (spol * spol + ppol * ppol);
-    //if (rand(seed) < reflected) return getReflectRay(ray, normal, intersectionPos, material, seed);
-
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
