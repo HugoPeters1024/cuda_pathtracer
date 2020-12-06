@@ -6,6 +6,7 @@
 #include <limits>
 #include <array>
 #include "linmath.h"
+#include "use_cuda.h"
 
 class Vector2 {
 public:
@@ -136,7 +137,7 @@ public:
   Matrix4() {}
   Matrix4(const mat4x4 data) { mat4x4_dup(this->data, data); }
   Matrix4(const Matrix4 &m) : Matrix4(m.data) {}
-  static Matrix4 FromColumnVectors(Vector3 &v0, Vector3 &v1, Vector3 &v2) {
+  static Matrix4 FromColumnVectors(Vector3 v0, Vector3 v1, Vector3 v2) {
     mat4x4 m;
     vec4 vv0 = { v0.x, v0.y, v0.z, 0 };
     vec4 vv1 = { v1.x, v1.y, v1.z, 0 };
@@ -156,6 +157,12 @@ public:
     vec4 i = { o.x, o.y, o.z, o.w };
     mat4x4_mul_vec4(r, data, i);
     return Vector4(r[0], r[1], r[2], r[3]);
+  }
+  HYBRID float4 operator* (const float4& o) const {
+      vec4 r;
+      vec4 i = { o.x, o.y, o.z, o.w };
+      mat4x4_mul_vec4(r, data, i);
+      return make_float4(r[0], r[1], r[2], r[3]);
   }
   Matrix4 operator * (const Matrix4 &o) const {
     mat4x4 r;

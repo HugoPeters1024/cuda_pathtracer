@@ -40,6 +40,8 @@ newmtl kamen_zid
 	map_Kd kamen.png
         map_bump kamen-bump.png
         bump kamen-bump.png
+        map_norm kamen-normal.png
+        norm kamen-normal.png
 
 newmtl stupovi
 	Ns 8.000000
@@ -68,8 +70,8 @@ newmtl pod
 	Ke 0.000000 0.000000 0.000000
 	map_Ka mramor6x6.png
 	map_Kd mramor6x6.png
-	map_bump mramor6x6-bump.png
-	bump mramor6x6-bump.png
+	map_norm mramor6x6-normal.png
+	norm mramor6x6-normal.png
 
 newmtl pod_tepih
 	Ns 8.000000

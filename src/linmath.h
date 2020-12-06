@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <float.h>
+#include "use_cuda.h"
 
 #ifdef _MSC_VER
 	#define inline __inline
@@ -288,7 +289,7 @@ static inline void mat4x4_mul(mat4x4 M, const mat4x4 a, const mat4x4 b)
 	}
 	mat4x4_dup(M, temp);
 }
-static inline void mat4x4_mul_vec4(vec4 r, const mat4x4 M, const vec4 v)
+HYBRID static inline void mat4x4_mul_vec4(vec4 r, const mat4x4 M, const vec4 v)
 {
 	for(int j=0; j<4; ++j) {
 		r[j] = 0.f;

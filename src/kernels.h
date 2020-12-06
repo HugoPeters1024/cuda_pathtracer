@@ -447,6 +447,8 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
+    const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
+    const TriangleV& triangleV = _GTriangles[hitInfo.primitive_id];
 
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
@@ -458,14 +460,28 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
     if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
     {
         float t, u, v;
-        assert( rayTriangleIntersect(ray, _GTriangles[hitInfo.primitive_id], t, u, v));
-        const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
+        assert( rayTriangleIntersect(ray, triangleV, t, u, v));
         // Calculate the exact texture location by interpolating the three vertices' texture coords
         float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
         float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
         // According to the mtl spec texture should be multiplied by the diffuse color
         // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
         material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
+    }
+
+    // sample the normal of the material by redoing the intersection
+    if (material.hasNormalMap && hitInfo.primitive_type == TRIANGLE)
+    {
+        float t, u, v;
+        assert( rayTriangleIntersect(ray, triangleV, t, u, v));
+        // Calculate the exact texture location by interpolating the three vertices' texture coords
+        float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
+        float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
+        stateBuf.setState(ray.pixeli, state);
+        float3 texNormal = normalize(make_float3(texColor.x * 2 - 1, texColor.y * 2 -1, texColor.z*2-1));
+        texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
+        if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
+        colliderNormal = texNormal;
     }
 
     // Create a secondary ray either diffuse or reflected

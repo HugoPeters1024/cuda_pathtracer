@@ -83,21 +83,25 @@ inline cudaTextureObject_t loadTexture(const char* filename)
 {
   int width, height, nrChannels;
 
-  float* data3 = stbi_loadf(filename, &width, &height, &nrChannels, 0);
+  unsigned char* data3 = stbi_load(filename, &width, &height, &nrChannels, 0);
   if (!data3) {
     fprintf(stderr, "Could not load texture: %s", filename);
     exit(8);
   } else { printf("Loaded texture %s (%ix%i)\n", filename, width, height);
   }
 
+  assert(nrChannels >= 3);
+
   // Convert the float data to 4 component float
   float* fdata = (float*)malloc(width*height*4*sizeof(float));
+  float r = 1.0f / 256.0f;
+
   for(int y=0; y<height; y++)
   {
     for(int x=0; x<width; x++) {
-      fdata[x*4+(height-y-1)*4*width+0] = data3[x*nrChannels+y*nrChannels*width+0];
-      fdata[x*4+(height-y-1)*4*width+1] = data3[x*nrChannels+y*nrChannels*width+1];
-      fdata[x*4+(height-y-1)*4*width+2] = data3[x*nrChannels+y*nrChannels*width+2];
+      fdata[x*4+(height-y-1)*4*width+0] = data3[x*nrChannels+y*nrChannels*width+0]*r;
+      fdata[x*4+(height-y-1)*4*width+1] = data3[x*nrChannels+y*nrChannels*width+1]*r;
+      fdata[x*4+(height-y-1)*4*width+2] = data3[x*nrChannels+y*nrChannels*width+2]*r;
       fdata[x*4+(height-y-1)*4*width+3] = 1;
     }
   }
@@ -117,6 +121,7 @@ inline cudaTextureObject_t loadTexture(const char* filename)
   texDesc.normalizedCoords = true;
   texDesc.addressMode[0] = cudaAddressModeWrap;
   texDesc.addressMode[1] = cudaAddressModeWrap;
+  texDesc.filterMode = cudaFilterModeLinear;
   texDesc.readMode = cudaReadModeElementType;
 
   cudaResourceViewDesc viewDesc;

@@ -17,6 +17,7 @@
 #include <vector_functions.h>
 
 #include "constants.h"
+#include "vec.h"
 
 #define inf 99999999
 
@@ -34,7 +35,9 @@ struct Material
     float refractive_index;
     float3 absorption;
     cudaTextureObject_t texture;
+    cudaTextureObject_t normal_texture;
     bool hasTexture = false;
+    bool hasNormalMap = false;
 
     Material() {}
     Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 specular_color, float3 absorption)
@@ -157,6 +160,7 @@ struct __align__(16) Triangle
     float2 uv1;
     float2 uv2;
     MATERIAL_ID material;
+    Matrix4 TBN;
 
     HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
     HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }
@@ -199,9 +203,10 @@ struct __align__(16) TriangleD
     float3 n0, n1, n2;
     float2 uv0, uv1, uv2;
     MATERIAL_ID material;
+    Matrix4 TBN;
 
-    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
-        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
+    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material, Matrix4 TBN)
+        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
 };
 
 static bool __compare_triangles_x (Triangle a, Triangle b) {

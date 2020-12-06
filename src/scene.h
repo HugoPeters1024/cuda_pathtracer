@@ -54,6 +54,7 @@ public:
         tinyobj::ObjReader objReader;
         objReader.ParseFromFile(filename, objConfig);
 
+
         std::map<std::string, cudaTextureObject_t> textureItems;
 
         Matrix4 transform = Matrix4::FromTranslation(offset.x, offset.y, offset.z) * Matrix4::FromScale(scale) * Matrix4::FromAxisRotations(rotation.x, rotation.y, rotation.z);
@@ -75,8 +76,6 @@ public:
 
                 // Ensure that we don't get crazy values by normalizing the
                 // different components
-                printf("reflect: %f\n", material.reflect);
-
                 float sum = material.transmit + material.reflect;
                 if (sum > 1)
                 {
@@ -104,6 +103,23 @@ public:
                     material.hasTexture = true;
                 }
 
+                if (mat.normal_texname != "")
+                {
+                    if (textureItems.find(mat.normal_texname) == textureItems.end())
+                    {
+                        // not found, load and add to map
+                        cudaTextureObject_t normal_texture = loadTexture(mat.normal_texname.c_str());
+                        material.normal_texture = normal_texture;
+                        textureItems[mat.normal_texname] = normal_texture;
+                    }
+                    else
+                    {
+                        // already loaded
+                        material.normal_texture = textureItems.at(mat.normal_texname);
+                    }
+                    material.hasNormalMap = true;
+                }
+
 
                 material_ids[m] = addMaterial(material);
             }
@@ -127,6 +143,15 @@ public:
                 float2 uv0 = hasUvs ? make_float2(uvs[it0.texcoord_index*2+0], uvs[it0.texcoord_index*2+1]) : make_float2(0);
                 float2 uv1 = hasUvs ? make_float2(uvs[it1.texcoord_index*2+0], uvs[it1.texcoord_index*2+1]) : make_float2(0);
                 float2 uv2 = hasUvs ? make_float2(uvs[it2.texcoord_index*2+0], uvs[it2.texcoord_index*2+1]) : make_float2(0);
+                if (useMtl)
+                {
+                    // MTL files suck!!!!
+                    auto mat = objReader.GetMaterials()[mit];
+                    float2 offset = make_float2(mat.diffuse_texopt.origin_offset[0], mat.diffuse_texopt.origin_offset[1]);
+                    uv0 = uv0 + offset;
+                    uv1 = uv1 + offset;
+                    uv2 = uv2 + offset;
+                }
 
                 Vector4 v0_tmp = transform * Vector4(v0.x, v0.y, v0.z, 1);
                 Vector4 v1_tmp = transform * Vector4(v1.x, v1.y, v1.z, 1);
@@ -151,17 +176,44 @@ public:
                     n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
                 }
 
-                if (useMtl)
+
+                Matrix4 TBN;
+                if (useMtl && materials[material_ids[mit]].hasNormalMap)
                 {
-                    // MTL files suck!!!!
-                    auto mat = objReader.GetMaterials()[mit];
-                    float2 offset = make_float2(mat.diffuse_texopt.origin_offset[0], mat.diffuse_texopt.origin_offset[1]);
-                    uv0 = uv0 + offset;
-                    uv1 = uv1 + offset;
-                    uv2 = uv2 + offset;
+                    // Calculate the inverted TBN matrix;
+                    float2 deltaUV1 = uv1 - uv0;
+                    float2 deltaUV2 = uv2 - uv0;
+
+                    float denom = (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+                    if (fabs(denom) > 0.000001)
+                    {
+                        float f = 1.0f / denom;
+                        float3 edge1 = v1 - v0;
+                        float3 edge2 = v2 - v0;
+                        float3 tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
+                        float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
+                        if (dot(cross(n0, tangent), bitangent) < 0.0f) tangent = -tangent;
+
+                        assert (fabs(dot(tangent, n0)) < EPS);
+                        assert (fabs(dot(bitangent, n0)) < EPS);
+
+                        // Matrix inversion is pretty heavy, only do it when needed
+                        TBN = Matrix4::FromColumnVectors(
+                                Vector3(tangent.x, tangent.y, tangent.z),
+                                Vector3(bitangent.x, bitangent.y, bitangent.z),
+                                Vector3(n0.x, n0.y, n0.z));
+
+                        Vector4 transformed = TBN * Vector4(0,0,1,0);
+                        int lol = 1;
+                    }
+                    else
+                    {
+                        materials[material_ids[mit]].hasNormalMap = false;
+                    }
                 }
 
-                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material});
+
+                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN});
             }
         }
     }
@@ -182,7 +234,7 @@ public:
         {
             const Triangle& t = triangles[i];
             ret.h_vertex_buffer[i] = TriangleV(t.v0, t.v1, t.v2);
-            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.uv0, t.uv1, t.uv2, t.material);
+            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.uv0, t.uv1, t.uv2, t.material, t.TBN);
         }
 
         // copy over the materials
