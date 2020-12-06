@@ -18,11 +18,11 @@ __device__ __constant__ TriangleD* DTriangleData;
 
 __device__ __constant__ Material* DMaterials;
 
-__device__ AtomicQueue<Ray> DRayQueue;
+__device__ AtomicQueue<RayPacked> DRayQueue;
 
-__device__ AtomicQueue<Ray> DShadowRayQueue;
+__device__ AtomicQueue<RayPacked> DShadowRayQueue;
 
-__device__ AtomicQueue<Ray> DRayQueueNew;
+__device__ AtomicQueue<RayPacked> DRayQueueNew;
 
 __device__ __constant__ DSizedBuffer<Sphere> DSpheres;
 

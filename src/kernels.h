@@ -377,7 +377,7 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
     uint seed = getSeed(x,y,time);
-    Ray ray = camera.getRay(x,y,seed);
+    RayPacked ray = RayPacked(camera.getRay(x,y,seed));
     DRayQueue.push(ray);
 }
 
@@ -385,7 +385,7 @@ __global__ void kernel_extend(HitInfo* intersections, uint bounce)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
-    const Ray ray = DRayQueue[i];
+    const Ray ray = DRayQueue[i].getRay();
     HitInfo hitInfo = traverseBVHStack(ray, false);
     intersections[i] = hitInfo;
 }
@@ -395,7 +395,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
-    const Ray ray = DRayQueue[i];
+    const Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
     uint seed = getSeed(i,wang_hash(i),time);
@@ -456,31 +456,30 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
     }
 
     // sample the texture of the material by redoing the intersection
-    if (material.hasTexture && hitInfo.primitive_type == TRIANGLE)
+    if (material.hasTexture || material.hasNormalMap)
     {
         float t, u, v;
         assert( rayTriangleIntersect(ray, triangleV, t, u, v));
         // Calculate the exact texture location by interpolating the three vertices' texture coords
         float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
-        float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
-        // According to the mtl spec texture should be multiplied by the diffuse color
-        // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
-        material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
-    }
 
-    // sample the normal of the material by redoing the intersection
-    if (material.hasNormalMap && hitInfo.primitive_type == TRIANGLE)
-    {
-        float t, u, v;
-        assert( rayTriangleIntersect(ray, triangleV, t, u, v));
-        // Calculate the exact texture location by interpolating the three vertices' texture coords
-        float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
-        float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
+        if (material.hasTexture)
+        {
+            float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
+            // According to the mtl spec texture should be multiplied by the diffuse color
+            // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
+            material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
+        }
 
-        float3 texNormal = normalize(make_float3(texColor.x * 2 - 1, texColor.y * 2 -1, texColor.z*2-1));
-        texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
-        if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
-        colliderNormal = texNormal;
+        // sample the normal of the material by redoing the intersection
+        if (material.hasNormalMap)
+        {
+            float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
+            float3 texNormal = normalize(make_float3(texColor.x * 2 - 1, texColor.y * 2 -1, texColor.z*2-1));
+            texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
+            if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
+            colliderNormal = texNormal;
+        }
     }
 
     // Create a secondary ray either diffuse or reflected
@@ -564,12 +563,12 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
                 // We invert the shadowrays to get coherent origins.
                 Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
                 shadowRay.length = shadowLength - 2 * EPS;
-                DShadowRayQueue.push(shadowRay);
+                DShadowRayQueue.push(RayPacked(shadowRay));
             }
         }
     }
 
-    DRayQueueNew.push(secondary);
+    DRayQueueNew.push(RayPacked(secondary));
     stateBuf.setState(ray.pixeli, state);
 }
 
@@ -579,7 +578,7 @@ __global__ void kernel_connect(TraceStateSOA stateBuf)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DShadowRayQueue.size) return;
 
-    const Ray& shadowRay = DShadowRayQueue[i];
+    const Ray& shadowRay = DShadowRayQueue[i].getRay();
     HitInfo hitInfo = traverseBVHStack(shadowRay, true);
     if (hitInfo.intersected) return;
 

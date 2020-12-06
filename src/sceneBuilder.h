@@ -128,7 +128,7 @@ inline SceneData getSibenikScene()
 
     // Add all the objects
     scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId, true);
-    //scene.addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
+    scene.addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
 //    scene.addModel("cube_brian.obj", 1, make_float3(0), make_float3(-4, 6, 0), 0, true);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
    // scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);

@@ -124,7 +124,7 @@ struct Box
     }
 };
 
-struct __align__(16) Ray
+struct Ray
 {
     float3 origin;
     float3 direction;
@@ -136,6 +136,29 @@ struct __align__(16) Ray
     HYBRID Ray(float3 origin, float3 direction, uint px, uint py) : origin(origin), direction(direction), pixeli(px + py * WINDOW_WIDTH) { length = 9999999;}
 
     __device__ float getSortingKey() const { return (float)pixeli; }
+};
+
+struct __align__(16) RayPacked
+{
+    float4 origin;
+    float4 direction;
+
+    HYBRID inline Ray getRay() const
+    {
+        Ray ret;
+        ret.origin = get3f(origin);
+        ret.direction = get3f(direction);
+        ret.length = origin.w;
+        ret.pixeli = reinterpret_cast<const uint&>(direction.w);
+        return ret;
+    }
+
+    HYBRID RayPacked() {}
+    HYBRID RayPacked(const Ray& ray)
+    {
+        origin = make_float4(ray.origin, ray.length);
+        direction = make_float4(ray.direction, reinterpret_cast<const float&>(ray.pixeli));
+    }
 };
 
 enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, PLANE, LIGHT };

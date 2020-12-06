@@ -10,9 +10,9 @@ class Pathtracer : public Application
 private:
     cudaGraphicsResource* pGraphicsResource;
     cudaArray *arrayPtr;
-    AtomicQueue<Ray> rayQueue;
-    AtomicQueue<Ray> shadowRayQueue;
-    AtomicQueue<Ray> rayQueueNew;
+    AtomicQueue<RayPacked> rayQueue;
+    AtomicQueue<RayPacked> shadowRayQueue;
+    AtomicQueue<RayPacked> rayQueueNew;
     DSizedBuffer<Sphere> dSphereBuffer;
     DSizedBuffer<Plane> dPlaneBuffer;
     DSizedBuffer<SphereLight> dSphereLightBuffer;
@@ -61,9 +61,9 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );
 
     // queue of rays for wavefront tracing
-    rayQueue = AtomicQueue<Ray>(NR_PIXELS);
-    shadowRayQueue = AtomicQueue<Ray>(NR_PIXELS);
-    rayQueueNew = AtomicQueue<Ray>(NR_PIXELS);
+    rayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
+    shadowRayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
+    rayQueueNew = AtomicQueue<RayPacked>(NR_PIXELS);
 
     // Allocate trace state SOA
     cudaSafe( cudaMalloc(&traceBufSOA.masks, NR_PIXELS * sizeof(float4)) );

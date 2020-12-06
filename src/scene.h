@@ -180,36 +180,19 @@ public:
                 Matrix4 TBN;
                 if (useMtl && materials[material_ids[mit]].hasNormalMap)
                 {
-                    // Calculate the inverted TBN matrix;
+                    float3 edge1 = v1 - v0;
+                    float3 edge2 = v2 - v0;
                     float2 deltaUV1 = uv1 - uv0;
                     float2 deltaUV2 = uv2 - uv0;
 
-                    float denom = (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                    if (true)
-                    {
-                        float f = 1.0f / denom;
-                        float3 edge1 = v1 - v0;
-                        float3 edge2 = v2 - v0;
-                        float3 tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
-                        float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
-                        if (dot(cross(n0, tangent), bitangent) < 0.0f) tangent = -tangent;
+                    float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+                    float3 tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
+                    float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
 
-                        //assert (fabs(dot(tangent, n0)) < EPS);
-                        //assert (fabs(dot(bitangent, n0)) < EPS);
-
-                        // Matrix inversion is pretty heavy, only do it when needed
-                        TBN = Matrix4::FromColumnVectors(
-                                Vector3(tangent.x, tangent.y, tangent.z),
-                                Vector3(bitangent.x, bitangent.y, bitangent.z),
-                                Vector3(n0.x, n0.y, n0.z));
-
-                        Vector4 transformed = TBN * Vector4(0,0,1,0);
-                        int lol = 1;
-                    }
-                    else
-                    {
-                        materials[material_ids[mit]].hasNormalMap = false;
-                    }
+                    TBN = Matrix4::FromColumnVectors(
+                            Vector3(tangent.x, tangent.y, tangent.z),
+                            Vector3(bitangent.x, bitangent.y, bitangent.z),
+                            Vector3(n0.x, n0.y, n0.z));
                 }
 
                 triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN});

@@ -63,19 +63,21 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
                 case 2: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_z); break;
             }
 
-            Box leftBox = triangles[start].getBoundingBox();
-            Box rightBox = triangles[start+count-1].getBoundingBox();
+            Box leftBox = Box::fromPoint(triangles[start].v0);
+            Box rightBox = Box::fromPoint(triangles[start+count-1].v0);
 
             // first sweep from the left to get the left costs
             // we sweep so we can incrementally update the bounding box for efficiency
             for (int i=0; i<count; i++)
             {
+                // left is exclusive
                 const Triangle& tl = triangles[start+i];
+                leftCosts[i] = leftBox.getSurfaceArea() * invParentSurface;
                 leftBox.consumePoint(tl.v0);
                 leftBox.consumePoint(tl.v1);
                 leftBox.consumePoint(tl.v2);
-                leftCosts[i] = leftBox.getSurfaceArea() * invParentSurface;
 
+                // right is inclusive
                 const Triangle& tr = triangles[start + count - i - 1];
                 rightBox.consumePoint(tr.v0);
                 rightBox.consumePoint(tr.v1);
@@ -87,7 +89,7 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
             for(int i=0; i<count; i++)
             {
                 // 0.5 is the cost of traversal
-                float thisCost = leftCosts[i] * i + rightCosts[count - i - 1] * (count - i) + 2.5;
+                float thisCost = leftCosts[i] * i + rightCosts[count - i - 1] * (count - i) + 1.5;
                 if (thisCost < min_cost)
                 {
                     min_cost = thisCost;
