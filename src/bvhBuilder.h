@@ -34,10 +34,14 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
 {
     // bvh size is bounded by 2*triangle_count-1
     BVHNode* ret = (BVHNode*)malloc((2 * triangles.size() - 1) * sizeof(BVHNode));
+    uint* indices = (uint*)malloc(triangles.size() * sizeof(uint));
+    for(uint i=0; i<triangles.size(); i++) indices[i] = i;
     float* leftCosts = (float*)malloc(triangles.size() * sizeof(float));
     float* rightCosts = (float*)malloc(triangles.size() * sizeof(float));
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
+
+    SORTING_SOURCE = triangles.data();
 
     work.push(std::make_tuple(node_count++, 0, triangles.size()));
 
@@ -49,7 +53,12 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         uint start = std::get<1>(workItem);
         uint count = std::get<2>(workItem);
 
-        Box boundingBox = buildTriangleBox(&triangles[start], count);
+        Box boundingBox = Box::fromPoint(triangles[indices[start]].v0);
+        for(int i=start; i<start+count; i++) {
+            boundingBox.consumePoint(triangles[indices[i]].v0);
+            boundingBox.consumePoint(triangles[indices[i]].v1);
+            boundingBox.consumePoint(triangles[indices[i]].v2);
+        }
         float invParentSurface = 1.0f / boundingBox.getSurfaceArea();
         int min_level = -1;
         int min_split_pos = -1;
@@ -58,27 +67,27 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         {
             // Sort the triangles on the dimension we want to check
             switch (level) {
-                case 0: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_x); break;
-                case 1: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_y); break;
-                case 2: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_z); break;
+                case 0: std::sort(indices+start, indices+start+count, __compare_triangles_x); break;
+                case 1: std::sort(indices+start, indices+start+count, __compare_triangles_y); break;
+                case 2: std::sort(indices+start, indices+start+count, __compare_triangles_z); break;
             }
 
-            Box leftBox = Box::fromPoint(triangles[start].v0);
-            Box rightBox = Box::fromPoint(triangles[start+count-1].v0);
+            Box leftBox = Box::fromPoint(triangles[indices[start]].v0);
+            Box rightBox = Box::fromPoint(triangles[indices[start+count-1]].v0);
 
             // first sweep from the left to get the left costs
             // we sweep so we can incrementally update the bounding box for efficiency
             for (int i=0; i<count; i++)
             {
                 // left is exclusive
-                const Triangle& tl = triangles[start+i];
+                const Triangle& tl = triangles[indices[start+i]];
                 leftCosts[i] = leftBox.getSurfaceArea() * invParentSurface;
                 leftBox.consumePoint(tl.v0);
                 leftBox.consumePoint(tl.v1);
                 leftBox.consumePoint(tl.v2);
 
                 // right is inclusive
-                const Triangle& tr = triangles[start + count - i - 1];
+                const Triangle& tr = triangles[indices[start + count - i - 1]];
                 rightBox.consumePoint(tr.v0);
                 rightBox.consumePoint(tr.v1);
                 rightBox.consumePoint(tr.v2);
@@ -113,9 +122,9 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         // Sort the triangles one last time based on the level the heuristic gave us
         // to ensure that they are in the expected order
         switch (min_level) {
-            case 0: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_x); break;
-            case 1: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_y); break;
-            // case 2 is already satisfied
+            case 0: std::sort(indices+start, indices+start+count, __compare_triangles_x); break;
+            case 1: std::sort(indices+start, indices+start+count, __compare_triangles_y); break;
+                // case 2 is already satisfied
         }
 
         // Create items for the children, ensures children are next to each other
@@ -131,6 +140,8 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
 
         assert (child2_start == child1_start+child1_count);
         assert (child1_count + child2_count == count);
+        assert (child1_count > 0);
+        assert (child2_count > 0);
 
         // push the work on the stack
         work.push(std::make_tuple(child2_index, child2_start, child2_count));
@@ -140,8 +151,16 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         ret[index] = BVHNode::MakeNode(boundingBox, child1_index, min_level);
     }
 
+    // permute the triangles given the indices.
+    auto tmp_triangles = std::vector<Triangle>(triangles.begin(), triangles.end());
+    for(int i=0; i<triangles.size(); i++)
+    {
+        triangles[i] = tmp_triangles[indices[i]];
+    }
+
     free(leftCosts);
     free(rightCosts);
+    free(indices);
 
     // Reduce the memory allocation to match the final size
     ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));

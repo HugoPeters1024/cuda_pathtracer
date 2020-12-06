@@ -232,16 +232,16 @@ struct __align__(16) TriangleD
         : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
 };
 
-static bool __compare_triangles_x (Triangle a, Triangle b) {
-    return (a.centroid().x < b.centroid().x);
-}
+static Triangle* SORTING_SOURCE;
 
-static bool __compare_triangles_y (Triangle a, Triangle b) {
-    return (a.centroid().y < b.centroid().y);
+static bool __compare_triangles_x (uint a, uint b) {
+    return (SORTING_SOURCE[a].centroid().x < SORTING_SOURCE[b].centroid().x);
 }
-
-static bool __compare_triangles_z (Triangle a, Triangle b) {
-    return (a.centroid().z < b.centroid().z);
+static bool __compare_triangles_y (uint a, uint b) {
+    return (SORTING_SOURCE[a].centroid().y < SORTING_SOURCE[b].centroid().y);
+}
+static bool __compare_triangles_z (uint a, uint b) {
+    return (SORTING_SOURCE[a].centroid().z < SORTING_SOURCE[b].centroid().z);
 }
 
 struct BVHSplittingTree
