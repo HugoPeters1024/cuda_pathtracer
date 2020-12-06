@@ -94,7 +94,7 @@ inline cudaTextureObject_t loadTexture(const char* filename)
 
   // Convert the float data to 4 component float
   float* fdata = (float*)malloc(width*height*4*sizeof(float));
-  float r = 1.0f / 256.0f;
+  float r = 1.0f / 255.0f;
 
   for(int y=0; y<height; y++)
   {

@@ -7,43 +7,20 @@
 #include "constants.h"
 #include "vec.h"
 
-Box buildTriangleBox(const Triangle* triangles, uint count)
-{
-    float min_x, min_y, min_z, max_x, max_y, max_z;
-    min_x = min_y = min_z = 100000;
-    max_x = max_y = max_z = -100000;
-    for(int i=0; i<count; i++)
-    {
-        const Triangle& t = triangles[i];
-        min_x = std::min(min_x, t.min_x());
-        min_y = std::min(min_y, t.min_y());
-        min_z = std::min(min_z, t.min_z());
-
-        max_x = std::max(max_x, t.max_x());
-        max_y = std::max(max_y, t.max_y());
-        max_z = std::max(max_z, t.max_z());
-    }
-
-    return Box {
-        make_float3(min_x, min_y, min_z),
-        make_float3(max_x, max_y, max_z)
-    };
-}
-
-BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
+BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
 {
     // bvh size is bounded by 2*triangle_count-1
-    BVHNode* ret = (BVHNode*)malloc((2 * triangles.size() - 1) * sizeof(BVHNode));
-    uint* indices = (uint*)malloc(triangles.size() * sizeof(uint));
-    for(uint i=0; i<triangles.size(); i++) indices[i] = i;
-    float* leftCosts = (float*)malloc(triangles.size() * sizeof(float));
-    float* rightCosts = (float*)malloc(triangles.size() * sizeof(float));
+    BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
+    uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
+    for(uint i=0; i<trianglesV.size(); i++) indices[i] = i;
+    float* leftCosts = (float*)malloc(trianglesV.size() * sizeof(float));
+    float* rightCosts = (float*)malloc(trianglesV.size() * sizeof(float));
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
 
-    SORTING_SOURCE = triangles.data();
+    SORTING_SOURCE = trianglesV.data();
 
-    work.push(std::make_tuple(node_count++, 0, triangles.size()));
+    work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
 
     while(!work.empty())
     {
@@ -67,22 +44,22 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
                 case 2: std::sort(indices+start, indices+start+count, __compare_triangles_z); break;
             }
 
-            Box leftBox = Box::fromPoint(triangles[indices[start]].v0);
-            Box rightBox = Box::fromPoint(triangles[indices[start+count-1]].v0);
+            Box leftBox = Box::fromPoint(trianglesV[indices[start]].v0);
+            Box rightBox = Box::fromPoint(trianglesV[indices[start+count-1]].v0);
 
             // first sweep from the left to get the left costs
             // we sweep so we can incrementally update the bounding box for efficiency
             for (int i=0; i<count; i++)
             {
                 // left is exclusive
-                const Triangle& tl = triangles[indices[start+i]];
+                const TriangleV& tl = trianglesV[indices[start+i]];
                 leftCosts[i] = leftBox.getSurfaceArea();
                 leftBox.consumePoint(tl.v0);
                 leftBox.consumePoint(tl.v1);
                 leftBox.consumePoint(tl.v2);
 
                 // right is inclusive
-                const Triangle& tr = triangles[indices[start + count - i - 1]];
+                const TriangleV& tr = trianglesV[indices[start + count - i - 1]];
                 rightBox.consumePoint(tr.v0);
                 rightBox.consumePoint(tr.v1);
                 rightBox.consumePoint(tr.v2);
@@ -151,10 +128,12 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
     }
 
     // permute the triangles given the indices.
-    auto tmp_triangles = std::vector<Triangle>(triangles.begin(), triangles.end());
-    for(int i=0; i<triangles.size(); i++)
+    auto tmp_trianglesV = std::vector<TriangleV>(trianglesV.begin(), trianglesV.end());
+    auto tmp_trianglesD = std::vector<TriangleD>(trianglesD.begin(), trianglesD.end());
+    for(int i=0; i<trianglesV.size(); i++)
     {
-        triangles[i] = tmp_triangles[indices[i]];
+        trianglesV[i] = tmp_trianglesV[indices[i]];
+        trianglesD[i] = tmp_trianglesD[indices[i]];
     }
 
     free(leftCosts);

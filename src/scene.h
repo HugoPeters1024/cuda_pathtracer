@@ -27,7 +27,8 @@ struct SceneData
 class Scene
 {
 public:
-    std::vector<Triangle> triangles;
+    std::vector<TriangleV> trianglesV;
+    std::vector<TriangleD> trianglesD;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
@@ -195,7 +196,8 @@ public:
                             Vector3(n0.x, n0.y, n0.z));
                 }
 
-                triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN});
+                trianglesV.push_back(TriangleV(v0, v1, v2));
+                trianglesD.push_back(TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN));
             }
         }
     }
@@ -205,41 +207,26 @@ public:
         assert(sphereLights.size() > 0);
         SceneData ret;
 
+        printf("Building a BVH...\n");
         uint bvhSize;
-        ret.h_bvh_buffer = createBVH(triangles, &bvhSize);
+        ret.h_bvh_buffer = createBVH(trianglesV, trianglesD, &bvhSize);
         printf("BVH Size: %u\n", bvhSize);
 
-        // Split the vertices and other data for better caching
-        ret.h_vertex_buffer = (TriangleV*)malloc(triangles.size() * sizeof(TriangleV));
-        ret.h_data_buffer = (TriangleD*)malloc(triangles.size() * sizeof(TriangleD));
-        for(int i=0; i<triangles.size(); i++)
-        {
-            const Triangle& t = triangles[i];
-            ret.h_vertex_buffer[i] = TriangleV(t.v0, t.v1, t.v2);
-            ret.h_data_buffer[i] = TriangleD(t.n0, t.n1, t.n2, t.uv0, t.uv1, t.uv2, t.material, t.TBN);
-        }
+        ret.h_vertex_buffer = trianglesV.data();
+        ret.h_data_buffer = trianglesD.data();
 
-        // copy over the materials
-        ret.h_material_buffer = (Material*)malloc(materials.size() * sizeof(Material));
-        memcpy(ret.h_material_buffer, materials.data(), materials.size() * sizeof(Material));
-
-        // copy over the spheres
-        ret.h_sphere_buffer = (Sphere*)malloc(spheres.size() * sizeof(Sphere));
-        memcpy(ret.h_sphere_buffer, spheres.data(), spheres.size() * sizeof(Sphere));
-
-        // copy over the planes
-        ret.h_plane_buffer = (Plane*)malloc(planes.size() * sizeof(Plane));
-        memcpy(ret.h_plane_buffer, planes.data(), planes.size() * sizeof(Plane));
+        ret.h_material_buffer = materials.data();
+        ret.h_sphere_buffer = spheres.data();
+        ret.h_plane_buffer = planes.data();
 
         // copy over the point lights
-        ret.h_point_light_buffer = (PointLight*)malloc(pointLights.size() * sizeof(PointLight));
-        memcpy(ret.h_point_light_buffer, pointLights.data(), pointLights.size() * sizeof(PointLight));
+        ret.h_point_light_buffer = pointLights.data();
 
         // copy over the sphere lights
-        ret.h_sphere_light_buffer = (SphereLight*)malloc(sphereLights.size() * sizeof(SphereLight));
-        memcpy(ret.h_sphere_light_buffer, sphereLights.data(), sphereLights.size() * sizeof(SphereLight));
+        ret.h_sphere_light_buffer = sphereLights.data();
 
-        ret.num_triangles = triangles.size();
+        assert(trianglesV.size() == trianglesD.size());
+        ret.num_triangles = trianglesV.size();
         ret.num_bvh_nodes = bvhSize;
         ret.num_materials = materials.size();
         ret.num_spheres = spheres.size();

@@ -171,50 +171,6 @@ struct __align__(16) HitInfo
     float t;
 };
 
-struct __align__(16) Triangle
-{
-    float3 v0;
-    float3 v1;
-    float3 v2;
-    float3 n0;
-    float3 n1;
-    float3 n2;
-    float2 uv0;
-    float2 uv1;
-    float2 uv2;
-    MATERIAL_ID material;
-    Matrix4 TBN;
-
-    HYBRID inline float3 centroid() const { return (v0 + v1 + v2) / 3.0f; }
-    HYBRID inline float max_x() const { return max(v0.x, max(v1.x, v2.x)); }
-    HYBRID inline float max_y() const { return max(v0.y, max(v1.y, v2.y)); }
-    HYBRID inline float max_z() const { return max(v0.z, max(v1.z, v2.z)); }
-    HYBRID inline float min_x() const { return min(v0.x, min(v1.x, v2.x)); }
-    HYBRID inline float min_y() const { return min(v0.y, min(v1.y, v2.y)); }
-    HYBRID inline float min_z() const { return min(v0.z, min(v1.z, v2.z)); }
-
-    Box getBoundingBox() const
-    {
-        float vminx = min(v0.x, min(v1.x, v2.x));
-        float vminy = min(v0.y, min(v1.y, v2.y));
-        float vminz = min(v0.z, min(v1.z, v2.z));
-
-        float vmaxx = max(v0.x, max(v1.x, v2.x));
-        float vmaxy = max(v0.y, max(v1.y, v2.y));
-        float vmaxz = max(v0.z, max(v1.z, v2.z));
-
-        return Box {
-            make_float3(vminx, vminy, vminz),
-            make_float3(vmaxx, vmaxy, vmaxz)
-        };
-    }
-
-    float getSurfaceArea() const
-    {
-        return 0.5 * (v0.x*(v1.y - v2.y) + v1.x*(v2.y - v0.y) + v2.x*(v0.y-v1.y));
-    }
-};
-
 struct __align__(16) TriangleV
 {
     float3 v0, v1, v2;
@@ -232,48 +188,25 @@ struct __align__(16) TriangleD
         : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
 };
 
-static Triangle* SORTING_SOURCE;
+static TriangleV* SORTING_SOURCE;
 
 static bool __compare_triangles_x (uint a, uint b) {
-    return (SORTING_SOURCE[a].centroid().x < SORTING_SOURCE[b].centroid().x);
+    const TriangleV& ta = SORTING_SOURCE[a];
+    const TriangleV& tb = SORTING_SOURCE[b];
+    return ta.v0.x + ta.v1.x + ta.v2.x < tb.v0.x + tb.v1.x + tb.v2.x;
 }
+
 static bool __compare_triangles_y (uint a, uint b) {
-    return (SORTING_SOURCE[a].centroid().y < SORTING_SOURCE[b].centroid().y);
+    const TriangleV& ta = SORTING_SOURCE[a];
+    const TriangleV& tb = SORTING_SOURCE[b];
+    return ta.v0.y + ta.v1.y + ta.v2.y < tb.v0.y + tb.v1.y + tb.v2.y;
 }
+
 static bool __compare_triangles_z (uint a, uint b) {
-    return (SORTING_SOURCE[a].centroid().z < SORTING_SOURCE[b].centroid().z);
+    const TriangleV& ta = SORTING_SOURCE[a];
+    const TriangleV& tb = SORTING_SOURCE[b];
+    return ta.v0.z + ta.v1.z + ta.v2.z < tb.v0.z + tb.v1.z + tb.v2.z;
 }
-
-struct BVHSplittingTree
-{
-    float cost;
-    BVHSplittingTree* child1;
-    BVHSplittingTree* child2;
-};
-
-struct BVHTree
-{
-    BVHTree* child1;
-    BVHTree* child2;
-    bool isLeaf;
-    std::vector<Triangle> triangles;
-    Box boundingBox;
-    int used_level = -1;
-
-    uint treeSize() const {
-        if (isLeaf) return 1;
-        uint left = child1 != nullptr ? child1->treeSize() : 0;
-        uint right = child2 != nullptr ? child2->treeSize() : 0;
-        return 1 + left + right;
-    }
-
-    ~BVHTree()
-    {
-        delete child1;
-        delete child2;
-    }
-};
-
 
 struct __align__(16) BVHNode
 {
@@ -284,6 +217,7 @@ struct __align__(16) BVHNode
         uint t_start;
     };
     uint t_data;
+
     HYBRID uint split_plane() const { return t_data >> 30; }
     HYBRID uint t_count() const { return t_data & (0xffffffff>>2); }
     HYBRID bool isLeaf() const { return t_count() > 0; }
