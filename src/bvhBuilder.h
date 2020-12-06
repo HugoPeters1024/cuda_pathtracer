@@ -113,7 +113,7 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         switch (min_level) {
             case 0: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_x); break;
             case 1: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_y); break;
-            case 2: std::sort(triangles.begin()+start, triangles.begin()+start+count, __compare_triangles_z); break;
+            // case 2 is already satisfied
         }
 
         // Create items for the children, ensures children are next to each other

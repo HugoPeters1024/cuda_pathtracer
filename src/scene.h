@@ -185,7 +185,7 @@ public:
                     float2 deltaUV2 = uv2 - uv0;
 
                     float denom = (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                    if (fabs(denom) > 0.000001)
+                    if (true)
                     {
                         float f = 1.0f / denom;
                         float3 edge1 = v1 - v0;
@@ -194,8 +194,8 @@ public:
                         float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
                         if (dot(cross(n0, tangent), bitangent) < 0.0f) tangent = -tangent;
 
-                        assert (fabs(dot(tangent, n0)) < EPS);
-                        assert (fabs(dot(bitangent, n0)) < EPS);
+                        //assert (fabs(dot(tangent, n0)) < EPS);
+                        //assert (fabs(dot(bitangent, n0)) < EPS);
 
                         // Matrix inversion is pretty heavy, only do it when needed
                         TBN = Matrix4::FromColumnVectors(
@@ -211,7 +211,6 @@ public:
                         materials[material_ids[mit]].hasNormalMap = false;
                     }
                 }
-
 
                 triangles.push_back(Triangle { v0, v1, v2, n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN});
             }

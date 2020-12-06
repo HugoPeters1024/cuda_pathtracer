@@ -405,7 +405,6 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-        if (bounce > 0) sk = sk * 10;
         /*
         // Artificially increase contrast to make the sun a more apparent light source
         // without affecting the direct view of the image.
@@ -477,7 +476,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
         // Calculate the exact texture location by interpolating the three vertices' texture coords
         float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
         float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-        stateBuf.setState(ray.pixeli, state);
+
         float3 texNormal = normalize(make_float3(texColor.x * 2 - 1, texColor.y * 2 -1, texColor.z*2-1));
         texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
         if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
