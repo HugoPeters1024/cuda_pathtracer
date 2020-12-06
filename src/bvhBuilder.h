@@ -53,16 +53,11 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
         uint start = std::get<1>(workItem);
         uint count = std::get<2>(workItem);
 
-        Box boundingBox = Box::fromPoint(triangles[indices[start]].v0);
-        for(int i=start; i<start+count; i++) {
-            boundingBox.consumePoint(triangles[indices[i]].v0);
-            boundingBox.consumePoint(triangles[indices[i]].v1);
-            boundingBox.consumePoint(triangles[indices[i]].v2);
-        }
-        float invParentSurface = 1.0f / boundingBox.getSurfaceArea();
         int min_level = -1;
         int min_split_pos = -1;
         float min_cost = count;
+        Box boundingBox;
+        float invParentSurface;
         for(int level = 0; level<3; level++)
         {
             // Sort the triangles on the dimension we want to check
@@ -81,7 +76,7 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
             {
                 // left is exclusive
                 const Triangle& tl = triangles[indices[start+i]];
-                leftCosts[i] = leftBox.getSurfaceArea() * invParentSurface;
+                leftCosts[i] = leftBox.getSurfaceArea();
                 leftBox.consumePoint(tl.v0);
                 leftBox.consumePoint(tl.v1);
                 leftBox.consumePoint(tl.v2);
@@ -91,14 +86,18 @@ BVHNode* createBVH(std::vector<Triangle>& triangles, uint* bvh_size)
                 rightBox.consumePoint(tr.v0);
                 rightBox.consumePoint(tr.v1);
                 rightBox.consumePoint(tr.v2);
-                rightCosts[i] = rightBox.getSurfaceArea() * invParentSurface;
+                rightCosts[i] = rightBox.getSurfaceArea();
             }
+
+            // left box and right box now have the full set of triangles, so we know the parent surface
+            boundingBox = rightBox;
+            invParentSurface = 1.0f / boundingBox.getSurfaceArea();
 
             // Find the optimal combined costs index
             for(int i=0; i<count; i++)
             {
                 // 0.5 is the cost of traversal
-                float thisCost = leftCosts[i] * i + rightCosts[count - i - 1] * (count - i) + 1.5;
+                float thisCost = leftCosts[i] * i * invParentSurface + rightCosts[count - i - 1] * (count - i) * invParentSurface + 1.5;
                 if (thisCost < min_cost)
                 {
                     min_cost = thisCost;
