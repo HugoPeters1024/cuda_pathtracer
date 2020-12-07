@@ -7,7 +7,7 @@
 #include "constants.h"
 #include "vec.h"
 
-BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
+inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
 {
     // bvh size is bounded by 2*triangle_count-1
     BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
@@ -74,7 +74,7 @@ BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& t
             for(int i=0; i<count; i++)
             {
                 // 0.5 is the cost of traversal
-                float thisCost = leftCosts[i] * i * invParentSurface + rightCosts[count - i - 1] * (count - i) * invParentSurface + 1.5;
+                float thisCost = leftCosts[i] * i * invParentSurface + rightCosts[count - i - 1] * (count - i) * invParentSurface + EPS;
                 if (thisCost < min_cost)
                 {
                     min_cost = thisCost;

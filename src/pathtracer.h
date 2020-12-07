@@ -16,7 +16,7 @@ private:
     DSizedBuffer<Sphere> dSphereBuffer;
     DSizedBuffer<Plane> dPlaneBuffer;
     DSizedBuffer<SphereLight> dSphereLightBuffer;
-    HitInfo* intersectionBuf;
+    HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
 
@@ -70,7 +70,7 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&traceBufSOA.accucolors, NR_PIXELS * sizeof(float4)) );
     cudaSafe( cudaMalloc(&traceBufSOA.lights, NR_PIXELS * sizeof(float4)) );
 
-    cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfo)) );
+    cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfoPacked)) );
 
 
     // Enable NEE by default

@@ -381,17 +381,17 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     DRayQueue.push(ray);
 }
 
-__global__ void kernel_extend(HitInfo* intersections, uint bounce)
+__global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i].getRay();
     HitInfo hitInfo = traverseBVHStack(ray, false);
-    intersections[i] = hitInfo;
+    intersections[i] = HitInfoPacked(hitInfo);
 }
 
 
-__global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -399,7 +399,7 @@ __global__ void kernel_shade(const HitInfo* intersections, TraceStateSOA stateBu
     TraceState state = stateBuf.getState(ray.pixeli);
 
     uint seed = getSeed(i,wang_hash(i),time);
-    const HitInfo hitInfo = intersections[i];
+    const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected) {
         // We consider the skydome a lightsource in the set of random bounces
         float2 uvCoords = normalToUv(ray.direction);

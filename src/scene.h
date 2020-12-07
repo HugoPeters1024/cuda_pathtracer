@@ -73,7 +73,7 @@ public:
                 material.specular_color = make_float3(mat.specular[0], mat.specular[1], mat.specular[2]);
                 material.transmit = 1-mat.dissolve;
                 material.reflect = (mat.specular[0]+mat.specular[1]+mat.specular[2])/3.0f;
-                material.glossy = mat.shininess / 1000.0f;
+                material.glossy = mat.shininess / 4000.0f;
 
                 // Ensure that we don't get crazy values by normalizing the
                 // different components

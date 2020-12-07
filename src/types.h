@@ -163,12 +163,38 @@ struct __align__(16) RayPacked
 
 enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, PLANE, LIGHT };
 
+
 struct __align__(16) HitInfo
 {
     PRIMITIVE_TYPE primitive_type;
     bool intersected;
     uint primitive_id;
     float t;
+};
+
+struct __align__(16) HitInfoPacked
+{
+    float4 data;
+
+    __device__ HitInfo getHitInfo() const
+    {
+        return HitInfo
+        {
+            reinterpret_cast<const PRIMITIVE_TYPE&>(data.x),
+            reinterpret_cast<const bool&>(data.y),
+            reinterpret_cast<const uint&>(data.z),
+            data.w,
+        };
+    }
+
+    __device__ HitInfoPacked(const HitInfo& hitInfo)
+    {
+        data = make_float4(
+                reinterpret_cast<const float&>(hitInfo.primitive_type),
+                reinterpret_cast<const float&>(hitInfo.intersected),
+                reinterpret_cast<const float&>(hitInfo.primitive_id),
+                hitInfo.t);
+    }
 };
 
 struct __align__(16) TriangleV
