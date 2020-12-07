@@ -1,6 +1,5 @@
 #ifndef H_KERNELS
 #define H_KERNELS
-
 #include "constants.h"
 #include "use_cuda.h"
 #include "types.h"
@@ -607,6 +606,20 @@ __global__ void kernel_clear_screen(cudaSurfaceObject_t texRef)
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
     surf2Dwrite(make_float4(0), texRef, x*sizeof(float4), y);
+}
+
+__global__ void kernel_clear_rays()
+{
+    DRayQueue.clear();
+    DShadowRayQueue.clear();
+    DRayQueueNew.clear();
+}
+
+__global__ void kernel_swap_and_clear()
+{
+    swapc(DRayQueue, DRayQueueNew);
+    DRayQueueNew.clear();
+    DShadowRayQueue.clear();
 }
 
 #endif

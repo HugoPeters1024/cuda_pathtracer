@@ -335,7 +335,7 @@ struct AtomicQueue
         values[atomicAdd(&size, 1)] = ray;
     }
 
-    inline void clear() { size = 0; }
+    __device__ inline void clear() { size = 0; }
 };
 
 template <class T>

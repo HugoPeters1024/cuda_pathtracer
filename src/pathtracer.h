@@ -62,8 +62,11 @@ void Pathtracer::Init()
 
     // queue of rays for wavefront tracing
     rayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
+    rayQueue.syncToDevice(DRayQueue);
     shadowRayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
+    shadowRayQueue.syncToDevice(DShadowRayQueue);
     rayQueueNew = AtomicQueue<RayPacked>(NR_PIXELS);
+    rayQueueNew.syncToDevice(DRayQueueNew);
 
     // Allocate trace state SOA
     cudaSafe( cudaMalloc(&traceBufSOA.masks, NR_PIXELS * sizeof(float4)) );
@@ -83,7 +86,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     dSphereLightBuffer.update(sceneData.h_sphere_light_buffer);
 
     // sync NEE toggle
-    cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
+    cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
 
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
@@ -116,39 +119,33 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
 
     // Generate primary rays in the ray queue
-    rayQueue.clear();
-    rayQueue.syncToDevice(DRayQueue);
+    //rayQueue.clear();
+    //rayQueue.syncToDevice(DRayQueue);
+    //cudaSafe ( cudaDeviceSynchronize() );
+    
+    kernel_clear_rays<<<1,1>>>();
     kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, currentTime);
-    rayQueue.syncFromDevice(DRayQueue);
-    assert (rayQueue.size == WINDOW_WIDTH * WINDOW_HEIGHT);
 
 
     uint max_bounces;
     if (_NEE)
-        max_bounces = shouldClear ? 1 : 5;
+        max_bounces = shouldClear ? 2 : 5;
     else
         max_bounces = shouldClear ? 2 : 5;
 
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,
-        kernel_extend<<<rayQueue.size / 64 + 1, 64>>>(intersectionBuf, bounce);
+        kernel_extend<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        shadowRayQueue.clear();
-        shadowRayQueue.syncToDevice(DShadowRayQueue);
-        rayQueueNew.clear();
-        rayQueueNew.syncToDevice(DRayQueueNew);
-        kernel_shade<<<rayQueue.size / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
-        shadowRayQueue.syncFromDevice(DShadowRayQueue);
-        rayQueueNew.syncFromDevice(DRayQueueNew);
+        kernel_shade<<<NR_PIXELS / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
 
         // Sample the light source for every shadow ray
-        kernel_connect<<<shadowRayQueue.size / 128 + 1, 128>>>(traceBufSOA);
+        kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
 
-        // swap the ray buffers
-        rayQueueNew.syncToDevice(DRayQueue);
-        std::swap(rayQueue, rayQueueNew);
+        // swap the ray buffers and clear.
+        kernel_swap_and_clear<<<1,1>>>();
     }
 
     // Write the final state accumulator into the texture
