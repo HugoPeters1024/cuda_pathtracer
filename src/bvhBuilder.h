@@ -35,6 +35,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     
     BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
     uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
+    uint* binIds = (uint*)malloc(trianglesV.size() * sizeof(uint));
     float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
     for(uint i=0; i<trianglesV.size(); i++) 
     {
@@ -44,7 +45,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
 
-    SORTING_SOURCE = centroids;
+    BIN_SOURCE = binIds;
 
     work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
 
@@ -94,12 +95,14 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         }
 
         // Populate the bins
+        float binFac = K*(1-EPS) / (bmax - bmin);
         for(int i=start; i<start+count; i++)
         {
             float3 centroid = centroids[indices[i]];
             const TriangleV& t = trianglesV[indices[i]];
-            uint binId = getBinId(K, axis, centroid, bmin, bmax);
+            uint binId = uint((at(centroid, axis) - bmin) * binFac);
             assert(binId >= 0 && binId < K);
+            binIds[indices[i]] = binId;
 
             binCounts[binId]++;
             bins[binId].consumePoint(t.v0);
@@ -155,9 +158,10 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
 
         // splitting should never be better than terminating with 1
         // triangle.
-        assert (count >= 1);
+       // assert (count >= 1);
 
-        auto it = std::partition(indices+start, indices+start+count, [centroids, axis, bmin, bmax,min_k](uint ii){return getBinId(K, axis, centroids[ii], bmin, bmax) < min_k;});
+        BIN_K = min_k;
+        auto it = std::partition(indices+start, indices+start+count, __compare_triangles_bin);
 
         // Create items for the children, ensures children are next to each other
         // in memory
@@ -170,10 +174,12 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         uint child2_start = start + child1_count;
         uint child2_count = count - child1_count;
 
+        /*
         assert (child2_start == child1_start+child1_count);
         assert (child1_count + child2_count == count);
         assert (child1_count > 0);
         assert (child2_count > 0);
+        */
 
         // push the work on the stack
         work.push(std::make_tuple(child2_index, child2_start, child2_count));
@@ -188,6 +194,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     permuteTriangles(indices, trianglesV.data(), trianglesD.data(), trianglesV.size());
 
     free(indices);
+    free(binIds);
     free(centroids);
     ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));
     *bvh_size = node_count;

@@ -231,6 +231,8 @@ struct __align__(16) TriangleD
 };
 
 static float3* SORTING_SOURCE;
+static uint* BIN_SOURCE;
+static uint BIN_K;
 
 static bool __compare_triangles_x (uint a, uint b) {
     return SORTING_SOURCE[a].x < SORTING_SOURCE[b].x;
@@ -240,6 +242,9 @@ static bool __compare_triangles_y (uint a, uint b) {
 }
 static bool __compare_triangles_z (uint a, uint b) {
     return SORTING_SOURCE[a].z < SORTING_SOURCE[b].z;
+}
+static bool __compare_triangles_bin(uint a) {
+    return BIN_SOURCE[a] < BIN_K;
 }
 
 struct __align__(16) BVHNode
