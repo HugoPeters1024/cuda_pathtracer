@@ -92,6 +92,8 @@ struct Box
     float3 vmin;
     float3 vmax;
 
+    Box() {}
+    Box(float3 vmin, float3 vmax) : vmin(vmin), vmax(vmax) {}
     HYBRID inline float3 centroid() const { return (vmin + vmax) * 0.5; }
     HYBRID inline float diagonal() const { return length(vmin - vmax); };
     inline float volume() const { return abs((vmax.x - vmin.x) * (vmax.y - vmin.y) * (vmax.z - vmin.z)); }
@@ -108,6 +110,14 @@ struct Box
     {
         return Box {
             p,p
+        };
+    }
+
+    static Box insideOut()
+    {
+        return Box {
+            make_float3(9999999),
+            make_float3(-9999999)
         };
     }
 
@@ -214,24 +224,16 @@ struct __align__(16) TriangleD
         : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
 };
 
-static TriangleV* SORTING_SOURCE;
+static float3* SORTING_SOURCE;
 
 static bool __compare_triangles_x (uint a, uint b) {
-    const TriangleV& ta = SORTING_SOURCE[a];
-    const TriangleV& tb = SORTING_SOURCE[b];
-    return ta.v0.x + ta.v1.x + ta.v2.x < tb.v0.x + tb.v1.x + tb.v2.x;
+    return SORTING_SOURCE[a].x < SORTING_SOURCE[b].x;
 }
-
 static bool __compare_triangles_y (uint a, uint b) {
-    const TriangleV& ta = SORTING_SOURCE[a];
-    const TriangleV& tb = SORTING_SOURCE[b];
-    return ta.v0.y + ta.v1.y + ta.v2.y < tb.v0.y + tb.v1.y + tb.v2.y;
+    return SORTING_SOURCE[a].y < SORTING_SOURCE[b].y;
 }
-
 static bool __compare_triangles_z (uint a, uint b) {
-    const TriangleV& ta = SORTING_SOURCE[a];
-    const TriangleV& tb = SORTING_SOURCE[b];
-    return ta.v0.z + ta.v1.z + ta.v2.z < tb.v0.z + tb.v1.z + tb.v2.z;
+    return SORTING_SOURCE[a].z < SORTING_SOURCE[b].z;
 }
 
 struct __align__(16) BVHNode

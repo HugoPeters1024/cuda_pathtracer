@@ -404,6 +404,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        if (bounce > 0) sk = sk * 10;
         /*
         // Artificially increase contrast to make the sun a more apparent light source
         // without affecting the direct view of the image.
@@ -559,10 +560,14 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
                 state.light = state.mask * light.color * SA * DSphereLights.size;
 
-                // We invert the shadowrays to get coherent origins.
-                Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
-                shadowRay.length = shadowLength - 2 * EPS;
-                DShadowRayQueue.push(RayPacked(shadowRay));
+                // contribution will not be worth it otherwise.
+                if (dot(state.light, state.light) > 0.03)
+                {
+                    // We invert the shadowrays to get coherent origins.
+                    Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
+                    shadowRay.length = shadowLength - 2 * EPS;
+                    DShadowRayQueue.push(RayPacked(shadowRay));
+                }
             }
         }
     }

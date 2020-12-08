@@ -7,18 +7,188 @@
 #include "constants.h"
 #include "vec.h"
 
+inline void permuteTriangles(uint* indices, TriangleV* trianglesV, TriangleD* trianglesD, uint n)
+{
+    // permute the triangles given the indices. 
+    auto tmp_trianglesV = std::vector<TriangleV>(trianglesV, trianglesV + n);
+    auto tmp_trianglesD = std::vector<TriangleD>(trianglesD, trianglesD + n);
+    for(int i=0; i<n; i++)
+    {
+        trianglesV[i] = tmp_trianglesV[indices[i]];
+        trianglesD[i] = tmp_trianglesD[indices[i]];
+    }
+}
+
+// http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
+inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
+{
+    float ping = glfwGetTime();
+    // find dominant axis
+    // uniformly select K spatial intervals
+    // use nth_interval to partition the triangles
+    const uint K = 16;
+    
+    BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
+    uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
+    float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
+    for(uint i=0; i<trianglesV.size(); i++) 
+    {
+        indices[i] = i;
+        centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
+    }
+    std::stack<std::tuple<uint, uint, uint>> work;
+    uint node_count = 0;
+
+    SORTING_SOURCE = centroids;
+
+    work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
+
+    while(!work.empty())
+    {
+        auto workItem = work.top();
+        work.pop();
+        uint index = std::get<0>(workItem);
+        uint start = std::get<1>(workItem);
+        uint count = std::get<2>(workItem);
+
+        // use centroids to find the dominant axis.
+        Box parent = Box::insideOut();
+        for(int i=start; i<start+count; i++)
+        {
+            const TriangleV& t = trianglesV[indices[i]];
+            parent.consumePoint(t.v0);
+            parent.consumePoint(t.v1);
+            parent.consumePoint(t.v2);
+        }
+        float invParentSurface = 1.0f / parent.getSurfaceArea();
+
+        float3 diffvec = parent.vmax - parent.vmin;
+        float diff[3] = { diffvec.x, diffvec.y, diffvec.z };
+        float vmin3[3] = { parent.vmin.x, parent.vmin.y, parent.vmin.z };
+        int axis;
+        if (diff[0] > diff[1] && diff[0] > diff[2])
+            axis = 0;
+        else if (diff[1] > diff[0] && diff[1] > diff[2])
+            axis = 1;
+        else 
+            axis = 2;
+
+        float interval = diff[axis] / K;
+        float pivot = vmin3[axis];
+        float min_pivot;
+        float min_sah = count;
+        int min_k = -1;
+        uint child1_count;
+
+        for(uint k=0; k<K-1; k++)
+        {
+            pivot += interval;
+
+            // evaluate the SAH heuristic
+            Box leftBox = Box::insideOut();
+            Box rightBox = Box::insideOut();
+
+            // first sweep from the left to get the left costs
+            // we sweep so we can incrementally update the bounding box for efficiency
+            uint leftCount = 0;
+            uint rightCount = 0;
+            for (uint i=start; i<start+count; i++)
+            {
+                // left is exclusive
+                const TriangleV& t = trianglesV[indices[i]];
+                if (at(centroids[indices[i]], axis) < pivot)
+                {
+                    leftBox.consumePoint(t.v0);
+                    leftBox.consumePoint(t.v1);
+                    leftBox.consumePoint(t.v2);
+                    leftCount++;
+                }
+                else
+                {
+                    rightBox.consumePoint(t.v0);
+                    rightBox.consumePoint(t.v1);
+                    rightBox.consumePoint(t.v2);
+                    rightCount++;
+                }
+            }
+
+            // calculate surface area heuristic
+            float sah = leftBox.getSurfaceArea() * leftCount * invParentSurface + rightBox.getSurfaceArea() * rightCount * invParentSurface + EPS;
+            if (sah < min_sah)
+            {
+                min_sah = sah;
+                min_k = k;
+                child1_count = leftCount;
+                min_pivot = pivot;
+            }
+        }
+
+        // Splitting was not worth it become a child and push no new work.
+        if (min_k == -1)
+        {
+            ret[index] = BVHNode::MakeChild(parent, start, count);
+            continue;
+        }
+
+        // splitting should never be better than terminating with 1
+        // triangle.
+        assert (count >= 1);
+
+        auto it = std::partition(indices+start, indices+start+count, [centroids, indices,axis, min_pivot](uint index){return at(centroids[indices[index]], axis) < min_pivot;});
+
+        // Create items for the children, ensures children are next to each other
+        // in memory
+        uint child1_index = node_count++;
+        uint child2_index = node_count++;
+
+        uint child1_start = start;
+
+        uint child2_start = start + child1_count;
+        uint child2_count = count - child1_count;
+
+        assert (child2_start == child1_start+child1_count);
+        assert (child1_count + child2_count == count);
+        assert (child1_count > 0);
+        assert (child2_count > 0);
+
+        // push the work on the stack
+        work.push(std::make_tuple(child2_index, child2_start, child2_count));
+        work.push(std::make_tuple(child1_index, child1_start, child1_count));
+
+        // Create a node
+        ret[index] = BVHNode::MakeNode(parent, child1_index, axis);
+    }
+
+
+    printf("BVH build took %f ms\n", (glfwGetTime() - ping)*1000);
+    permuteTriangles(indices, trianglesV.data(), trianglesD.data(), trianglesV.size());
+
+    free(indices);
+    free(centroids);
+    ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));
+    *bvh_size = node_count;
+    return ret;
+}
+
 inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
 {
+    float ping = glfwGetTime();
     // bvh size is bounded by 2*triangle_count-1
     BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
     uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
-    for(uint i=0; i<trianglesV.size(); i++) indices[i] = i;
+    float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
+    for(uint i=0; i<trianglesV.size(); i++) 
+    {
+        indices[i] = i;
+        centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
+    }
+
     float* leftCosts = (float*)malloc(trianglesV.size() * sizeof(float));
     float* rightCosts = (float*)malloc(trianglesV.size() * sizeof(float));
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
 
-    SORTING_SOURCE = trianglesV.data();
+    SORTING_SOURCE = centroids;
 
     work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
 
@@ -127,22 +297,17 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
         ret[index] = BVHNode::MakeNode(boundingBox, child1_index, min_level);
     }
 
-    // permute the triangles given the indices.
-    auto tmp_trianglesV = std::vector<TriangleV>(trianglesV.begin(), trianglesV.end());
-    auto tmp_trianglesD = std::vector<TriangleD>(trianglesD.begin(), trianglesD.end());
-    for(int i=0; i<trianglesV.size(); i++)
-    {
-        trianglesV[i] = tmp_trianglesV[indices[i]];
-        trianglesD[i] = tmp_trianglesD[indices[i]];
-    }
-
+    printf("BVH build took %f ms\n", (glfwGetTime() - ping)*1000);
+    permuteTriangles(indices, trianglesV.data(), trianglesD.data(), trianglesV.size());
     free(leftCosts);
     free(rightCosts);
+    free(centroids);
     free(indices);
 
     // Reduce the memory allocation to match the final size
     ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));
     *bvh_size = node_count;
+
     return ret;
 }
 

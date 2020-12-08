@@ -79,6 +79,11 @@ HYBRID inline uint getSeed(uint x, uint y, float time)
     return wang_hash((x + WINDOW_WIDTH * y) * (uint)(time * 100));
 }
 
+HYBRID inline float at(const float3& v, uint i)
+{
+    return ((const float*)&v)[i];
+}
+
 inline cudaTextureObject_t loadTexture(const char* filename)
 {
   int width, height, nrChannels;

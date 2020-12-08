@@ -4,6 +4,7 @@
 #include "application.h"
 #include "globals.h"
 #include "kernels.h"
+#include <driver_types.h>
 
 class Pathtracer : public Application
 {
@@ -32,7 +33,7 @@ void Pathtracer::Init()
     dSkydomeTex = loadTexture("skydome.jpg");
 
     // Register the texture with cuda as preperation for interop.
-    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsNone) );
+    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
 
     dSphereBuffer = DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, &DSpheres);
     dPlaneBuffer = DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
@@ -82,12 +83,6 @@ void Pathtracer::Init()
 
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
-    // Update the sphere area lights
-    dSphereLightBuffer.update(sceneData.h_sphere_light_buffer);
-
-    // sync NEE toggle
-    cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
-
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
 
@@ -105,15 +100,23 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     // Calculate the thread size and warp size
     // These are used by simply kernels only, so we max
     // out the block size.
-    int tx = 32;
-    int ty = 32;
+    int tx = 16;
+    int ty = 16;
     dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);
     dim3 dimThreads(tx,ty);
 
 
     // clear the ray queue and update on gpu
     if (shouldClear)
+    {
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
+
+        // Update the sphere area lights
+        dSphereLightBuffer.update(sceneData.h_sphere_light_buffer);
+
+        // sync NEE toggle
+        cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
+    }
 
 
     kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
@@ -129,7 +132,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     uint max_bounces;
     if (_NEE)
-        max_bounces = shouldClear ? 2 : 5;
+        max_bounces = shouldClear ? 1 : 5;
     else
         max_bounces = shouldClear ? 2 : 5;
 
@@ -142,7 +145,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         kernel_shade<<<NR_PIXELS / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
 
         // Sample the light source for every shadow ray
-        kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
+        if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
 
         // swap the ray buffers and clear.
         kernel_swap_and_clear<<<1,1>>>();
