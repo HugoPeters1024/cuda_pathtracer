@@ -86,6 +86,7 @@ int main(int argc, char** argv) {
     if (!window) return 3;
 
     glfwMakeContextCurrent(window);
+    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
     glfwSwapInterval(1);
 
     // Compile the quad shader to display a texture

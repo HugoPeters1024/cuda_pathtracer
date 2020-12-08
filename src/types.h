@@ -7,7 +7,9 @@
 
 #define GL_GLEXT_PROTOTYPES 1
 #define GL3_PROTOTYPES      1
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#include "../glad/include/glad/glad.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"

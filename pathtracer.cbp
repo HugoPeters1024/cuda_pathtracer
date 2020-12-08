@@ -5,89 +5,13 @@
 		<Option title="pathtracer"/>
 		<Option makefile_is_custom="1"/>
 		<Option compiler="gcc"/>
-		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;CMake Files\glfw\docs\;"/>
+		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;"/>
 		<Build>
 			<Target title="all">
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
 				<Option type="4"/>
 				<MakeCommands>
 					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 all"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="install/strip">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install/strip"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="install/local">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install/local"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="pathtracer">
-				<Option output="/home/hugo/repos/cuda_pathtracer/pathtracer" prefix_auto="0" extension_auto="0"/>
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option object_output="./"/>
-				<Option type="1"/>
-				<Option compiler="gcc"/>
-				<Compiler>
-					<Add directory="/home/hugo/repos/cuda_pathtracer/./glfw/include"/>
-					<Add directory="/usr/include"/>
-					<Add directory="/home/hugo/repos/cuda_pathtracer/glfw/include"/>
-				</Compiler>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 pathtracer"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="pathtracer/fast">
-				<Option output="/home/hugo/repos/cuda_pathtracer/pathtracer" prefix_auto="0" extension_auto="0"/>
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option object_output="./"/>
-				<Option type="1"/>
-				<Option compiler="gcc"/>
-				<Compiler>
-					<Add directory="/home/hugo/repos/cuda_pathtracer/./glfw/include"/>
-					<Add directory="/usr/include"/>
-					<Add directory="/home/hugo/repos/cuda_pathtracer/glfw/include"/>
-				</Compiler>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 pathtracer/fast"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="install">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="list_install_components">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 list_install_components"/>
 					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
 					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
@@ -113,14 +37,74 @@
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
-			<Target title="uninstall">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw"/>
-				<Option type="4"/>
+			<Target title="glad">
+				<Option output="/home/hugo/repos/cuda_pathtracer/libglad.a" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
+				<Option object_output="./"/>
+				<Option type="2"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glad/include"/>
+				</Compiler>
 				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 uninstall"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 clean"/>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 glad"/>
+					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="glad/fast">
+				<Option output="/home/hugo/repos/cuda_pathtracer/libglad.a" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
+				<Option object_output="./"/>
+				<Option type="2"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glad/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 glad/fast"/>
+					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="pathtracer">
+				<Option output="/home/hugo/repos/cuda_pathtracer/pathtracer" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add option="-DGLFW_INCLUDD_NONE"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glfw/include"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glad/include"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/glfw/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 pathtracer"/>
+					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="pathtracer/fast">
+				<Option output="/home/hugo/repos/cuda_pathtracer/pathtracer" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
+				<Option object_output="./"/>
+				<Option type="1"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add option="-DGLFW_INCLUDD_NONE"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glfw/include"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/./glad/include"/>
+					<Add directory="/home/hugo/repos/cuda_pathtracer/glfw/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 pathtracer/fast"/>
+					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
 			<Target title="glfw">
@@ -159,17 +143,10 @@
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/src/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
-			<Target title="docs">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw/docs"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 docs"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
 		</Build>
+		<Unit filename="/home/hugo/repos/cuda_pathtracer/glad/src/glad.c">
+			<Option target="glad"/>
+		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/include/GLFW/glfw3.h">
 			<Option target="glfw"/>
 		</Unit>
@@ -266,9 +243,6 @@
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMakeLists.txt">
 			<Option virtualFolder="CMake Files\glfw\"/>
 		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMake/cmake_uninstall.cmake.in">
-			<Option virtualFolder="CMake Files\glfw\CMake\"/>
-		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMake/glfw3.pc.in">
 			<Option virtualFolder="CMake Files\glfw\CMake\"/>
 		</Unit>
@@ -280,12 +254,6 @@
 		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/src/glfw_config.h.in">
 			<Option virtualFolder="CMake Files\glfw\src\"/>
-		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/CMakeLists.txt">
-			<Option virtualFolder="CMake Files\glfw\docs\"/>
-		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/Doxyfile.in">
-			<Option virtualFolder="CMake Files\glfw\docs\"/>
 		</Unit>
 	</Project>
 </CodeBlocks_project_file>
