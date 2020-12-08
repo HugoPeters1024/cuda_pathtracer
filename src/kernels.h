@@ -19,21 +19,6 @@ __device__ inline void swapc(T& left, T& right)
 #define swapc std::swap
 #endif
 
-HYBRID inline float lambert(const float3 &v1, const float3 &v2)
-{
-#ifdef __CUDA_ARCH__
-    return max(dot(v1,v2),0.0f);
-#else
-    return std::max(dot(v1,v2),0.0f);
-#endif
-}
-
-HYBRID inline bool firstIsFar(const uint& split_plane, const Ray& ray)
-{
-    // I know it's hacky but damn is it fast
-    return ((float*)&ray.direction)[split_plane] < 0;
-}
-
 HYBRID inline float2 normalToUv(const float3& normal)
 {
     float u = atan2(normal.x, normal.z) / (2*3.1415926) + 0.5;
@@ -132,12 +117,11 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, const HitInfo& hitInfo)
+HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, const HitInfo& hitInfo)
 {
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
-    float tmin;
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
@@ -166,7 +150,7 @@ __device__ bool traverseBVHShadows(const Ray& ray)
         if (current.isLeaf())
         {
             uint start = current.t_start;
-            uint end = start + current.t_count();
+            uint end = start + current.t_count;
             float t;
             for(uint i=start; i<end; i++)
             {
@@ -246,18 +230,23 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     // Precompute inv ray direction for better slab tests
     float3 invRayDir = 1.0f / ray.direction;
 
-    const BVHNode root = _GBVH[0];
-    if (boxtest(root.boundingBox, ray.origin, invRayDir, hitInfo)) stack[size++] = 0;
+    // declare variables used in the loop
+    float tnear, tfar;
+    bool bnear, bfar;
+    uint near_id, far_id;
+    uint start, end;
+
+    BVHNode current = _GBVH[0];
+    if (boxtest(current.boundingBox, ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
-        uint current_id = stack[--size];
-        const BVHNode& current = _GBVH[current_id];
+        current = _GBVH[stack[--size]];
 
         if (current.isLeaf())
         {
-            uint start = current.t_start;
-            uint end = start + current.t_count();
+            start = current.t_start;
+            end = start + current.t_count;
             for(uint i=start; i<end; i++)
             {
                 if (rayTriangleIntersect(ray, _GTriangles[i], t, u, v) && t < hitInfo.t)
@@ -272,11 +261,11 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
         }
         else
         {
-            uint near_id = current.child1;
-            uint far_id = current.child1 + 1;
-            bool bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, hitInfo);
-            bool bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, hitInfo);
-            if (firstIsFar(current.split_plane(), ray)) {
+            near_id = current.child1;
+            far_id = current.child1 + 1;
+            bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, tnear, hitInfo);
+            bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, tfar, hitInfo);
+            if (bnear && bfar && tnear > tfar) {
                 swapc(near_id, far_id);
                 swapc(bnear, bfar);
             }
@@ -475,7 +464,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormal = normalize(make_float3(texColor.x * 2 - 1, texColor.y * 2 -1, texColor.z*2-1));
+            float3 texNormal = normalize(get3f(texColor)*2-make_float3(1));
             texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
             colliderNormal = texNormal;

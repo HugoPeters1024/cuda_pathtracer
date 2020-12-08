@@ -255,26 +255,24 @@ struct __align__(16) BVHNode
         uint child1;
         uint t_start;
     };
-    uint t_data;
+    uint t_count;
 
-    HYBRID uint split_plane() const { return t_data >> 30; }
-    HYBRID uint t_count() const { return t_data & (0xffffffff>>2); }
-    HYBRID bool isLeaf() const { return t_count() > 0; }
+    HYBRID inline bool isLeaf() const { return t_count > 0; }
 
     static BVHNode MakeChild(Box boundingBox, uint t_start, uint t_count) 
     {
         BVHNode ret;
         ret.boundingBox = boundingBox;
         ret.t_start = t_start;
-        ret.t_data = t_count;
+        ret.t_count = t_count;
         return ret;
     }
-    static BVHNode MakeNode(Box boundingBox, uint child1, uint split_plane) 
+    static BVHNode MakeNode(Box boundingBox, uint child1)
     {
         BVHNode ret;
         ret.boundingBox = boundingBox;
         ret.child1 = child1;
-        ret.t_data = split_plane << 30;
+        ret.t_count = 0;
         return ret;
     }
 };

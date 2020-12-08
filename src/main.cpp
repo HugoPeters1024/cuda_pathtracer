@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <chrono>
+#include <thread>
 
 #include "cxxopts.hpp"
 
@@ -49,8 +50,8 @@ layout (location = 0) uniform float time;
 
 void main() { 
     vec2 fromCenter = uv - vec2(0.5);
-    vec4 sampleR = texture(tex, uv + 0.018 * fromCenter);
-    vec4 sampleG = texture(tex, uv + 0.011 * fromCenter);
+    vec4 sampleR = texture(tex, uv + 0.011 * fromCenter);
+    vec4 sampleG = texture(tex, uv + 0.007 * fromCenter);
     vec4 sampleB = texture(tex, uv + 0.003 * fromCenter);
     float gamma = 1.8f;
     color.x = pow(sampleR.x / sampleR.w, 1.0f/gamma);
@@ -225,7 +226,10 @@ int main(int argc, char** argv) {
         if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-        while (glfwGetTime() - start < 1.0 / 60.0) {}
+        float frameTime = glfwGetTime() - start;
+        if (frameTime < 1.0 / 60.0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds((uint)(((1.0/60.0f)-frameTime)*1000)));
+        }
     }
 
     glfwDestroyWindow(window);

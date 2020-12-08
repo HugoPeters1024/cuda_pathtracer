@@ -186,7 +186,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         work.push(std::make_tuple(child1_index, child1_start, child1_count));
 
         // Create a node
-        ret[index] = BVHNode::MakeNode(parent, child1_index, axis);
+        ret[index] = BVHNode::MakeNode(parent, child1_index);
     }
 
 
@@ -294,7 +294,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
 
         // splitting should never be better than terminating with 1
         // triangle.
-        assert (count >= 2);
+        assert (count >= 1);
 
         // Sort the triangles one last time based on the level the heuristic gave us
         // to ensure that they are in the expected order
@@ -325,7 +325,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
         work.push(std::make_tuple(child1_index, child1_start, child1_count));
 
         // Create a node
-        ret[index] = BVHNode::MakeNode(boundingBox, child1_index, min_level);
+        ret[index] = BVHNode::MakeNode(boundingBox, child1_index);
     }
 
     printf("BVH build took %f ms\n", (glfwGetTime() - ping)*1000);
