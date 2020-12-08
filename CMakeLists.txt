@@ -24,7 +24,7 @@ target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        #--gpu-architecture=sm_62
                        -arch=sm_50
                        --device-link
-                       -O0
+                       -O3
                        -g
                        -Xcompiler
                        -fopenmp

@@ -209,7 +209,7 @@ public:
 
         printf("Building a BVH...\n");
         uint bvhSize;
-        ret.h_bvh_buffer = createBVH(trianglesV, trianglesD, &bvhSize);
+        ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);
         printf("BVH Size: %u\n", bvhSize);
 
         ret.h_vertex_buffer = trianglesV.data();

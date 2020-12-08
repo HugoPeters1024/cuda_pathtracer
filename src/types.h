@@ -121,6 +121,12 @@ struct Box
         };
     }
 
+    void consumeBox(const Box& a)
+    {
+        vmin = fminf(vmin, a.vmin);
+        vmax = fmaxf(vmax, a.vmax);
+    }
+
     void consumePoint(const float3& p)
     {
         vmin = fminf(p, vmin);

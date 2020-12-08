@@ -19,6 +19,11 @@ inline void permuteTriangles(uint* indices, TriangleV* trianglesV, TriangleD* tr
     }
 }
 
+inline uint getBinId(uint K, uint axis, const float3& centroid, float bmin, float bmax)
+{
+    return (uint)(K*(1-EPS)*(at(centroid, axis) - bmin) / (bmax - bmin));
+}
+
 // http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
 inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
 {
@@ -53,18 +58,21 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
 
         // use centroids to find the dominant axis.
         Box parent = Box::insideOut();
+        Box parentCentroid = Box::insideOut();
         for(int i=start; i<start+count; i++)
         {
+            const float3& centroid = centroids[indices[i]];
             const TriangleV& t = trianglesV[indices[i]];
             parent.consumePoint(t.v0);
             parent.consumePoint(t.v1);
             parent.consumePoint(t.v2);
+
+            parentCentroid.consumePoint(centroid);
         }
         float invParentSurface = 1.0f / parent.getSurfaceArea();
 
-        float3 diffvec = parent.vmax - parent.vmin;
+        float3 diffvec = parentCentroid.vmax - parentCentroid.vmin;
         float diff[3] = { diffvec.x, diffvec.y, diffvec.z };
-        float vmin3[3] = { parent.vmin.x, parent.vmin.y, parent.vmin.z };
         int axis;
         if (diff[0] > diff[1] && diff[0] > diff[2])
             axis = 0;
@@ -73,53 +81,68 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         else 
             axis = 2;
 
-        float interval = diff[axis] / K;
-        float pivot = vmin3[axis];
-        float min_pivot;
+        float bmin = at(parentCentroid.vmin, axis);
+        float bmax = at(parentCentroid.vmax, axis);
+
+
+        uint binCounts[K];
+        Box bins[K];
+        for(uint k=0; k<K; k++)
+        {
+            binCounts[k] = 0;
+            bins[k] = Box::insideOut();
+        }
+
+        // Populate the bins
+        for(int i=start; i<start+count; i++)
+        {
+            float3 centroid = centroids[indices[i]];
+            const TriangleV& t = trianglesV[indices[i]];
+            uint binId = getBinId(K, axis, centroid, bmin, bmax);
+            assert(binId >= 0 && binId < K);
+
+            binCounts[binId]++;
+            bins[binId].consumePoint(t.v0);
+            bins[binId].consumePoint(t.v1);
+            bins[binId].consumePoint(t.v2);
+        }
+
         float min_sah = count;
         int min_k = -1;
-        uint child1_count;
 
-        for(uint k=0; k<K-1; k++)
+        // Do a sweep to collect the SAH values
+        Box leftBox = Box::insideOut();
+        Box rightBox = Box::insideOut();
+        float leftCosts[K];
+        float rightCosts[K];
+        uint leftCount = 0;
+        uint rightCount = 0;
+
+        // first sweep from the left to get the left costs
+        // we sweep so we can incrementally update the bounding box for efficiency
+        for (int k=0; k<K; k++)
         {
-            pivot += interval;
+            // left is exclusive
+            const Box& bl = bins[k];
+            leftCosts[k] = leftCount * leftBox.getSurfaceArea() * invParentSurface;
+            leftBox.consumeBox(bl);
+            leftCount += binCounts[k];
 
-            // evaluate the SAH heuristic
-            Box leftBox = Box::insideOut();
-            Box rightBox = Box::insideOut();
+            // right is inclusive
+            const Box& br = bins[K - k - 1];
+            rightBox.consumeBox(br);
+            rightCount += binCounts[K - k - 1];
+            rightCosts[K - k - 1] = rightCount * rightBox.getSurfaceArea() * invParentSurface;
+        }
 
-            // first sweep from the left to get the left costs
-            // we sweep so we can incrementally update the bounding box for efficiency
-            uint leftCount = 0;
-            uint rightCount = 0;
-            for (uint i=start; i<start+count; i++)
-            {
-                // left is exclusive
-                const TriangleV& t = trianglesV[indices[i]];
-                if (at(centroids[indices[i]], axis) < pivot)
-                {
-                    leftBox.consumePoint(t.v0);
-                    leftBox.consumePoint(t.v1);
-                    leftBox.consumePoint(t.v2);
-                    leftCount++;
-                }
-                else
-                {
-                    rightBox.consumePoint(t.v0);
-                    rightBox.consumePoint(t.v1);
-                    rightBox.consumePoint(t.v2);
-                    rightCount++;
-                }
-            }
-
-            // calculate surface area heuristic
-            float sah = leftBox.getSurfaceArea() * leftCount * invParentSurface + rightBox.getSurfaceArea() * rightCount * invParentSurface + EPS;
+        // calculate the sah
+        for(int k=0; k<K; k++)
+        {
+            float sah = leftCosts[k] + rightCosts[k] + EPS;
             if (sah < min_sah)
             {
                 min_sah = sah;
                 min_k = k;
-                child1_count = leftCount;
-                min_pivot = pivot;
             }
         }
 
@@ -134,7 +157,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         // triangle.
         assert (count >= 1);
 
-        auto it = std::partition(indices+start, indices+start+count, [centroids, indices,axis, min_pivot](uint index){return at(centroids[indices[index]], axis) < min_pivot;});
+        auto it = std::partition(indices+start, indices+start+count, [centroids, axis, bmin, bmax,min_k](uint ii){return getBinId(K, axis, centroids[ii], bmin, bmax) < min_k;});
 
         // Create items for the children, ensures children are next to each other
         // in memory
@@ -142,6 +165,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         uint child2_index = node_count++;
 
         uint child1_start = start;
+        uint child1_count = (uint)(it - (indices + start));
 
         uint child2_start = start + child1_count;
         uint child2_count = count - child1_count;
