@@ -160,8 +160,11 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         // triangle.
        // assert (count >= 1);
 
-        BIN_K = min_k;
-        auto it = std::partition(indices+start, indices+start+count, __compare_triangles_bin);
+        //giBIN_K = min_k;
+        uint minLeftCount = 0;
+        for(int k=0; k<min_k; k++) minLeftCount += binCounts[k];
+        //auto it = std::partition(indices+start, indices+start+count, __compare_triangles_bin);
+        std::nth_element(indices+start, indices+start+minLeftCount, indices+start+count, __compare_triangles_bin);
 
         // Create items for the children, ensures children are next to each other
         // in memory
@@ -169,7 +172,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         uint child2_index = node_count++;
 
         uint child1_start = start;
-        uint child1_count = (uint)(it - (indices + start));
+        uint child1_count = minLeftCount;
 
         uint child2_start = start + child1_count;
         uint child2_count = count - child1_count;
