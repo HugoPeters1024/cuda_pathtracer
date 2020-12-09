@@ -223,13 +223,14 @@ struct __align__(16) TriangleV
 
 struct __align__(16) TriangleD
 {
-    float3 n0, n1, n2;
+    float3 normal;
+    float3 tangent;
+    float3 bitangent;
     float2 uv0, uv1, uv2;
     MATERIAL_ID material;
-    Matrix4 TBN;
 
-    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material, Matrix4 TBN)
-        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
+    TriangleD(float3 normal, float3 tangent, float3 bitangent, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
+        : normal(normal), tangent(tangent), bitangent(bitangent), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
 };
 
 static float3* SORTING_SOURCE;

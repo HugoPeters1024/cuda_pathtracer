@@ -42,7 +42,7 @@ HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& int
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            float3 normal = _GTriangleData[hitInfo.primitive_id].n0;
+            float3 normal = _GTriangleData[hitInfo.primitive_id].normal;
             return normal;
         }
         case SPHERE: {
@@ -81,13 +81,13 @@ HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
     return t>0;
 }
 
-HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
+HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin, float& tmax)
 {
     float3 t0 = (box.vmin - rayOrigin) * invRayDir;
     float3 t1 = (box.vmax - rayOrigin) * invRayDir;
     float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
     tmin = fmaxcompf(tmin3);
-    float tmax = fmincompf(tmax3);
+    tmax = fmincompf(tmax3);
     
     return tmin <= tmax && tmax > 0;
 }
@@ -117,12 +117,12 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, const HitInfo& hitInfo)
+HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, float& tmax, const HitInfo& hitInfo)
 {
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
-    return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
+    return slabTest(rayOrigin, invRayDir, box, tmin, tmax) && tmin < hitInfo.t;
 }
 
 /*
@@ -237,11 +237,13 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     uint start, end;
 
     BVHNode current = _GBVH[0];
-    if (boxtest(current.boundingBox, ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
+    if (boxtest(current.boundingBox, ray.origin, invRayDir, tnear, tfar, hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
         current = _GBVH[stack[--size]];
+
+        if (!boxtest(current.boundingBox, ray.origin, invRayDir, tfar, tnear, hitInfo)) continue;
 
         if (current.isLeaf())
         {
@@ -263,8 +265,8 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
         {
             near_id = current.child1;
             far_id = current.child1 + 1;
-            bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, tnear, hitInfo);
-            bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, tfar, hitInfo);
+            bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, tnear, tfar, hitInfo);
+            bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, tfar, tnear, hitInfo);
             if (bnear && bfar && tnear > tfar) {
                 swapc(near_id, far_id);
                 swapc(bnear, bfar);
@@ -464,8 +466,13 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormal = normalize(get3f(texColor)*2-make_float3(1));
-            texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
+            float3 texNormalOriginal = normalize(get3f(texColor)*2-make_float3(1));
+            // Inline matrix multiplication with TBN
+            float3 texNormal;
+            texNormal.x = dot(texNormalOriginal, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x));
+            texNormal.y = dot(texNormalOriginal, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y));
+            texNormal.z = dot(texNormalOriginal, make_float3(triangleData.tangent.z, triangleData.bitangent.z, triangleData.normal.z));
+            texNormal = normalize(texNormal);
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
             colliderNormal = texNormal;
         }

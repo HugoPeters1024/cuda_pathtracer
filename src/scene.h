@@ -177,8 +177,8 @@ public:
                     n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
                 }
 
+                float3 tangent, bitangent;
 
-                Matrix4 TBN;
                 if (useMtl && materials[material_ids[mit]].hasNormalMap)
                 {
                     float3 edge1 = v1 - v0;
@@ -187,17 +187,12 @@ public:
                     float2 deltaUV2 = uv2 - uv0;
 
                     float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                    float3 tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
-                    float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
-
-                    TBN = Matrix4::FromColumnVectors(
-                            Vector3(tangent.x, tangent.y, tangent.z),
-                            Vector3(bitangent.x, bitangent.y, bitangent.z),
-                            Vector3(n0.x, n0.y, n0.z));
+                    tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
+                    bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
                 }
 
                 trianglesV.push_back(TriangleV(v0, v1, v2));
-                trianglesD.push_back(TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN));
+                trianglesD.push_back(TriangleD(n0, tangent, bitangent, uv0, uv1, uv2, useMtl ? material_ids[mit] : material));
             }
         }
     }
@@ -209,7 +204,7 @@ public:
 
         printf("Building a BVH...\n");
         uint bvhSize;
-        ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);
+        ret.h_bvh_buffer = createBVH(trianglesV, trianglesD, &bvhSize);
         printf("BVH Size: %u\n", bvhSize);
 
         ret.h_vertex_buffer = trianglesV.data();
