@@ -35,19 +35,29 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     
     BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
     uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
+    SSEBox* boundingBoxes = (SSEBox*)malloc(trianglesV.size() * sizeof(SSEBox));
     uint* binIds = (uint*)malloc(trianglesV.size() * sizeof(uint));
     float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
+    SSEBox rootBox = SSEBox::insideOut();
     for(uint i=0; i<trianglesV.size(); i++) 
     {
         indices[i] = i;
         centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
+        boundingBoxes[i] = SSEBox::fromTriangle(trianglesV[i]);
+        rootBox.consumeBox(boundingBoxes[i]);
     }
+
+    // set the root box
+    ret[0].boundingBox = rootBox.toNormalBox();
+
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
-
-    BIN_SOURCE = binIds;
-
     work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
+
+    float leftCosts[K];
+    float rightCosts[K];
+    uint binCounts[K];
+    SSEBox bins[K];
 
     while(!work.empty())
     {
@@ -56,24 +66,31 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         uint index = std::get<0>(workItem);
         uint start = std::get<1>(workItem);
         uint count = std::get<2>(workItem);
+        // bounding boxes are assigned forwardly
+        Box parent = ret[index].boundingBox;
+
+        // Count lower bound
+        if (count <= 4)
+        {
+            ret[index] = BVHNode::MakeChild(parent, start, count);
+            continue;
+        }
+
+        float invParentSurface = 1.0f / parent.getSurfaceArea();
 
         // use centroids to find the dominant axis.
-        Box parent = Box::insideOut();
-        Box parentCentroid = Box::insideOut();
+        //SSEBox parent = SSEBox::insideOut();
+        SSEBox parentCentroid = SSEBox::insideOut();
         for(int i=start; i<start+count; i++)
         {
             const float3& centroid = centroids[indices[i]];
-            const TriangleV& t = trianglesV[indices[i]];
-            parent.consumePoint(t.v0);
-            parent.consumePoint(t.v1);
-            parent.consumePoint(t.v2);
-
+            //const SSEBox& box = boundingBoxes[indices[i]];
+           // parent.consumeBox(box);
             parentCentroid.consumePoint(centroid);
         }
-        float invParentSurface = 1.0f / parent.getSurfaceArea();
 
-        float3 diffvec = parentCentroid.vmax - parentCentroid.vmin;
-        float diff[3] = { diffvec.x, diffvec.y, diffvec.z };
+        __m128 diff = _mm_sub_ps(parentCentroid.vmax, parentCentroid.vmin);
+
         int axis;
         if (diff[0] > diff[1] && diff[0] > diff[2])
             axis = 0;
@@ -82,16 +99,21 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         else 
             axis = 2;
 
-        float bmin = at(parentCentroid.vmin, axis);
-        float bmax = at(parentCentroid.vmax, axis);
+        float bmin = parentCentroid.vmin[axis];
+        float bmax = parentCentroid.vmax[axis];
+
+        // dominant axis bound
+        if (bmax - bmin < K * EPS)
+        {
+            ret[index] = BVHNode::MakeChild(parent, start, count);
+            continue;
+        }
 
 
-        uint binCounts[K];
-        Box bins[K];
         for(uint k=0; k<K; k++)
         {
             binCounts[k] = 0;
-            bins[k] = Box::insideOut();
+            bins[k] = SSEBox::insideOut();
         }
 
         // Populate the bins
@@ -99,40 +121,36 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         for(int i=start; i<start+count; i++)
         {
             float3 centroid = centroids[indices[i]];
-            const TriangleV& t = trianglesV[indices[i]];
+            const SSEBox& b = boundingBoxes[indices[i]];
             uint binId = uint((at(centroid, axis) - bmin) * binFac);
-            assert(binId >= 0 && binId < K);
             binIds[indices[i]] = binId;
 
             binCounts[binId]++;
-            bins[binId].consumePoint(t.v0);
-            bins[binId].consumePoint(t.v1);
-            bins[binId].consumePoint(t.v2);
+            bins[binId].consumeBox(b);
         }
 
         float min_sah = count;
         int min_k = -1;
 
         // Do a sweep to collect the SAH values
-        Box leftBox = Box::insideOut();
-        Box rightBox = Box::insideOut();
-        float leftCosts[K];
-        float rightCosts[K];
+        SSEBox leftBox = SSEBox::insideOut();
+        SSEBox rightBox = SSEBox::insideOut();
         uint leftCount = 0;
         uint rightCount = 0;
+
 
         // first sweep from the left to get the left costs
         // we sweep so we can incrementally update the bounding box for efficiency
         for (int k=0; k<K; k++)
         {
             // left is exclusive
-            const Box& bl = bins[k];
+            const SSEBox& bl = bins[k];
             leftCosts[k] = leftCount * leftBox.getSurfaceArea() * invParentSurface;
             leftBox.consumeBox(bl);
             leftCount += binCounts[k];
 
             // right is inclusive
-            const Box& br = bins[K - k - 1];
+            const SSEBox& br = bins[K - k - 1];
             rightBox.consumeBox(br);
             rightCount += binCounts[K - k - 1];
             rightCosts[K - k - 1] = rightCount * rightBox.getSurfaceArea() * invParentSurface;
@@ -156,15 +174,32 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
             continue;
         }
 
-        // splitting should never be better than terminating with 1
-        // triangle.
-       // assert (count >= 1);
+        uint* pLeft = indices+start;
+        uint* pRight = indices+start+count-1;
+        char state = 0;
+        while(pLeft != pRight)
+        {
+            if (state == 0) {
+                if(binIds[*pLeft] < min_k) {
+                    pLeft++;
+                    continue;
+                } else state = 1;
+            }
 
-        //giBIN_K = min_k;
-        uint minLeftCount = 0;
-        for(int k=0; k<min_k; k++) minLeftCount += binCounts[k];
-        //auto it = std::partition(indices+start, indices+start+count, __compare_triangles_bin);
-        std::nth_element(indices+start, indices+start+minLeftCount, indices+start+count, __compare_triangles_bin);
+            if (state == 1) {
+                if(binIds[*pRight] >= min_k) {
+                    pRight--;
+                    continue;
+                }
+            }
+
+            uint tmp = *pLeft;
+            *pLeft = *pRight;
+            *pRight = tmp;
+            state = 0;
+        }
+
+        uint minLeftCount = pLeft - (indices+start);
 
         // Create items for the children, ensures children are next to each other
         // in memory
@@ -182,7 +217,16 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         assert (child1_count + child2_count == count);
         assert (child1_count > 0);
         assert (child2_count > 0);
-        */
+         */
+
+        // forward assign the bounding boxes
+        SSEBox child1Box = SSEBox::insideOut();
+        for(int k=0; k<min_k; k++) child1Box.consumeBox(bins[k]);
+        ret[child1_index].boundingBox = child1Box.toNormalBox();
+
+        SSEBox child2Box = SSEBox::insideOut();
+        for(int k=min_k; k<K; k++) child2Box.consumeBox(bins[k]);
+        ret[child2_index].boundingBox = child2Box.toNormalBox();
 
         // push the work on the stack
         work.push(std::make_tuple(child2_index, child2_start, child2_count));
@@ -199,6 +243,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     free(indices);
     free(binIds);
     free(centroids);
+    free(boundingBoxes);
     ret = (BVHNode*)realloc(ret, node_count * sizeof(BVHNode));
     *bvh_size = node_count;
     return ret;

@@ -30,6 +30,8 @@ target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        -fopenmp
                        >)
 
+set (CMAKE_CXX_FLAGS "-march=native -O3")
+
 
 # We want to use c++ inline with cuda, so set nvcc as primary compiler
 set_source_files_properties(${cpu_source_files} PROPERTIES LANGUAGE CUDA)

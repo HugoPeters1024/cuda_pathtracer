@@ -5,7 +5,7 @@
 		<Option title="pathtracer"/>
 		<Option makefile_is_custom="1"/>
 		<Option compiler="gcc"/>
-		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;CMake Files\glfw\docs\;"/>
+		<Option virtualFolders="CMake Files\;CMake Files\glfw\;CMake Files\glfw\CMake\;CMake Files\glfw\src\;"/>
 		<Build>
 			<Target title="all">
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
@@ -17,21 +17,21 @@
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
-			<Target title="install/strip">
+			<Target title="rebuild_cache">
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
 				<Option type="4"/>
 				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install/strip"/>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 rebuild_cache"/>
 					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
 					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
-			<Target title="install/local">
+			<Target title="edit_cache">
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
 				<Option type="4"/>
 				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install/local"/>
+					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 edit_cache"/>
 					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
 					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
@@ -73,56 +73,6 @@
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
-			<Target title="install">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 install"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="list_install_components">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 list_install_components"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="edit_cache">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 edit_cache"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="rebuild_cache">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 rebuild_cache"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="uninstall">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 uninstall"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
 			<Target title="glfw">
 				<Option output="/home/hugo/repos/cuda_pathtracer/glfw/src/libglfw3.a" prefix_auto="0" extension_auto="0"/>
 				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw/src"/>
@@ -157,16 +107,6 @@
 					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/src/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
 					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/src/Makefile&quot;  VERBOSE=1 clean"/>
 					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/src/Makefile&quot;  VERBOSE=1 clean"/>
-				</MakeCommands>
-			</Target>
-			<Target title="docs">
-				<Option working_dir="/home/hugo/repos/cuda_pathtracer/glfw/docs"/>
-				<Option type="4"/>
-				<MakeCommands>
-					<Build command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 docs"/>
-					<CompileFile command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
-					<Clean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
-					<DistClean command="/usr/bin/make -f &quot;/home/hugo/repos/cuda_pathtracer/glfw/docs/Makefile&quot;  VERBOSE=1 clean"/>
 				</MakeCommands>
 			</Target>
 		</Build>
@@ -266,9 +206,6 @@
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMakeLists.txt">
 			<Option virtualFolder="CMake Files\glfw\"/>
 		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMake/cmake_uninstall.cmake.in">
-			<Option virtualFolder="CMake Files\glfw\CMake\"/>
-		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/CMake/glfw3.pc.in">
 			<Option virtualFolder="CMake Files\glfw\CMake\"/>
 		</Unit>
@@ -280,12 +217,6 @@
 		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/src/glfw_config.h.in">
 			<Option virtualFolder="CMake Files\glfw\src\"/>
-		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/CMakeLists.txt">
-			<Option virtualFolder="CMake Files\glfw\docs\"/>
-		</Unit>
-		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/docs/Doxyfile.in">
-			<Option virtualFolder="CMake Files\glfw\docs\"/>
 		</Unit>
 	</Project>
 </CodeBlocks_project_file>

@@ -207,6 +207,8 @@ public:
         assert(sphereLights.size() > 0);
         SceneData ret;
 
+        printf("Finalizing scene, total triangles: %u\n", trianglesV.size());
+
         printf("Building a BVH...\n");
         uint bvhSize;
         ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);

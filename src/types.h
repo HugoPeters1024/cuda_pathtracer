@@ -15,6 +15,7 @@
 #include "use_cuda.h"
 #include <limits>
 #include <vector_functions.h>
+#include <emmintrin.h>
 
 #include "constants.h"
 #include "vec.h"
@@ -68,6 +69,35 @@ struct SphereLight : public Sphere
         : Sphere(pos, radius, 0), color(color) {}
 };
 
+struct __align__(16) TriangleV
+{
+    float3 v0, v1, v2;
+    TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
+};
+
+struct __align__(16) TriangleD
+{
+    float3 n0, n1, n2;
+    float2 uv0, uv1, uv2;
+    MATERIAL_ID material;
+    Matrix4 TBN;
+
+    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material, Matrix4 TBN)
+        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
+};
+
+static float3* SORTING_SOURCE;
+
+static bool __compare_triangles_x (uint a, uint b) {
+    return SORTING_SOURCE[a].x < SORTING_SOURCE[b].x;
+}
+static bool __compare_triangles_y (uint a, uint b) {
+    return SORTING_SOURCE[a].y < SORTING_SOURCE[b].y;
+}
+static bool __compare_triangles_z (uint a, uint b) {
+    return SORTING_SOURCE[a].z < SORTING_SOURCE[b].z;
+}
+
 struct Plane
 {
     float3 normal;
@@ -86,6 +116,9 @@ struct PointLight
 
     PointLight(float3 pos, float3 color) : pos(pos), color(color) {}
 };
+
+
+
 
 struct Box
 {
@@ -137,6 +170,60 @@ struct Box
         return vmax.x >= other.vmin.x && other.vmax.x >= vmin.x &&
                vmax.y >= other.vmin.y && other.vmax.y >= vmin.y &&
                vmax.z >= other.vmin.z && other.vmax.z >= vmin.z;
+    }
+};
+
+struct SSEBox
+{
+    __m128 vmin, vmax;
+
+    static SSEBox insideOut()
+    {
+        return SSEBox {
+            _mm_setr_ps(999999, 99999, 99999, 0),
+            _mm_setr_ps(-999999, -99999, -99999, 0),
+        };
+    }
+
+    static SSEBox fromTriangle(const TriangleV& t)
+    {
+        __m128 sse_v0 = _mm_setr_ps(t.v0.x, t.v0.y, t.v0.z, 0);
+        __m128 sse_v1 = _mm_setr_ps(t.v1.x, t.v1.y, t.v1.z, 0);
+        __m128 sse_v2 = _mm_setr_ps(t.v2.x, t.v2.y, t.v2.z, 0);
+        return SSEBox {
+            _mm_min_ps(sse_v0, _mm_min_ps(sse_v1, sse_v2)),
+            _mm_max_ps(sse_v0, _mm_max_ps(sse_v1, sse_v2)),
+        };
+    }
+
+    void consumeBox(const SSEBox& a)
+    {
+        vmin = _mm_min_ps(vmin, a.vmin);
+        vmax = _mm_max_ps(vmax, a.vmax);
+    }
+
+    void consumePoint(const float3& p)
+    {
+        __m128 sse_p = _mm_setr_ps(p.x, p.y, p.z, 0);
+        vmin = _mm_min_ps(vmin, sse_p);
+        vmax = _mm_max_ps(vmax, sse_p);
+    }
+
+    inline Box toNormalBox()
+    {
+        return Box {
+            make_float3(vmin[0], vmin[1], vmin[2]),
+            make_float3(vmax[0], vmax[1], vmax[2]),
+        };
+    }
+
+    inline float getSurfaceArea() const
+    {
+        __m128 minToMax = _mm_sub_ps(vmax, vmin);
+        float lx = minToMax[0];
+        float ly = minToMax[1];
+        float lz = minToMax[2];
+        return 2*lx*ly + 2*lx*lz + 2*ly*lz;
     }
 };
 
@@ -213,39 +300,6 @@ struct __align__(16) HitInfoPacked
     }
 };
 
-struct __align__(16) TriangleV
-{
-    float3 v0, v1, v2;
-    TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
-};
-
-struct __align__(16) TriangleD
-{
-    float3 n0, n1, n2;
-    float2 uv0, uv1, uv2;
-    MATERIAL_ID material;
-    Matrix4 TBN;
-
-    TriangleD(float3 n0, float3 n1, float3 n2, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material, Matrix4 TBN)
-        : n0(n0), n1(n1), n2(n2), uv0(uv0), uv1(uv1), uv2(uv2), material(material), TBN(TBN) {}
-};
-
-static float3* SORTING_SOURCE;
-static uint* BIN_SOURCE;
-static uint BIN_K;
-
-static bool __compare_triangles_x (uint a, uint b) {
-    return SORTING_SOURCE[a].x < SORTING_SOURCE[b].x;
-}
-static bool __compare_triangles_y (uint a, uint b) {
-    return SORTING_SOURCE[a].y < SORTING_SOURCE[b].y;
-}
-static bool __compare_triangles_z (uint a, uint b) {
-    return SORTING_SOURCE[a].z < SORTING_SOURCE[b].z;
-}
-static bool __compare_triangles_bin(uint a, uint b) {
-    return BIN_SOURCE[a] < BIN_SOURCE[b];
-}
 
 struct __align__(16) BVHNode
 {
