@@ -126,16 +126,18 @@ public:
             }
         }
 
+        const auto& vertices = objReader.GetAttrib().vertices;
+        const auto& uvs = objReader.GetAttrib().texcoords;
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
+            trianglesV.reserve(trianglesV.size() + objReader.GetShapes()[s].mesh.indices.size() / 3);
+            trianglesD.reserve(trianglesD.size() + objReader.GetShapes()[s].mesh.indices.size() / 3);
             for(int i=0; i<objReader.GetShapes()[s].mesh.indices.size(); i+=3)
             {
                 auto it0 = objReader.GetShapes()[s].mesh.indices[i+0];
                 auto it1 = objReader.GetShapes()[s].mesh.indices[i+1];
                 auto it2 = objReader.GetShapes()[s].mesh.indices[i+2];
                 auto mit = objReader.GetShapes()[s].mesh.material_ids[i/3];
-                auto vertices = objReader.GetAttrib().vertices;
-                auto uvs = objReader.GetAttrib().texcoords;
                 bool hasUvs = uvs.size() > 0;
                 float3 v0 = make_float3(vertices[it0.vertex_index*3+0], vertices[it0.vertex_index*3+1], vertices[it0.vertex_index*3+2]);
                 float3 v1 = make_float3(vertices[it1.vertex_index*3+0], vertices[it1.vertex_index*3+1], vertices[it1.vertex_index*3+2]);
@@ -203,7 +205,7 @@ public:
     }
 
     SceneData finalize()
-    { 
+    {
         assert(sphereLights.size() > 0);
         SceneData ret;
 

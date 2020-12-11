@@ -282,6 +282,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
         uint start = std::get<1>(workItem);
         uint count = std::get<2>(workItem);
 
+
         int min_level = -1;
         int min_split_pos = -1;
         float min_cost = count;
@@ -337,7 +338,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
         }
 
         // Splitting was not worth it become a child and push no new work.
-        if (min_level == -1)
+        if (min_level == -1 || count <= 4)
         {
             ret[index] = BVHNode::MakeChild(boundingBox, start, count);
             continue;
