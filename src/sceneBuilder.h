@@ -159,9 +159,9 @@ inline SceneData getSibenikScene()
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,4.0), lucyMatId);
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,7.0), lucyMatId);
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,1.0), lucyMatId);
+     */
 
     scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
-     */
 
     //scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
     scene->addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
@@ -181,7 +181,7 @@ inline SceneData getConferenceScene()
     auto whiteId = scene->addMaterial(white);
 
  //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
-    scene->addModel("gallery.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, true);
+    scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
     scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
     scene->addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
 

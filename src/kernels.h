@@ -97,20 +97,21 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
+    bool ret = true;
     float det = dot(v0v1, pvec);
-    if (fabs(det) < 0.0001f) return false;
+    ret &= fabs(det) > 0.0001f;
     float invDet = 1 / det;
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
-    if (u < 0 || u > 1) return false;
+    ret &= !(u < 0 || u > 1);
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
-    if(v < 0 || u + v > 1) return false;
+    ret &= !(v < 0 || u + v > 1);
 
     t = dot(v0v2, qvec) * invDet;
-    return t > 0;
+    return ret && t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the

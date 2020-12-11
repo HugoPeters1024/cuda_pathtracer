@@ -127,18 +127,20 @@ public:
         }
 
         const auto& vertices = objReader.GetAttrib().vertices;
+        const auto& normals = objReader.GetAttrib().normals;
         const auto& uvs = objReader.GetAttrib().texcoords;
+        bool hasUvs = uvs.size() > 0;
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
-            trianglesV.reserve(trianglesV.size() + objReader.GetShapes()[s].mesh.indices.size() / 3);
-            trianglesD.reserve(trianglesD.size() + objReader.GetShapes()[s].mesh.indices.size() / 3);
-            for(int i=0; i<objReader.GetShapes()[s].mesh.indices.size(); i+=3)
+            const auto& shape = objReader.GetShapes()[s];
+            trianglesV.reserve(trianglesV.size() + shape.mesh.indices.size() / 3);
+            trianglesD.reserve(trianglesD.size() + shape.mesh.indices.size() / 3);
+            for(int i=0; i<shape.mesh.indices.size(); i+=3)
             {
-                auto it0 = objReader.GetShapes()[s].mesh.indices[i+0];
-                auto it1 = objReader.GetShapes()[s].mesh.indices[i+1];
-                auto it2 = objReader.GetShapes()[s].mesh.indices[i+2];
-                auto mit = objReader.GetShapes()[s].mesh.material_ids[i/3];
-                bool hasUvs = uvs.size() > 0;
+                const auto& it0 = shape.mesh.indices[i+0];
+                const auto& it1 = shape.mesh.indices[i+1];
+                const auto& it2 = shape.mesh.indices[i+2];
+                auto mit = shape.mesh.material_ids[i/3];
                 float3 v0 = make_float3(vertices[it0.vertex_index*3+0], vertices[it0.vertex_index*3+1], vertices[it0.vertex_index*3+2]);
                 float3 v1 = make_float3(vertices[it1.vertex_index*3+0], vertices[it1.vertex_index*3+1], vertices[it1.vertex_index*3+2]);
                 float3 v2 = make_float3(vertices[it2.vertex_index*3+0], vertices[it2.vertex_index*3+1], vertices[it2.vertex_index*3+2]);
@@ -173,7 +175,6 @@ public:
                     n2 = n1 = n0 = normalize(cross(edge1, edge2));
                 }
                 else {
-                    auto normals = objReader.GetAttrib().normals;
                     n0 = make_float3(normals[it0.normal_index*3+0], normals[it0.normal_index*3+1], normals[it0.normal_index*3+2]);
                     n1 = make_float3(normals[it1.normal_index*3+0], normals[it1.normal_index*3+1], normals[it1.normal_index*3+2]);
                     n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
@@ -200,6 +201,8 @@ public:
 
                 trianglesV.push_back(TriangleV(v0, v1, v2));
                 trianglesD.push_back(TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN));
+                if ((i/3)%1000 == 0)
+                    printf("Loading at %f percent\n", 100.0f * (float)i / (float)objReader.GetShapes()[s].mesh.indices.size());
             }
         }
     }
