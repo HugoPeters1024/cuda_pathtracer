@@ -59,6 +59,9 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     uint binCounts[K];
     SSEBox bins[K];
 
+    SSEBox scannedBinsLeft[K];
+    SSEBox scannedBinsRight[K];
+
     while(!work.empty())
     {
         auto workItem = work.top();
@@ -144,16 +147,16 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         for (int k=0; k<K; k++)
         {
             // left is exclusive
-            const SSEBox& bl = bins[k];
             leftCosts[k] = leftCount * leftBox.getSurfaceArea() * invParentSurface;
-            leftBox.consumeBox(bl);
+            scannedBinsLeft[k] = leftBox;
+            leftBox.consumeBox(bins[k]);
             leftCount += binCounts[k];
 
             // right is inclusive
-            const SSEBox& br = bins[K - k - 1];
-            rightBox.consumeBox(br);
+            rightBox.consumeBox(bins[K-k-1]);
             rightCount += binCounts[K - k - 1];
             rightCosts[K - k - 1] = rightCount * rightBox.getSurfaceArea() * invParentSurface;
+            scannedBinsRight[K - k - 1] = rightBox;
         }
 
         // calculate the sah
@@ -220,12 +223,12 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
          */
 
         // forward assign the bounding boxes
-        SSEBox child1Box = SSEBox::insideOut();
-        for(int k=0; k<min_k; k++) child1Box.consumeBox(bins[k]);
+        SSEBox child1Box = scannedBinsLeft[min_k];
+//        for(int k=0; k<min_k; k++) child1Box.consumeBox(bins[k]);
         ret[child1_index].boundingBox = child1Box.toNormalBox();
 
-        SSEBox child2Box = SSEBox::insideOut();
-        for(int k=min_k; k<K; k++) child2Box.consumeBox(bins[k]);
+        SSEBox child2Box = scannedBinsRight[min_k];
+ //       for(int k=min_k; k<K; k++) child2Box.consumeBox(bins[k]);
         ret[child2_index].boundingBox = child2Box.toNormalBox();
 
         // push the work on the stack
