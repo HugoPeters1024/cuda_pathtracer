@@ -201,8 +201,6 @@ public:
 
                 trianglesV.push_back(TriangleV(v0, v1, v2));
                 trianglesD.push_back(TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN));
-                if ((i/3)%1000 == 0)
-                    printf("Loading at %f percent\n", 100.0f * (float)i / (float)objReader.GetShapes()[s].mesh.indices.size());
             }
         }
     }
@@ -216,7 +214,7 @@ public:
 
         printf("Building a BVH...\n");
         uint bvhSize;
-        ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);
+        ret.h_bvh_buffer = createBVH(trianglesV, trianglesD, &bvhSize);
         printf("BVH Size: %u\n", bvhSize);
 
         ret.h_vertex_buffer = trianglesV.data();

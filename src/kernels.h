@@ -266,14 +266,14 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
             far_id = current.child1 + 1;
             bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, tnear, hitInfo);
             bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, tfar, hitInfo);
-            if (bnear && bfar && tnear > tfar) {
-                swapc(near_id, far_id);
-                swapc(bnear, bfar);
-            }
 
             // push on the stack, first the far child
             if (bfar) stack[size++] = far_id;
             if (bnear)  stack[size++] = near_id;
+
+            if (bnear && bfar && tnear > tfar) {
+                swapc(stack[size-1], stack[size-2]);
+            }
 
             //assert (size < STACK_SIZE);
         }
@@ -465,7 +465,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormal = normalize(get3f(texColor)*2-make_float3(1));
+            float3 texNormal = normalize(get3f(texColor)*2-make_float3(1)) * make_float3(-1, 1, 1);
             texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
             colliderNormal = texNormal;
