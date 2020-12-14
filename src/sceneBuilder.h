@@ -181,7 +181,8 @@ inline SceneData getConferenceScene()
     auto whiteId = scene->addMaterial(white);
 
  //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
-    scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
+    //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
+    scene->addModel("lost_empire.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, true);
     scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
     scene->addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
 

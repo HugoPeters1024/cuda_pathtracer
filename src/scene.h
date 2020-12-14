@@ -54,6 +54,11 @@ public:
         objConfig.triangulate = true;
         tinyobj::ObjReader objReader;
         objReader.ParseFromFile(filename, objConfig);
+        if (!objReader.Valid())
+        {
+            printf("Tinyobj could not load the model...\n");
+            exit(1);
+        }
 
 
         std::map<std::string, cudaTextureObject_t> textureItems;
@@ -130,6 +135,7 @@ public:
         const auto& normals = objReader.GetAttrib().normals;
         const auto& uvs = objReader.GetAttrib().texcoords;
         bool hasUvs = uvs.size() > 0;
+
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
             const auto& shape = objReader.GetShapes()[s];
@@ -214,7 +220,7 @@ public:
 
         printf("Building a BVH...\n");
         uint bvhSize;
-        ret.h_bvh_buffer = createBVH(trianglesV, trianglesD, &bvhSize);
+        ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);
         printf("BVH Size: %u\n", bvhSize);
 
         ret.h_vertex_buffer = trianglesV.data();

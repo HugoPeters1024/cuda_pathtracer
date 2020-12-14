@@ -436,6 +436,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
+    float3 surfaceNormal = colliderNormal;
     const TriangleD& triangleData = _GTriangleData[hitInfo.primitive_id];
     const TriangleV& triangleV = _GTriangles[hitInfo.primitive_id];
 
@@ -474,6 +475,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
+    bool cullSecondary = false;
     float random = rand(seed);
     if (random < material.transmit)
     {
@@ -517,6 +519,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.fromSpecular = false;
 
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
+        // due to normal mapping a sample might go into the surface
+        cullSecondary = dot(surfaceNormal, secondary.direction) < 0;
 
         // Lambert term is not applied because it is implicit due to the cosine weights
         // for the new sampled direction.
@@ -562,7 +566,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
     }
 
-    DRayQueueNew.push(RayPacked(secondary));
+    if (!cullSecondary) DRayQueueNew.push(RayPacked(secondary));
     stateBuf.setState(ray.pixeli, state);
 }
 
