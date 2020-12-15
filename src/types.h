@@ -19,6 +19,7 @@
 
 #include "constants.h"
 #include "vec.h"
+#include <glm/glm.hpp>
 
 #define inf 99999999
 
@@ -117,16 +118,13 @@ struct PointLight
     PointLight(float3 pos, float3 color) : pos(pos), color(color) {}
 };
 
-
-
-
 struct Box
 {
     float3 vmin;
     float3 vmax;
 
-    Box() {}
-    Box(float3 vmin, float3 vmax) : vmin(vmin), vmax(vmax) {}
+    HYBRID Box() {}
+    HYBRID Box(float3 vmin, float3 vmax) : vmin(vmin), vmax(vmax) {}
     HYBRID inline float3 centroid() const { return (vmin + vmax) * 0.5; }
     HYBRID inline float diagonal() const { return length(vmin - vmax); };
     inline float volume() const { return abs((vmax.x - vmin.x) * (vmax.y - vmin.y) * (vmax.z - vmin.z)); }
@@ -227,6 +225,7 @@ struct SSEBox
     }
 };
 
+
 struct Ray
 {
     float3 origin;
@@ -272,6 +271,7 @@ struct __align__(16) HitInfo
     PRIMITIVE_TYPE primitive_type;
     bool intersected;
     uint primitive_id;
+    uint model_id;
     float t;
 };
 
@@ -281,21 +281,25 @@ struct __align__(16) HitInfoPacked
 
     __device__ HitInfo getHitInfo() const
     {
-        return HitInfo
+        uint id_data = __float_as_uint(data.z);
+        HitInfo ret = HitInfo
         {
             reinterpret_cast<const PRIMITIVE_TYPE&>(data.x),
             reinterpret_cast<const bool&>(data.y),
-            reinterpret_cast<const uint&>(data.z),
+            id_data & 0x00ffffff,
+            (id_data >> 24),
             data.w,
         };
+        return ret;
     }
 
     __device__ HitInfoPacked(const HitInfo& hitInfo)
     {
+        uint id_data = (hitInfo.model_id << 24) | hitInfo.primitive_id;
         data = make_float4(
                 reinterpret_cast<const float&>(hitInfo.primitive_type),
                 reinterpret_cast<const float&>(hitInfo.intersected),
-                reinterpret_cast<const float&>(hitInfo.primitive_id),
+                reinterpret_cast<const float&>(id_data),
                 hitInfo.t);
     }
 };
@@ -327,6 +331,35 @@ struct __align__(16) BVHNode
         BVHNode ret;
         ret.vmin = make_float4(boundingBox.vmin, reinterpret_cast<float&>(child1));
         ret.vmax = make_float4(boundingBox.vmax, reinterpret_cast<float&>(t_count));
+        return ret;
+    }
+};
+
+struct Model
+{
+    TriangleV* trianglesV;
+    TriangleD* trianglesD;
+    BVHNode* bvh;
+    uint nrTriangles;
+    uint nrBvhNodes;
+    glm::mat4 transform;
+    glm::mat4 invTransform;
+};
+
+struct __align__(16) TopLevelBVH
+{
+    float3 vmin;
+    float3 vmax;
+    uint child1;
+    uint child2;
+    uint leaf;
+    bool isLeaf = false;
+
+    static TopLevelBVH CreateLeaf(uint bvhIdx)
+    {
+        TopLevelBVH ret;
+        ret.leaf = true;
+        ret.leaf = bvhIdx;
         return ret;
     }
 };

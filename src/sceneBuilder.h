@@ -56,7 +56,7 @@ inline SceneData getOutsideScene()
     // Add all the objects
     //scene.addModel("sibenik.obj", 3, make_float3(0), make_float3(0,42,0), sibenikMatId);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
-    scene->addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+  //  scene->addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
    // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);

@@ -4,19 +4,19 @@
 #include "types.h"
 #include "bvhBuilder.h"
 
+
 // Final product of the scene
 struct SceneData
 {
-    TriangleV* h_vertex_buffer;
-    TriangleD* h_data_buffer;
-    BVHNode* h_bvh_buffer;
+    TopLevelBVH* h_top_bvh;
+    Model* h_models;
     Material* h_material_buffer;
     Sphere* h_sphere_buffer;
     Plane* h_plane_buffer;
     PointLight* h_point_light_buffer;
     SphereLight* h_sphere_light_buffer;
-    uint num_triangles;
-    uint num_bvh_nodes;
+    uint num_top_bvh_nodes;
+    uint num_models;
     uint num_materials;
     uint num_spheres;
     uint num_planes;
@@ -24,11 +24,12 @@ struct SceneData
     uint num_sphere_lights;
 };
 
+
 class Scene
 {
 public:
-    std::vector<TriangleV> trianglesV;
-    std::vector<TriangleD> trianglesD;
+    std::vector<TopLevelBVH> topBvh;
+    std::vector<Model> models;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
@@ -136,12 +137,22 @@ public:
         const auto& uvs = objReader.GetAttrib().texcoords;
         bool hasUvs = uvs.size() > 0;
 
+        Model model;
+        model.nrTriangles = 0;
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
             const auto& shape = objReader.GetShapes()[s];
-            trianglesV.reserve(trianglesV.size() + shape.mesh.indices.size() / 3);
-            trianglesD.reserve(trianglesD.size() + shape.mesh.indices.size() / 3);
-            for(int i=0; i<shape.mesh.indices.size(); i+=3)
+            model.nrTriangles += shape.mesh.indices.size() / 3;
+        }
+
+        model.trianglesV = (TriangleV*)malloc(model.nrTriangles * sizeof(TriangleV));
+        model.trianglesD = (TriangleD*)malloc(model.nrTriangles * sizeof(TriangleD));
+
+        uint triangle_index = 0;
+        for(int s=0; s<objReader.GetShapes().size(); s++)
+        {
+            const auto& shape = objReader.GetShapes()[s];
+            for(int i=0; i<shape.mesh.indices.size(); i+=3, triangle_index++)
             {
                 const auto& it0 = shape.mesh.indices[i+0];
                 const auto& it1 = shape.mesh.indices[i+1];
@@ -205,10 +216,19 @@ public:
                             Vector3(n0.x, n0.y, n0.z));
                 }
 
-                trianglesV.push_back(TriangleV(v0, v1, v2));
-                trianglesD.push_back(TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN));
+                model.trianglesV[triangle_index] = TriangleV(v0, v1, v2);
+                model.trianglesD[triangle_index] = TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN);
             }
         }
+        printf("Building a BVH over %u triangles\n", model.nrTriangles);
+        float ping = glfwGetTime();
+        model.bvh = createBVHBinned(model.trianglesV, model.trianglesD, model.nrTriangles, &model.nrBvhNodes);
+        printf("Build took %fms\n", (glfwGetTime() - ping) *1000);
+        printf("BVH Size: %u\n", model.nrBvhNodes);
+
+        models.push_back(model);
+        // TODO
+        topBvh.push_back(TopLevelBVH::CreateLeaf(0));
     }
 
     SceneData finalize()
@@ -216,15 +236,7 @@ public:
         assert(sphereLights.size() > 0);
         SceneData ret;
 
-        printf("Finalizing scene, total triangles: %u\n", trianglesV.size());
-
-        printf("Building a BVH...\n");
-        uint bvhSize;
-        ret.h_bvh_buffer = createBVHBinned(trianglesV, trianglesD, &bvhSize);
-        printf("BVH Size: %u\n", bvhSize);
-
-        ret.h_vertex_buffer = trianglesV.data();
-        ret.h_data_buffer = trianglesD.data();
+        ret.h_top_bvh = topBvh.data();
 
         ret.h_material_buffer = materials.data();
         ret.h_sphere_buffer = spheres.data();
@@ -236,9 +248,12 @@ public:
         // copy over the sphere lights
         ret.h_sphere_light_buffer = sphereLights.data();
 
-        assert(trianglesV.size() == trianglesD.size());
-        ret.num_triangles = trianglesV.size();
-        ret.num_bvh_nodes = bvhSize;
+        ret.h_models = models.data();
+
+        ret.h_top_bvh = topBvh.data();
+
+        ret.num_models = models.size();
+        ret.num_top_bvh_nodes = topBvh.size();
         ret.num_materials = materials.size();
         ret.num_spheres = spheres.size();
         ret.num_planes = planes.size();

@@ -30,12 +30,11 @@ public:
 void Raytracer::Init()
 {
     // Assign the scene buffers to the global binding sites
-    HTriangles = sceneData.h_vertex_buffer;
-    HTriangleData = sceneData.h_data_buffer;
+    HModels = sceneData.h_models;
+    HTopBVH = sceneData.h_top_bvh;
     HSpheres = HSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres);
     HPlanes = HSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes);
     HMaterials = sceneData.h_material_buffer;
-    HBVH = sceneData.h_bvh_buffer;
     HSphereLights = HSizedBuffer<SphereLight>(nullptr, 0);
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
@@ -67,7 +66,7 @@ void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 float3 Raytracer::radiance(const Ray& ray, int iteration)
 {
     if (iteration >= max_depth) return make_float3(0);
-    HitInfo hitInfo = traverseBVHStack(ray, false);
+    HitInfo hitInfo = traverseTopLevel(ray, false);
     if (!hitInfo.intersected) return make_float3(0.2, 0.3, 0.6);
 
     if (hitInfo.primitive_type == LIGHT)
@@ -75,13 +74,15 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
         return make_float3(1);
     }
 
+    const Model model = _GModels[hitInfo.model_id];
+
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
 
-    const float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
+    const float3 originalNormal = getColliderNormal(hitInfo, intersectionPos, model);
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    Material material = getColliderMaterial(hitInfo);
+    Material material = getColliderMaterial(hitInfo, model);
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);
@@ -109,7 +110,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             fromLight /= dis2light;
             Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
             shadowRay.length = dis2light - 2 * EPS;
-            HitInfo shadowHit = traverseBVHStack(shadowRay, true);
+            HitInfo shadowHit = traverseTopLevel(shadowRay, true);
             if (!shadowHit.intersected) {
                 diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;
             }
@@ -120,7 +121,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     if (transmission > 0)
     {
 
-        float changed_reflection = 0;
+       float changed_reflection = 0;
         Ray refractRay = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, changed_reflection);
         transmission -= changed_reflection;
         reflect += changed_reflection;

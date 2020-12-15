@@ -45,6 +45,9 @@ target_link_libraries(pathtracer ${OPENGL_LIBRARIES})
 #target_link_libraries(pathtracer glfw)
 # These variables have been set by the previous command
 
+find_package(glm REQUIRED)
+message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
+
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(pathtracer OpenMP::OpenMP_CXX)

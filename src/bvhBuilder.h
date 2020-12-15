@@ -25,7 +25,7 @@ inline uint getBinId(uint K, uint axis, const float3& centroid, float bmin, floa
 }
 
 // http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
-inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
+inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, uint nrTriangles, uint* bvh_size)
 {
     float ping = glfwGetTime();
     // find dominant axis
@@ -33,13 +33,13 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     // use nth_interval to partition the triangles
     const uint K = 16;
     
-    BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
-    uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
-    SSEBox* boundingBoxes = (SSEBox*)malloc(trianglesV.size() * sizeof(SSEBox));
-    uint* binIds = (uint*)malloc(trianglesV.size() * sizeof(uint));
-    float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
+    BVHNode* ret = (BVHNode*)malloc((2 * nrTriangles - 1) * sizeof(BVHNode));
+    uint* indices = (uint*)malloc(nrTriangles * sizeof(uint));
+    SSEBox* boundingBoxes = (SSEBox*)malloc(nrTriangles * sizeof(SSEBox));
+    uint* binIds = (uint*)malloc(nrTriangles * sizeof(uint));
+    float3* centroids = (float3*)malloc(nrTriangles * sizeof(float3));
     SSEBox rootBox = SSEBox::insideOut();
-    for(uint i=0; i<trianglesV.size(); i++) 
+    for(uint i=0; i<nrTriangles; i++) 
     {
         indices[i] = i;
         centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
@@ -54,7 +54,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
 
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
-    work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
+    work.push(std::make_tuple(node_count++, 0, nrTriangles));
 
     float leftCosts[K];
     float rightCosts[K];
@@ -245,7 +245,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
 
 
     printf("BVH build took %f ms\n", (glfwGetTime() - ping)*1000);
-    permuteTriangles(indices, trianglesV.data(), trianglesD.data(), trianglesV.size());
+    permuteTriangles(indices, trianglesV, trianglesD, nrTriangles);
 
     free(indices);
     free(binIds);

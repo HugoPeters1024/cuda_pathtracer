@@ -39,27 +39,50 @@ void Pathtracer::Init()
     dPlaneBuffer = DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
     dSphereLightBuffer = DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, &DSphereLights);
 
-    // Upload the host buffers to cuda
-    TriangleV* d_vertex_buffer;
-    cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV)) );
-    cudaSafe( cudaMemcpy(d_vertex_buffer, sceneData.h_vertex_buffer, sceneData.num_triangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
-    TriangleD* d_data_buffer;
-    cudaSafe( cudaMalloc(&d_data_buffer, sceneData.num_triangles * sizeof(TriangleD)) );
-    cudaSafe( cudaMemcpy(d_data_buffer, sceneData.h_data_buffer, sceneData.num_triangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
 
-    BVHNode* d_bvh_buffer;
-    cudaSafe( cudaMalloc(&d_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode)) );
-    cudaSafe( cudaMemcpy(d_bvh_buffer, sceneData.h_bvh_buffer, sceneData.num_bvh_nodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+    // Host buffer of device buffers... ;)
+    Model hd_models[sceneData.num_models];
+
+    // copy over the model but set the gpu buffers as source
+    memcpy(hd_models, sceneData.h_models, sceneData.num_models * sizeof(Model));
+
+    for(int i=0; i<sceneData.num_models; i++)
+    {
+        TriangleV* d_vertex_buffer;
+        TriangleD* d_data_buffer;
+        BVHNode* d_bvh_buffer;
+
+        // Upload the host buffers to cuda
+        cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.h_models[i].nrTriangles * sizeof(TriangleV)) );
+        cudaSafe( cudaMalloc(&d_data_buffer, sceneData.h_models[i].nrTriangles * sizeof(TriangleD)) );
+        cudaSafe( cudaMalloc(&d_bvh_buffer, sceneData.h_models[i].nrBvhNodes * sizeof(TriangleD)) );
+
+        cudaSafe( cudaMemcpy(d_vertex_buffer, sceneData.h_models[i].trianglesV, sceneData.h_models[i].nrTriangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpy(d_data_buffer, sceneData.h_models[i].trianglesD, sceneData.h_models[i].nrTriangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpy(d_bvh_buffer, sceneData.h_models[i].bvh, sceneData.h_models[i].nrBvhNodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+
+        hd_models[i].trianglesV = d_vertex_buffer;
+        hd_models[i].trianglesD = d_data_buffer;
+        hd_models[i].bvh = d_bvh_buffer;
+    }
+
+    // Upload the collection of buffers to a new buffer
+    Model* d_models;
+    cudaSafe( cudaMalloc(&d_models, sceneData.num_models * sizeof(Model)) );
+    cudaSafe( cudaMemcpy(d_models, hd_models, sceneData.num_models * sizeof(Model), cudaMemcpyHostToDevice) );
+
+    TopLevelBVH* d_topBvh;
+    cudaSafe( cudaMalloc(&d_topBvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH)) );
+    cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
     Material* matBuf;
     cudaSafe( cudaMalloc(&matBuf, sceneData.num_materials * sizeof(Material)));
     cudaSafe( cudaMemcpy(matBuf, sceneData.h_material_buffer, sceneData.num_materials * sizeof(Material), cudaMemcpyHostToDevice) );
 
     // Assign to the global binding sites
-    cudaSafe( cudaMemcpyToSymbol(DTriangles, &d_vertex_buffer, sizeof(d_vertex_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(DTriangleData, &d_data_buffer, sizeof(d_data_buffer)) );
-    cudaSafe( cudaMemcpyToSymbol(DBVH, &d_bvh_buffer, sizeof(d_bvh_buffer)) );
+    cudaSafe( cudaMemcpyToSymbol(DModels, &d_models, sizeof(d_models)) );
     cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );
+    cudaSafe( cudaMemcpyToSymbol(DTopBVH, &d_topBvh, sizeof(d_topBvh)) );
 
     // queue of rays for wavefront tracing
     rayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
