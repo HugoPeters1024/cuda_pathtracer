@@ -303,30 +303,30 @@ struct __align__(16) HitInfoPacked
 
 struct __align__(16) BVHNode
 {
-    Box boundingBox;
-    // either a leaf or a child
-    union {
-        uint child1;
-        uint t_start;
-    };
-    uint t_count;
+    float4 vmin;
+    float4 vmax;
 
-    HYBRID inline bool isLeaf() const { return t_count > 0; }
+    HYBRID inline uint t_start() const { return reinterpret_cast<const uint&>(vmin.w); }
+    HYBRID inline uint child1() const { return reinterpret_cast<const uint&>(vmin.w); }
+
+    HYBRID inline uint t_count() const { return reinterpret_cast<const uint&>(vmax.w); }
+    HYBRID inline bool isLeaf() const { return t_count() > 0; }
+    HYBRID inline Box getBox() const { return Box(get3f(vmin), get3f(vmax)); }
 
     static BVHNode MakeChild(Box boundingBox, uint t_start, uint t_count) 
     {
         BVHNode ret;
-        ret.boundingBox = boundingBox;
-        ret.t_start = t_start;
-        ret.t_count = t_count;
+        ret.vmin = make_float4(boundingBox.vmin, reinterpret_cast<float&>(t_start));
+        ret.vmax = make_float4(boundingBox.vmax, reinterpret_cast<float&>(t_count));
         return ret;
     }
+
     static BVHNode MakeNode(Box boundingBox, uint child1)
     {
+        uint t_count = 0;
         BVHNode ret;
-        ret.boundingBox = boundingBox;
-        ret.child1 = child1;
-        ret.t_count = 0;
+        ret.vmin = make_float4(boundingBox.vmin, reinterpret_cast<float&>(child1));
+        ret.vmax = make_float4(boundingBox.vmax, reinterpret_cast<float&>(t_count));
         return ret;
     }
 };

@@ -48,7 +48,9 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
     }
 
     // set the root box
-    ret[0].boundingBox = rootBox.toNormalBox();
+    Box rootBoxNormal = rootBox.toNormalBox();
+    ret[0].vmin = make_float4(rootBoxNormal.vmin, 0);
+    ret[0].vmax = make_float4(rootBoxNormal.vmax, 0);
 
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
@@ -70,7 +72,7 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
         uint start = std::get<1>(workItem);
         uint count = std::get<2>(workItem);
         // bounding boxes are assigned forwardly
-        Box parent = ret[index].boundingBox;
+        Box parent = ret[index].getBox();
 
         // Count lower bound
         if (count <= 4)
@@ -224,12 +226,14 @@ inline BVHNode* createBVHBinned(std::vector<TriangleV>& trianglesV, std::vector<
 
         // forward assign the bounding boxes
         SSEBox child1Box = scannedBinsLeft[min_k];
-//        for(int k=0; k<min_k; k++) child1Box.consumeBox(bins[k]);
-        ret[child1_index].boundingBox = child1Box.toNormalBox();
+        Box child1BoxNormal = child1Box.toNormalBox();
+        ret[child1_index].vmin = make_float4(child1BoxNormal.vmin, 0);
+        ret[child1_index].vmax = make_float4(child1BoxNormal.vmax, 0);
 
         SSEBox child2Box = scannedBinsRight[min_k];
- //       for(int k=min_k; k<K; k++) child2Box.consumeBox(bins[k]);
-        ret[child2_index].boundingBox = child2Box.toNormalBox();
+        Box child2BoxNormal = child2Box.toNormalBox();
+        ret[child2_index].vmin = make_float4(child2BoxNormal.vmin, 0);
+        ret[child2_index].vmax = make_float4(child2BoxNormal.vmax, 0);
 
         // push the work on the stack
         work.push(std::make_tuple(child2_index, child2_start, child2_count));

@@ -238,7 +238,7 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
     uint start, end;
 
     BVHNode current = _GBVH[0];
-    if (boxtest(current.boundingBox, ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
+    if (boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
 
     while(size > 0)
     {
@@ -246,8 +246,8 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
 
         if (current.isLeaf())
         {
-            start = current.t_start;
-            end = start + current.t_count;
+            start = current.t_start();
+            end = start + current.t_count();
             for(uint i=start; i<end; i++)
             {
                 if (rayTriangleIntersect(ray, _GTriangles[i], t, u, v) && t < hitInfo.t)
@@ -262,10 +262,10 @@ HYBRID HitInfo traverseBVHStack(const Ray& ray, bool anyIntersection)
         }
         else
         {
-            near_id = current.child1;
-            far_id = current.child1 + 1;
-            bnear = boxtest(_GBVH[near_id].boundingBox, ray.origin, invRayDir, tnear, hitInfo);
-            bfar = boxtest(_GBVH[far_id].boundingBox, ray.origin, invRayDir, tfar, hitInfo);
+            near_id = current.child1();
+            far_id = current.child1() + 1;
+            bnear = boxtest(_GBVH[near_id].getBox(), ray.origin, invRayDir, tnear, hitInfo);
+            bfar = boxtest(_GBVH[far_id].getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
             // push on the stack, first the far child
             if (bfar) stack[size++] = far_id;
