@@ -523,7 +523,15 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
     }
 
-    if (!cullSecondary) DRayQueueNew.push(RayPacked(secondary));
+    if (!cullSecondary) {
+        // Russian roullete
+        float p = clamp(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f, 1.0f);
+        if (rand(seed) < p)
+        {
+            DRayQueueNew.push(RayPacked(secondary));
+            state.mask *= (1.0f / p);
+        }
+    }
     stateBuf.setState(ray.pixeli, state);
 }
 
