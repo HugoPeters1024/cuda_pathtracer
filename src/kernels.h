@@ -26,23 +26,23 @@ HYBRID inline float2 normalToUv(const float3& normal)
     return make_float2(u,v);
 }
 
-HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo, const Model& model)
+HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo, const Model* model)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return _GMaterials[model.trianglesD[hitInfo.primitive_id].material];
+        case TRIANGLE: return _GMaterials[model->trianglesD[hitInfo.primitive_id].material];
         case SPHERE:   return _GMaterials[_GSpheres[hitInfo.primitive_id].material];
         case PLANE:    return _GMaterials[_GPlanes[hitInfo.primitive_id].material];
     }
     assert(false);
 }
 
-HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint, const Model& model)
+HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint, const Model* model)
 {
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            return model.trianglesD[hitInfo.primitive_id].n0;
+            return model->trianglesD[hitInfo.primitive_id].n0;
         }
         case SPHERE: {
             const Sphere& sphere = _GSpheres[hitInfo.primitive_id];
@@ -125,7 +125,7 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
-HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Model& model)
+HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Instance& instance, uint instanceIdx)
 {
     float t, u, v;
 
@@ -142,6 +142,7 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
     uint near_id, far_id;
     uint start, end;
 
+    const Model model = _GModels[instance.model_id];
     BVHNode current = model.bvh[0];
     if (boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
 
@@ -161,6 +162,7 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
                     hitInfo.primitive_id = i;
                     hitInfo.primitive_type = TRIANGLE;
                     hitInfo.t = t;
+                    hitInfo.instance_id = instanceIdx;
                     if (anyIntersection) return;
                 }
             }
@@ -190,7 +192,6 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     HitInfo hitInfo;
     hitInfo.intersected = false;
     hitInfo.t = ray.length;
-    hitInfo.model_id = 0;
     hitInfo.primitive_id = 0;
 
     float t, u, v;
@@ -235,7 +236,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     TopLevelBVH root = _GTopBVH[0];
     Instance rootInstance = _GInstances[root.leaf];
     Ray transformedRay = ray;
-    traverseBVHStack(ray, anyIntersection, hitInfo, _GModels[rootInstance.model_id]);
+    traverseBVHStack(ray, anyIntersection, hitInfo, rootInstance, root.leaf);
     return hitInfo;
 }
 
@@ -387,7 +388,16 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         return;
     }
 
-    const Model model = _GModels[hitInfo.model_id];
+    Instance* instance;
+    Model* model;
+
+    // Only triangles are always part of instances
+    if (hitInfo.primitive_type == TRIANGLE)
+    {
+        instance = _GInstances + hitInfo.instance_id;
+        model = _GModels + instance->model_id;
+    }
+
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     Material material = getColliderMaterial(hitInfo, model);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos, model);
@@ -405,8 +415,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // sample the texture of the material by redoing the intersection
     if (material.hasTexture || material.hasNormalMap)
     {
-        const TriangleD& triangleData = model.trianglesD[hitInfo.primitive_id];
-        const TriangleV& triangleV = model.trianglesV[hitInfo.primitive_id];
+        const TriangleD& triangleData = model->trianglesD[hitInfo.primitive_id];
+        const TriangleV& triangleV = model->trianglesV[hitInfo.primitive_id];
 
         float t, u, v;
         assert( rayTriangleIntersect(ray, triangleV, t, u, v));

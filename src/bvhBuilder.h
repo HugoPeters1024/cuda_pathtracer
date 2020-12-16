@@ -38,6 +38,7 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     SSEBox* boundingBoxes = (SSEBox*)malloc(nrTriangles * sizeof(SSEBox));
     uint* binIds = (uint*)malloc(nrTriangles * sizeof(uint));
     float3* centroids = (float3*)malloc(nrTriangles * sizeof(float3));
+
     SSEBox rootBox = SSEBox::insideOut();
     for(uint i=0; i<nrTriangles; i++) 
     {

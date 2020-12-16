@@ -271,7 +271,7 @@ struct __align__(16) HitInfo
     PRIMITIVE_TYPE primitive_type;
     bool intersected;
     uint primitive_id;
-    uint model_id;
+    uint instance_id;
     float t;
 };
 
@@ -299,7 +299,7 @@ struct __align__(16) HitInfoPacked
                 reinterpret_cast<const float&>(hitInfo.primitive_type),
                 reinterpret_cast<const float&>(hitInfo.intersected),
                 reinterpret_cast<const float&>(hitInfo.primitive_id),
-                reinterpret_cast<const float&>(hitInfo.model_id));
+                reinterpret_cast<const float&>(hitInfo.instance_id));
         data2.x = hitInfo.t;
     }
 };
