@@ -277,30 +277,30 @@ struct __align__(16) HitInfo
 
 struct __align__(16) HitInfoPacked
 {
-    float4 data;
+    float4 data1;
+    float4 data2;
 
     __device__ HitInfo getHitInfo() const
     {
-        uint id_data = __float_as_uint(data.z);
         HitInfo ret = HitInfo
         {
-            reinterpret_cast<const PRIMITIVE_TYPE&>(data.x),
-            reinterpret_cast<const bool&>(data.y),
-            id_data & 0x00ffffff,
-            (id_data >> 24),
-            data.w,
+            reinterpret_cast<const PRIMITIVE_TYPE&>(data1.x),
+            reinterpret_cast<const bool&>(data1.y),
+            reinterpret_cast<const uint&>(data1.z),
+            reinterpret_cast<const uint&>(data1.w),
+            data2.x,
         };
         return ret;
     }
 
     __device__ HitInfoPacked(const HitInfo& hitInfo)
     {
-        uint id_data = (hitInfo.model_id << 24) | hitInfo.primitive_id;
-        data = make_float4(
+        data1 = make_float4(
                 reinterpret_cast<const float&>(hitInfo.primitive_type),
                 reinterpret_cast<const float&>(hitInfo.intersected),
-                reinterpret_cast<const float&>(id_data),
-                hitInfo.t);
+                reinterpret_cast<const float&>(hitInfo.primitive_id),
+                reinterpret_cast<const float&>(hitInfo.model_id));
+        data2.x = hitInfo.t;
     }
 };
 
