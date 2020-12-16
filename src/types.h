@@ -20,6 +20,8 @@
 #include "constants.h"
 #include "vec.h"
 #include <glm/glm.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 
 #define inf 99999999
 

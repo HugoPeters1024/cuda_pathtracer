@@ -20,6 +20,7 @@ private:
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
+    Instance* d_instances;
 
 public:
     Pathtracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
@@ -71,7 +72,6 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&d_models, sceneData.num_models * sizeof(Model)) );
     cudaSafe( cudaMemcpy(d_models, hd_models, sceneData.num_models * sizeof(Model), cudaMemcpyHostToDevice) );
 
-    Instance* d_instances;
     cudaSafe( cudaMalloc(&d_instances, sceneData.num_instances * sizeof(Instance)) );
     cudaSafe( cudaMemcpy(d_instances, sceneData.h_instance_buffer, sceneData.num_instances * sizeof(Instance), cudaMemcpyHostToDevice) );
 

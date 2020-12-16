@@ -249,7 +249,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     // TODO
     TopLevelBVH root = _GTopBVH[0];
     Instance rootInstance = _GInstances[root.leaf];
-    Ray transformedRay = transformRay(ray, rootInstance.transform);
+    Ray transformedRay = transformRay(ray, rootInstance.invTransform);
     traverseBVHStack(transformedRay, anyIntersection, hitInfo, rootInstance, root.leaf);
     return hitInfo;
 }
@@ -355,7 +355,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
-    const Ray ray = DRayQueue[i].getRay();
+    Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
     uint seed = getSeed(i,wang_hash(i),time);
@@ -405,6 +405,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     Instance* instance;
     Model* model;
 
+    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     // Only triangles are always part of instances
     if (hitInfo.primitive_type == TRIANGLE)
     {
@@ -412,13 +413,19 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         model = _GModels + instance->model_id;
     }
 
-    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     Material material = getColliderMaterial(hitInfo, model);
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos, model);
+
+    // invert the normal and position transformation back to world space
+    if (hitInfo.primitive_type == TRIANGLE)
+    {
+        glm::vec4 wn = glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0) * instance->transform;
+        originalNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+    }
+
     bool inside = dot(ray.direction, originalNormal) > 0;
     float3 colliderNormal = inside ? -originalNormal : originalNormal;
     float3 surfaceNormal = colliderNormal;
-
 
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
@@ -433,7 +440,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         const TriangleV& triangleV = model->trianglesV[hitInfo.primitive_id];
 
         float t, u, v;
-        Ray transformedRay = transformRay(ray, instance->transform);
+        Ray transformedRay = transformRay(ray, instance->invTransform);
         assert( rayTriangleIntersect(transformedRay, triangleV, t, u, v));
         // Calculate the exact texture location by interpolating the three vertices' texture coords
         float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;

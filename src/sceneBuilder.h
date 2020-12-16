@@ -63,10 +63,12 @@ inline SceneData getOutsideScene()
     uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
 
     glm::mat4x4 house_transform = glm::mat4x4(
-            glm::vec4(1,0,0,-15),
-            glm::vec4(0,1,0,2.5),
-            glm::vec4(0,0,1,-4),
+            glm::vec4(1,0,0,15),
+            glm::vec4(0,1,0,-2.5),
+            glm::vec4(0,0,1,4),
             glm::vec4(0,0,0,1));
+
+    house_transform = glm::rotate(house_transform, 1.8f, glm::vec3(0.0f,1.0f,0.0f));
 
     Instance house
     {
@@ -214,7 +216,23 @@ inline SceneData getConferenceScene()
 
  //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
     //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
-    scene->addModel("lost_empire.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, true);
+    uint model = scene->addModel("lost_empire.obj", 0.2, make_float3(0), make_float3(0, 0, 0), whiteId, true);
+    glm::mat4x4 transform = glm::mat4x4(
+            glm::vec4(1,0,0,0),
+            glm::vec4(0,1,0,-10),
+            glm::vec4(0,0,1,0),
+            glm::vec4(0,0,0,1));
+
+    Instance lostEmpire
+    {
+        model,
+        transform,
+        glm::inverse(transform),
+    };
+    
+    scene->addInstance(lostEmpire);
+
+
     scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
     scene->addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
 
