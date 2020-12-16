@@ -71,6 +71,10 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&d_models, sceneData.num_models * sizeof(Model)) );
     cudaSafe( cudaMemcpy(d_models, hd_models, sceneData.num_models * sizeof(Model), cudaMemcpyHostToDevice) );
 
+    Instance* d_instances;
+    cudaSafe( cudaMalloc(&d_instances, sceneData.num_instances * sizeof(Instance)) );
+    cudaSafe( cudaMemcpy(d_instances, sceneData.h_instance_buffer, sceneData.num_instances * sizeof(Instance), cudaMemcpyHostToDevice) );
+
     TopLevelBVH* d_topBvh;
     cudaSafe( cudaMalloc(&d_topBvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH)) );
     cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
@@ -81,6 +85,7 @@ void Pathtracer::Init()
 
     // Assign to the global binding sites
     cudaSafe( cudaMemcpyToSymbol(DModels, &d_models, sizeof(d_models)) );
+    cudaSafe( cudaMemcpyToSymbol(DInstances, &d_instances, sizeof(d_instances)) );
     cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );
     cudaSafe( cudaMemcpyToSymbol(DTopBVH, &d_topBvh, sizeof(d_topBvh)) );
 

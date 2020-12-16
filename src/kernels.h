@@ -233,7 +233,9 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
 
     // TODO
     TopLevelBVH root = _GTopBVH[0];
-    traverseBVHStack(ray, anyIntersection, hitInfo, _GModels[root.leaf]);
+    Instance rootInstance = _GInstances[root.leaf];
+    Ray transformedRay = ray;
+    traverseBVHStack(ray, anyIntersection, hitInfo, _GModels[rootInstance.model_id]);
     return hitInfo;
 }
 

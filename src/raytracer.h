@@ -31,6 +31,7 @@ void Raytracer::Init()
 {
     // Assign the scene buffers to the global binding sites
     HModels = sceneData.h_models;
+    HInstances = sceneData.h_instance_buffer;
     HTopBVH = sceneData.h_top_bvh;
     HSpheres = HSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres);
     HPlanes = HSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes);

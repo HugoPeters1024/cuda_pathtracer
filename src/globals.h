@@ -7,8 +7,9 @@
 // global NEE switch
 __device__ __constant__ bool DNEE;
 
-// global pointer to the bvh buffer
 __device__ __constant__ Model* DModels;
+
+__device__ __constant__ Instance* DInstances;
 
 __device__ __constant__ TopLevelBVH* DTopBVH;
 
@@ -28,6 +29,7 @@ __device__ __constant__ DSizedBuffer<SphereLight> DSphereLights;
 
 static bool HNEE;
 static Model* HModels;
+static Instance* HInstances;
 static TopLevelBVH* HTopBVH;
 static Material* HMaterials;
 static HSizedBuffer<Sphere> HSpheres;
@@ -37,6 +39,7 @@ static HSizedBuffer<SphereLight> HSphereLights;
 #ifdef __CUDA_ARCH__
 #define _NEE DNEE
 #define _GModels DModels
+#define _GInstances DInstances
 #define _GSpheres DSpheres
 #define _GPlanes DPlanes
 #define _GMaterials DMaterials
@@ -45,6 +48,7 @@ static HSizedBuffer<SphereLight> HSphereLights;
 #else
 #define _NEE HNEE
 #define _GModels HModels
+#define _GInstances HInstances
 #define _GSpheres HSpheres
 #define _GPlanes HPlanes
 #define _GMaterials HMaterials

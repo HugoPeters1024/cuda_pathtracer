@@ -60,7 +60,22 @@ inline SceneData getOutsideScene()
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
    // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
-    scene->addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
+    uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
+
+    glm::mat4x4 house_transform = glm::mat4x4(
+            glm::vec4(1,0,0,0), 
+            glm::vec4(0,1,0,0),
+            glm::vec4(0,0,1,0),
+            glm::vec4(0,0,0,1));
+
+    Instance house
+    {
+        house_model,
+        house_transform,
+        glm::inverse(house_transform),
+    };
+
+    scene->addInstance(house);
 
     scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 

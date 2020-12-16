@@ -342,6 +342,11 @@ struct Model
     BVHNode* bvh;
     uint nrTriangles;
     uint nrBvhNodes;
+};
+
+struct Instance
+{
+    uint model_id;
     glm::mat4 transform;
     glm::mat4 invTransform;
 };
@@ -355,11 +360,11 @@ struct __align__(16) TopLevelBVH
     uint leaf;
     bool isLeaf = false;
 
-    static TopLevelBVH CreateLeaf(uint bvhIdx)
+    static TopLevelBVH CreateLeaf(uint instanceIdx)
     {
         TopLevelBVH ret;
         ret.leaf = true;
-        ret.leaf = bvhIdx;
+        ret.leaf = instanceIdx;
         return ret;
     }
 };

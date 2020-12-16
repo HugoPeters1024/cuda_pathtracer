@@ -15,6 +15,8 @@ struct SceneData
     Plane* h_plane_buffer;
     PointLight* h_point_light_buffer;
     SphereLight* h_sphere_light_buffer;
+    Instance* h_instance_buffer;
+    uint num_instances;
     uint num_top_bvh_nodes;
     uint num_models;
     uint num_materials;
@@ -30,6 +32,7 @@ class Scene
 public:
     std::vector<TopLevelBVH> topBvh;
     std::vector<Model> models;
+    std::vector<Instance> instances;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
@@ -46,8 +49,9 @@ public:
     void addPlane(Plane plane) { planes.push_back(plane); }
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
+    void addInstance(Instance instance) { instances.push_back(instance); }
 
-    void addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
+    uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
@@ -229,6 +233,7 @@ public:
         models.push_back(model);
         // TODO
         topBvh.push_back(TopLevelBVH::CreateLeaf(0));
+        return models.size() - 1;
     }
 
     void validate()
@@ -265,6 +270,9 @@ public:
 
         ret.h_top_bvh = topBvh.data();
 
+        ret.h_instance_buffer = instances.data();
+
+        ret.num_instances = instances.size();
         ret.num_models = models.size();
         ret.num_top_bvh_nodes = topBvh.size();
         ret.num_materials = materials.size();
