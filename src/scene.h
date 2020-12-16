@@ -238,13 +238,6 @@ public:
 
     void validate()
     {
-        uint totalTriangles = 0;
-        for (const Model& m : models) totalTriangles += m.nrTriangles;
-        // Ensure that the triangles fit in 24 bits
-        assert(totalTriangles < (1<<24));
-        // Ensure that the models fit in the remaining 8
-        assert(models.size() < (1<<8));
-
         // I can't deal with that lol
         assert(sphereLights.size() > 0);
     }

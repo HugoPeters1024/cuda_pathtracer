@@ -60,12 +60,12 @@ inline SceneData getOutsideScene()
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
    // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
-    uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
+    uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
 
     glm::mat4x4 house_transform = glm::mat4x4(
-            glm::vec4(1,0,0,0), 
-            glm::vec4(0,1,0,0),
-            glm::vec4(0,0,1,0),
+            glm::vec4(1,0,0,-15),
+            glm::vec4(0,1,0,2.5),
+            glm::vec4(0,0,1,-4),
             glm::vec4(0,0,0,1));
 
     Instance house
@@ -142,7 +142,24 @@ inline SceneData getSibenikScene()
     auto mirrorMatId = scene->addMaterial(mirrorMat);
 
     // Add all the objects
-    scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,12,0), sibenikMatId, true);
+    uint sibenikModel = scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, true);
+
+    glm::mat4x4 identity = glm::mat4x4(
+            glm::vec4(1,0,0,0),
+            glm::vec4(0,1,0,-12),
+            glm::vec4(0,0,1,0),
+            glm::vec4(0,0,0,1));
+
+
+    Instance sibenikInstance =
+    {
+        sibenikModel,
+        identity,
+        inverse(identity),
+    };
+
+    scene->addInstance(sibenikInstance);
+
     scene->addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
 //    scene.addModel("cube_brian.obj", 1, make_float3(0), make_float3(-4, 6, 0), 0, true);
     //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );

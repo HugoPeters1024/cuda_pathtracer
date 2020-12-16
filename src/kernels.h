@@ -26,6 +26,20 @@ HYBRID inline float2 normalToUv(const float3& normal)
     return make_float2(u,v);
 }
 
+HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
+{
+    glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
+    glm::vec4 oldOrigin = glm::vec4(ray.origin.x, ray.origin.y, ray.origin.z, 1);
+
+    glm::vec4 newDir = oldDir * transform;
+    glm::vec4 newOrigin = oldOrigin * transform;
+
+    Ray transformedRay = ray;
+    transformedRay.direction = normalize(make_float3(newDir.x, newDir.y, newDir.z));
+    transformedRay.origin = make_float3(newOrigin.x, newOrigin.y, newOrigin.z);
+    return transformedRay;
+}
+
 HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo, const Model* model)
 {
     switch (hitInfo.primitive_type)
@@ -235,8 +249,8 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     // TODO
     TopLevelBVH root = _GTopBVH[0];
     Instance rootInstance = _GInstances[root.leaf];
-    Ray transformedRay = ray;
-    traverseBVHStack(ray, anyIntersection, hitInfo, rootInstance, root.leaf);
+    Ray transformedRay = transformRay(ray, rootInstance.transform);
+    traverseBVHStack(transformedRay, anyIntersection, hitInfo, rootInstance, root.leaf);
     return hitInfo;
 }
 
@@ -419,7 +433,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         const TriangleV& triangleV = model->trianglesV[hitInfo.primitive_id];
 
         float t, u, v;
-        assert( rayTriangleIntersect(ray, triangleV, t, u, v));
+        Ray transformedRay = transformRay(ray, instance->transform);
+        assert( rayTriangleIntersect(transformedRay, triangleV, t, u, v));
         // Calculate the exact texture location by interpolating the three vertices' texture coords
         float2 uv = triangleData.uv0 * (1-u-v) + triangleData.uv1 * u + triangleData.uv2 * v;
 
