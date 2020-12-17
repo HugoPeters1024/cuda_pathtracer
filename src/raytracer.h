@@ -52,6 +52,10 @@ void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
         instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
     }
 
+    BuildTopLevelBVH(sceneData.h_top_bvh, instances, sceneData.h_models, sceneData.num_objects);
+
+
+
     max_depth = shouldClear ? 2 : 7;
 #pragma omp parallel for schedule (dynamic)
     for(uint i=0; i<NR_PIXELS; i++)

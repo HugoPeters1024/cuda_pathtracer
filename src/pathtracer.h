@@ -22,6 +22,7 @@ private:
     cudaTextureObject_t dSkydomeTex;
     Instance* h_instances;
     Instance* d_instances;
+    TopLevelBVH* d_topBvh;
 
 public:
     Pathtracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
@@ -76,9 +77,7 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&d_instances, sceneData.num_objects * sizeof(Instance)) );
     h_instances = (Instance*)malloc(sceneData.num_objects * sizeof(Instance));
 
-    TopLevelBVH* d_topBvh;
     cudaSafe( cudaMalloc(&d_topBvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH)) );
-    cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
     Material* matBuf;
     cudaSafe( cudaMalloc(&matBuf, sceneData.num_materials * sizeof(Material)));
@@ -112,14 +111,15 @@ void Pathtracer::Init()
 
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
-    sceneData.h_object_buffer[0].position += make_float3(0, 0.01f, 0);
     // Update all the gameobjects
     for(int i=0; i<sceneData.num_objects; i++)
     {
         h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
     }
     cudaSafe( cudaMemcpy(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyToSymbol(DInstances, &d_instances, sizeof(d_instances)) );
+
+    BuildTopLevelBVH(sceneData.h_top_bvh, h_instances, sceneData.h_models, sceneData.num_objects);
+    cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );

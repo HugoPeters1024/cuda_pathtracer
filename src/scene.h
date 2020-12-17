@@ -30,7 +30,7 @@ inline Instance ConvertToInstance(const GameObject& obj)
 {
     glm::mat4x4 transform = glm::mat4x4(1.0f);
     transform = glm::rotate(transform, obj.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-    transform = glm::rotate(transform, (float)glfwGetTime(), glm::vec3(0.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, obj.rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
     transform = glm::rotate(transform, obj.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
     transform = glm::scale(transform, glm::vec3(obj.scale.x, obj.scale.y, obj.scale.z));
     transform = glm::translate(transform, glm::vec3(obj.position.x, obj.position.y, obj.position.z));
@@ -42,10 +42,102 @@ inline Instance ConvertToInstance(const GameObject& obj)
     };
 }
 
+inline Box transformBox(const Box& box, const glm::mat4x4& transform)
+{
+    float3 points[8];
+    float3 minToMax = box.vmax - box.vmin;
+    points[0] = box.vmin;
+    points[1] = box.vmin + make_float3(minToMax.x, 0, 0);
+    points[2] = box.vmin + make_float3(0, minToMax.y, 0);
+    points[3] = box.vmin + make_float3(0, 0, minToMax.z);
+
+    points[4] = box.vmax;
+    points[5] = box.vmax - make_float3(minToMax.x, 0, 0);
+    points[6] = box.vmax - make_float3(0, minToMax.y, 0);
+    points[7] = box.vmax - make_float3(0, 0, minToMax.z);
+
+    Box ret = Box::insideOut();
+    for(const float3& p : points) {
+        glm::vec4 wp = transform * glm::vec4(p.x, p.y, p.z, 1);
+        ret.consumePoint(make_float3(wp.x, wp.y, wp.z));
+    }
+    return ret;
+}
+
+struct Indexed
+{
+    uint index;
+    TopLevelBVH item;
+};
+
+inline Indexed FindBestMatch(const uint node, const std::map<uint, Indexed>& list)
+{
+    float minSurface = std::numeric_limits<float>::max();
+    bool found = false;
+    Indexed match;
+    Box nodeBox = list.at(node).item.box;
+
+    auto it = list.begin();
+    for(uint i=0; i<list.size(); i++, it = std::next(it))
+    {
+        const Indexed& item = it->second;
+        if (item.index == node) continue;
+        Box newBox = nodeBox;
+        newBox.consumeBox(item.item.box);
+        if (newBox.getSurfaceArea() < minSurface)
+        {
+            minSurface = newBox.getSurfaceArea();
+            match = item;
+            found = true;
+        }
+    }
+
+    return found ? match : list.at(node);
+}
+
+
+inline void BuildTopLevelBVH(TopLevelBVH* dest, const Instance* instances, const Model* models, uint num_instances)
+{
+    // The toplevel bvh leaves should have the same bounding box as the bvh but transformed.
+    std::map<uint, Indexed> list;
+    uint node_count = 2 * num_instances - 1;
+    for(uint i=0; i<num_instances; i++) {
+        node_count--;
+        Box box = transformBox(models[instances[i].model_id].bvh[0].getBox(), instances[i].transform);
+        TopLevelBVH node = TopLevelBVH::CreateLeaf(i, box);
+        dest[node_count] = node;
+        list[node_count] = Indexed { node_count, node };
+    }
+
+    Indexed A = list.begin()->second;
+    Indexed B = FindBestMatch(A.index, list);
+
+    while(list.size() > 1)
+    {
+        Indexed C = FindBestMatch(B.index, list);
+        if (A.index == C.index)
+        {
+            list.erase(A.index);
+            list.erase(B.index);
+            TopLevelBVH parent = TopLevelBVH::CreateNode(A.index, B.index, Box::merged(A.item.box, B.item.box));
+            A = Indexed { --node_count, parent };
+            dest[A.index] = A.item;
+            list[A.index] = A;
+            B = FindBestMatch(A.index, list);
+        }
+        else
+        {
+            A = B;
+            B = C;
+        }
+    }
+
+    assert(node_count == 0);
+}
+
 class Scene
 {
 public:
-    std::vector<TopLevelBVH> topBvh;
     std::vector<Model> models;
     std::vector<GameObject> objects;
     std::vector<Material> materials;
@@ -240,8 +332,6 @@ public:
         printf("BVH Size: %u\n", model.nrBvhNodes);
 
         models.push_back(model);
-        // TODO
-        topBvh.push_back(TopLevelBVH::CreateLeaf(0));
         return models.size() - 1;
     }
 
@@ -256,11 +346,9 @@ public:
         validate();
         SceneData ret;
 
-        ret.h_top_bvh = topBvh.data();
-
-        ret.h_material_buffer = materials.data();
         ret.h_sphere_buffer = spheres.data();
         ret.h_plane_buffer = planes.data();
+        ret.h_material_buffer = materials.data();
 
         // copy over the point lights
         ret.h_point_light_buffer = pointLights.data();
@@ -270,13 +358,13 @@ public:
 
         ret.h_models = models.data();
 
-        ret.h_top_bvh = topBvh.data();
+        ret.num_top_bvh_nodes = 2 * objects.size() - 1;
+        ret.h_top_bvh = (TopLevelBVH*)malloc(ret.num_top_bvh_nodes * sizeof(TopLevelBVH));
 
         ret.h_object_buffer = objects.data();
 
         ret.num_objects = objects.size();
         ret.num_models = models.size();
-        ret.num_top_bvh_nodes = topBvh.size();
         ret.num_materials = materials.size();
         ret.num_spheres = spheres.size();
         ret.num_planes = planes.size();

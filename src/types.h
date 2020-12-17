@@ -152,6 +152,14 @@ struct Box
             make_float3(-9999999)
         };
     }
+    
+    static Box merged(const Box& a, const Box& b)
+    {
+        Box ret = Box::insideOut();
+        ret.consumeBox(a);
+        ret.consumeBox(b);
+        return ret;
+    }
 
     void consumeBox(const Box& a)
     {
@@ -364,18 +372,28 @@ struct GameObject
 
 struct __align__(16) TopLevelBVH
 {
-    float3 vmin;
-    float3 vmax;
+    Box box;
     uint child1;
     uint child2;
     uint leaf;
     bool isLeaf = false;
 
-    static TopLevelBVH CreateLeaf(uint instanceIdx)
+    static TopLevelBVH CreateLeaf(uint instanceIdx, const Box& box)
     {
         TopLevelBVH ret;
-        ret.leaf = true;
+        ret.isLeaf = true;
         ret.leaf = instanceIdx;
+        ret.box = box;
+        return ret;
+    }
+
+    static TopLevelBVH CreateNode(uint child1, uint child2, Box box)
+    {
+        TopLevelBVH ret;
+        ret.isLeaf = false;
+        ret.child1 = child1;
+        ret.child2 = child2;
+        ret.box = box;
         return ret;
     }
 };

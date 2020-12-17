@@ -216,7 +216,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     hitInfo.t = ray.length;
     hitInfo.primitive_id = 0;
 
-    float t, u, v;
+    float t, tmin;
 
     for(int i=0; i<_GSpheres.size; i++)
     {
@@ -254,11 +254,34 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
         }
     }
 
-    // TODO
-    TopLevelBVH root = _GTopBVH[0];
-    Instance rootInstance = _GInstances[root.leaf];
-    Ray transformedRay = transformRay(ray, rootInstance.invTransform);
-    traverseBVHStack(transformedRay, anyIntersection, hitInfo, rootInstance, root.leaf);
+    float3 invRayDir = 1.0f / ray.direction;
+
+    const uint STACK_SIZE = 5;
+    uint stack[STACK_SIZE];
+    uint size = 0;
+
+    TopLevelBVH current;
+    stack[size++] = 0;
+
+    while(size > 0)
+    {
+        current = _GTopBVH[stack[--size]];
+        if (!boxtest(current.box, ray.origin, invRayDir, tmin, hitInfo)) continue;
+
+        if (current.isLeaf)
+        {
+            Instance instance = _GInstances[current.leaf];
+            Ray transformedRay = transformRay(ray, instance.invTransform);
+            traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance, current.leaf);
+            if (anyIntersection && hitInfo.intersected) return hitInfo;
+        }
+        else
+        {
+            stack[size++] = current.child1;
+            stack[size++] = current.child2;
+        }
+    }
+
     return hitInfo;
 }
 
@@ -268,7 +291,7 @@ __device__ float3 BRDF(const float3& normal, uint& seed)
     float r2 = rand(seed);
     float r2s = sqrtf(r2);
 
-    float3 w = normal;
+    const float3& w = normal;
     float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
     float3 v = cross(w,u);
 
