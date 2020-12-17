@@ -56,7 +56,7 @@ HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& int
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            return model->trianglesD[hitInfo.primitive_id].n0;
+            return model->trianglesD[hitInfo.primitive_id].normal;
         }
         case SPHERE: {
             const Sphere& sphere = _GSpheres[hitInfo.primitive_id];
@@ -465,8 +465,17 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormal = normalize(get3f(texColor)*2-make_float3(1)) * make_float3(-1, 1, 1);
-            texNormal = get3f(normalize(triangleData.TBN * make_float4(texNormal, 0)));
+            float3 texNormalT = normalize(get3f(texColor)*2-make_float3(1)) * make_float3(-1, 1, 1);
+            float3 texNormal = normalize(make_float3(
+                    dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
+                    dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
+                    dot(texNormalT, make_float3(triangleData.tangent.z, triangleData.bitangent.z, triangleData.normal.z))
+            ));
+
+            // Transform the normal from model space to world space
+            glm::vec4 wn = glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0) * instance->transform;
+            texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
             colliderNormal = texNormal;
         }

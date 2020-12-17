@@ -146,18 +146,16 @@ inline SceneData getSibenikScene()
     // Add all the objects
     uint sibenikModel = scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, true);
 
-    glm::mat4x4 identity = glm::mat4x4(
-            glm::vec4(1,0,0,0),
-            glm::vec4(0,1,0,12),
-            glm::vec4(0,0,1,0),
-            glm::vec4(0,0,0,1));
 
+    glm::mat4x4 transform = glm::mat4x4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0, -12, 0));
+    transform = glm::rotate(transform, 3.14152926f * 0.5f, glm::vec3(0.0f,1.0f,0.0f));
 
     Instance sibenikInstance =
     {
         sibenikModel,
-        identity,
-        inverse(identity),
+        transform,
+        inverse(transform),
     };
 
     scene->addInstance(sibenikInstance);
@@ -169,33 +167,6 @@ inline SceneData getSibenikScene()
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
-    /*
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,1.0), lucyMatId);
-
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(0,0,4.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(0,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(0,0,1.0), lucyMatId);
-
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-3,0,4.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-3,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-3,0,1.0), lucyMatId);
-   // scene.addModel("house.obj", 0.04, make_float3(0), make_float3(15,-2.5,4), whiteId);
-
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-12,0,4.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-12,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-12,0,1.0), lucyMatId);
-
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-15,0,4.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-15,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-15,0,1.0), lucyMatId);
-
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,4.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,7.0), lucyMatId);
-    scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(-18,0,1.0), lucyMatId);
-     */
-
-    scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 
     //scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
     scene->addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));

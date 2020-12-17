@@ -187,22 +187,21 @@ public:
                 v1 = make_float3(v1_tmp.x, v1_tmp.y, v1_tmp.z);
                 v2 = make_float3(v2_tmp.x, v2_tmp.y, v2_tmp.z);
 
-                float3 n0, n1, n2;
+                float3 normal, tangent, bitangent;
 
                 if (it0.normal_index == -1 || it1.normal_index == -1 || it2.normal_index == -1)
                 {
                     float3 edge1 = v1 - v0;
                     float3 edge2 = v2 - v0;
-                    n2 = n1 = n0 = normalize(cross(edge1, edge2));
+                    normal = normalize(cross(edge1, edge2));
                 }
                 else {
-                    n0 = make_float3(normals[it0.normal_index*3+0], normals[it0.normal_index*3+1], normals[it0.normal_index*3+2]);
-                    n1 = make_float3(normals[it1.normal_index*3+0], normals[it1.normal_index*3+1], normals[it1.normal_index*3+2]);
-                    n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
+                    normal = make_float3(normals[it0.normal_index*3+0], normals[it0.normal_index*3+1], normals[it0.normal_index*3+2]);
+                    //n1 = make_float3(normals[it1.normal_index*3+0], normals[it1.normal_index*3+1], normals[it1.normal_index*3+2]);
+                    //n2 = make_float3(normals[it2.normal_index*3+0], normals[it2.normal_index*3+1], normals[it2.normal_index*3+2]);
                 }
 
 
-                Matrix4 TBN;
                 if (useMtl && materials[material_ids[mit]].hasNormalMap)
                 {
                     float3 edge1 = v1 - v0;
@@ -211,17 +210,12 @@ public:
                     float2 deltaUV2 = uv2 - uv0;
 
                     float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                    float3 tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
-                    float3 bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
-
-                    TBN = Matrix4::FromColumnVectors(
-                            Vector3(tangent.x, tangent.y, tangent.z),
-                            Vector3(bitangent.x, bitangent.y, bitangent.z),
-                            Vector3(n0.x, n0.y, n0.z));
+                    tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
+                    bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
                 }
 
                 model.trianglesV[triangle_index] = TriangleV(v0, v1, v2);
-                model.trianglesD[triangle_index] = TriangleD(n0, n1, n2, uv0, uv1, uv2, useMtl ? material_ids[mit] : material, TBN);
+                model.trianglesD[triangle_index] = TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, useMtl ? material_ids[mit] : material);
             }
         }
         printf("Building a BVH over %u triangles\n", model.nrTriangles);
