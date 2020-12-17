@@ -148,7 +148,7 @@ inline SceneData getSibenikScene()
 
     glm::mat4x4 identity = glm::mat4x4(
             glm::vec4(1,0,0,0),
-            glm::vec4(0,1,0,-12),
+            glm::vec4(0,1,0,12),
             glm::vec4(0,0,1,0),
             glm::vec4(0,0,0,1));
 

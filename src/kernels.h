@@ -96,11 +96,25 @@ HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
 
 HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
 {
+#ifdef __CUDA_ARCH__
     float3 t0 = (box.vmin - rayOrigin) * invRayDir;
     float3 t1 = (box.vmax - rayOrigin) * invRayDir;
     float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
     tmin = fmaxcompf(tmin3);
-    return fmincompf(tmax3) >= max(0.0f, tmin);
+    return fmincompf(tmax3) >= fmax(0.0f, tmin);
+#else
+    __m128 bmin = _mm_setr_ps(box.vmin.x, box.vmin.y, box.vmin.z, 0.0f);
+    __m128 bmax = _mm_setr_ps(box.vmax.x, box.vmax.y, box.vmax.z, 0.0f);
+    __m128 sdRayOrigin = _mm_setr_ps(rayOrigin.x, rayOrigin.y, rayOrigin.z, 0.0f);
+    __m128 sdInvRayDir = _mm_setr_ps(invRayDir.x, invRayDir.y, invRayDir.z, 0.0f);
+    __m128 t0 = _mm_mul_ps(_mm_sub_ps(bmin, sdRayOrigin), sdInvRayDir);
+    __m128 t1 = _mm_mul_ps(_mm_sub_ps(bmax, sdRayOrigin), sdInvRayDir);
+    __m128 sdtmin = _mm_min_ps(t0, t1);
+    __m128 sdtmax = _mm_max_ps(t0, t1);
+    tmin = fmax(fmax(sdtmin[0], sdtmin[1]), sdtmin[2]);
+    float tmax = fmin(fmin(sdtmax[0], sdtmax[1]), sdtmax[2]);
+    return tmax >= fmax(0.0f, tmin);
+#endif
 }
 
 HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
@@ -150,7 +164,7 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
     uint near_id, far_id;
     uint start, end;
 
-    const Model model = _GModels[instance.model_id];
+    const Model& model = _GModels[instance.model_id];
     BVHNode current = model.bvh[0];
     if (boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
 
@@ -539,13 +553,15 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
                 state.light = state.mask * light.color * SA * DSphereLights.size;
 
-                // contribution will not be worth it otherwise.
-                if (dot(state.light, state.light) > 0.03)
+                // Russian roullette for shadow rays
+                float p = clamp(fmax(fmax(state.light.x, state.light.y), state.light.z), 0.1, 1.0f);
+                if (rand(seed) < p)
                 {
                     // We invert the shadowrays to get coherent origins.
                     Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
                     shadowRay.length = shadowLength - 2 * EPS;
                     DShadowRayQueue.push(RayPacked(shadowRay));
+                    state.light *= (1.0f / p);
                 }
             }
         }
