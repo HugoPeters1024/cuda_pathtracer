@@ -196,15 +196,14 @@ struct SSEBox
         };
     }
 
-    void consumeBox(const SSEBox& a)
+    inline void consumeBox(const SSEBox& a)
     {
         vmin = _mm_min_ps(vmin, a.vmin);
         vmax = _mm_max_ps(vmax, a.vmax);
     }
 
-    void consumePoint(const float3& p)
+    inline void consumePoint(const __m128& sse_p)
     {
-        __m128 sse_p = _mm_setr_ps(p.x, p.y, p.z, 0);
         vmin = _mm_min_ps(vmin, sse_p);
         vmax = _mm_max_ps(vmax, sse_p);
     }

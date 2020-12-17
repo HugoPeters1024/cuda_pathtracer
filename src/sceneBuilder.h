@@ -216,12 +216,11 @@ inline SceneData getConferenceScene()
 
  //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
     //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
-    uint model = scene->addModel("lost_empire.obj", 0.2, make_float3(0), make_float3(0, 0, 0), whiteId, true);
-    glm::mat4x4 transform = glm::mat4x4(
-            glm::vec4(1,0,0,0),
-            glm::vec4(0,1,0,-10),
-            glm::vec4(0,0,1,0),
-            glm::vec4(0,0,0,1));
+    uint model = scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 0, 0), whiteId, true);
+
+    glm::mat4x4 transform = glm::mat4x4(1.0f);
+    transform = glm::translate(transform, glm::vec3(0, 10, 0));
+    transform = glm::rotate(transform, 3.14152926f * 0.5f, glm::vec3(1.0f,0.0f,0.0f));
 
     Instance lostEmpire
     {

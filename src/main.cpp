@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
         return -5;
     }
 
-    bool PATHRACER = false;
+    bool PATHRACER = true;
 
     // Create the applications
     Pathtracer pathtracerApp = Pathtracer(sceneData, texture);

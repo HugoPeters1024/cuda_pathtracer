@@ -7,6 +7,13 @@
 #include "constants.h"
 #include "vec.h"
 
+struct WorkItem
+{
+    uint index;
+    uint start;
+    uint count;
+};
+
 inline void permuteTriangles(uint* indices, TriangleV* trianglesV, TriangleD* trianglesD, uint n)
 {
     // permute the triangles given the indices. 
@@ -36,14 +43,18 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     BVHNode* ret = (BVHNode*)malloc((2 * nrTriangles - 1) * sizeof(BVHNode));
     uint* indices = (uint*)malloc(nrTriangles * sizeof(uint));
     SSEBox* boundingBoxes = (SSEBox*)malloc(nrTriangles * sizeof(SSEBox));
-    uint* binIds = (uint*)malloc(nrTriangles * sizeof(uint));
-    float3* centroids = (float3*)malloc(nrTriangles * sizeof(float3));
+    char* binIds = (char*)malloc(nrTriangles * sizeof(char));
+    __m128* centroids = (__m128*)malloc(nrTriangles * sizeof(__m128));
 
     SSEBox rootBox = SSEBox::insideOut();
     for(uint i=0; i<nrTriangles; i++) 
     {
         indices[i] = i;
-        centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
+        //centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
+        __m128 ssev0 = _mm_setr_ps(trianglesV[i].v0.x, trianglesV[i].v0.y, trianglesV[i].v0.z, 0);
+        __m128 ssev1 = _mm_setr_ps(trianglesV[i].v1.x, trianglesV[i].v1.y, trianglesV[i].v1.z, 0);
+        __m128 ssev2 = _mm_setr_ps(trianglesV[i].v2.x, trianglesV[i].v2.y, trianglesV[i].v2.z, 0);
+        centroids[i] = _mm_mul_ps(_mm_setr_ps(0.333333, 0.3333333, 0.3333333, 0), _mm_add_ps(ssev0, _mm_add_ps(ssev1, ssev2)));
         boundingBoxes[i] = SSEBox::fromTriangle(trianglesV[i]);
         rootBox.consumeBox(boundingBoxes[i]);
     }
@@ -53,9 +64,12 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     ret[0].vmin = make_float4(rootBoxNormal.vmin, 0);
     ret[0].vmax = make_float4(rootBoxNormal.vmax, 0);
 
-    std::stack<std::tuple<uint, uint, uint>> work;
+    //std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
-    work.push(std::make_tuple(node_count++, 0, nrTriangles));
+    WorkItem stack[256];
+    uint stack_size = 0;
+    stack[stack_size++] = WorkItem { node_count++, 0, nrTriangles };
+    //work.push(std::make_tuple(node_count++, 0, nrTriangles));
 
     float leftCosts[K];
     float rightCosts[K];
@@ -65,13 +79,13 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     SSEBox scannedBinsLeft[K];
     SSEBox scannedBinsRight[K];
 
-    while(!work.empty())
+    while(stack_size > 0)
     {
-        auto workItem = work.top();
-        work.pop();
-        uint index = std::get<0>(workItem);
-        uint start = std::get<1>(workItem);
-        uint count = std::get<2>(workItem);
+        assert(stack_size < 128);
+        auto workItem = stack[--stack_size];
+        uint index = workItem.index;
+        uint start = workItem.start;
+        uint count = workItem.count;
         // bounding boxes are assigned forwardly
         Box parent = ret[index].getBox();
 
@@ -89,7 +103,7 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         SSEBox parentCentroid = SSEBox::insideOut();
         for(int i=start; i<start+count; i++)
         {
-            const float3& centroid = centroids[indices[i]];
+            const __m128& centroid = centroids[indices[i]];
             //const SSEBox& box = boundingBoxes[indices[i]];
            // parent.consumeBox(box);
             parentCentroid.consumePoint(centroid);
@@ -126,9 +140,9 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         float binFac = K*(1-EPS) / (bmax - bmin);
         for(int i=start; i<start+count; i++)
         {
-            float3 centroid = centroids[indices[i]];
+            const __m128& centroid = centroids[indices[i]];
             const SSEBox& b = boundingBoxes[indices[i]];
-            uint binId = uint((at(centroid, axis) - bmin) * binFac);
+            char binId = (char)((centroid[axis] - bmin) * binFac);
             binIds[indices[i]] = binId;
 
             binCounts[binId]++;
@@ -237,8 +251,10 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         ret[child2_index].vmax = make_float4(child2BoxNormal.vmax, 0);
 
         // push the work on the stack
-        work.push(std::make_tuple(child2_index, child2_start, child2_count));
-        work.push(std::make_tuple(child1_index, child1_start, child1_count));
+        //work.push(std::make_tuple(child2_index, child2_start, child2_count));
+        //work.push(std::make_tuple(child1_index, child1_start, child1_count));
+        stack[stack_size++] = WorkItem { child2_index, child2_start, child2_count };
+        stack[stack_size++] = WorkItem { child1_index, child1_start, child1_count };
 
         // Create a node
         ret[index] = BVHNode::MakeNode(parent, child1_index);

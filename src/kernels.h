@@ -100,9 +100,7 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
     float3 t1 = (box.vmax - rayOrigin) * invRayDir;
     float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
     tmin = fmaxcompf(tmin3);
-    float tmax = fmincompf(tmax3);
-    
-    return tmin <= tmax && tmax > 0;
+    return fmincompf(tmax3) >= max(0.0f, tmin);
 }
 
 HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
@@ -110,21 +108,17 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
-    bool ret = true;
     float det = dot(v0v1, pvec);
-    ret &= fabs(det) > 0.0001f;
-    float invDet = 1 / det;
+    float invDet = 1.0f / det;
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
-    ret &= !(u < 0 || u > 1);
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
-    ret &= !(v < 0 || u + v > 1);
 
     t = dot(v0v2, qvec) * invDet;
-    return ret && t > 0;
+    return fabs(det) > 0.0001f && (u >= 0 && u <= 1) && (v >= 0 && u + v <= 1) && t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
