@@ -15,8 +15,8 @@ struct SceneData
     Plane* h_plane_buffer;
     PointLight* h_point_light_buffer;
     SphereLight* h_sphere_light_buffer;
-    Instance* h_instance_buffer;
-    uint num_instances;
+    GameObject* h_object_buffer;
+    uint num_objects;
     uint num_top_bvh_nodes;
     uint num_models;
     uint num_materials;
@@ -26,13 +26,28 @@ struct SceneData
     uint num_sphere_lights;
 };
 
+inline Instance ConvertToInstance(const GameObject& obj)
+{
+    glm::mat4x4 transform = glm::mat4x4(1.0f);
+    transform = glm::rotate(transform, obj.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+    transform = glm::rotate(transform, (float)glfwGetTime(), glm::vec3(0.0f, 1.0f, 0.0f));
+    transform = glm::rotate(transform, obj.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+    transform = glm::scale(transform, glm::vec3(obj.scale.x, obj.scale.y, obj.scale.z));
+    transform = glm::translate(transform, glm::vec3(obj.position.x, obj.position.y, obj.position.z));
+    return Instance
+    {
+        obj.model_id,
+        transform,
+        glm::inverse(transform)
+    };
+}
 
 class Scene
 {
 public:
     std::vector<TopLevelBVH> topBvh;
     std::vector<Model> models;
-    std::vector<Instance> instances;
+    std::vector<GameObject> objects;
     std::vector<Material> materials;
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
@@ -49,7 +64,7 @@ public:
     void addPlane(Plane plane) { planes.push_back(plane); }
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
-    void addInstance(Instance instance) { instances.push_back(instance); }
+    void addObject(GameObject object) { objects.push_back(object); }
 
     uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
@@ -257,9 +272,9 @@ public:
 
         ret.h_top_bvh = topBvh.data();
 
-        ret.h_instance_buffer = instances.data();
+        ret.h_object_buffer = objects.data();
 
-        ret.num_instances = instances.size();
+        ret.num_objects = objects.size();
         ret.num_models = models.size();
         ret.num_top_bvh_nodes = topBvh.size();
         ret.num_materials = materials.size();

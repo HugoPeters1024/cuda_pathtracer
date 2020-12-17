@@ -20,6 +20,7 @@ private:
     float* screenBuffer;
     uint max_depth;
     float3 radiance(const Ray& ray, int iteration = 0);
+    Instance* instances;
 
 public:
     Raytracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
@@ -29,9 +30,10 @@ public:
 
 void Raytracer::Init()
 {
+    instances = (Instance*)malloc(sceneData.num_objects * sizeof(Instance));
     // Assign the scene buffers to the global binding sites
     HModels = sceneData.h_models;
-    HInstances = sceneData.h_instance_buffer;
+    HInstances = instances;
     HTopBVH = sceneData.h_top_bvh;
     HSpheres = HSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres);
     HPlanes = HSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes);
@@ -44,6 +46,12 @@ void Raytracer::Init()
 
 void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
+    // instantiate all the instances
+    for(int i=0; i<sceneData.num_objects; i++)
+    {
+        instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
+    }
+
     max_depth = shouldClear ? 2 : 7;
 #pragma omp parallel for schedule (dynamic)
     for(uint i=0; i<NR_PIXELS; i++)

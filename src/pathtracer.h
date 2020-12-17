@@ -20,6 +20,7 @@ private:
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
+    Instance* h_instances;
     Instance* d_instances;
 
 public:
@@ -72,8 +73,8 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&d_models, sceneData.num_models * sizeof(Model)) );
     cudaSafe( cudaMemcpy(d_models, hd_models, sceneData.num_models * sizeof(Model), cudaMemcpyHostToDevice) );
 
-    cudaSafe( cudaMalloc(&d_instances, sceneData.num_instances * sizeof(Instance)) );
-    cudaSafe( cudaMemcpy(d_instances, sceneData.h_instance_buffer, sceneData.num_instances * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&d_instances, sceneData.num_objects * sizeof(Instance)) );
+    h_instances = (Instance*)malloc(sceneData.num_objects * sizeof(Instance));
 
     TopLevelBVH* d_topBvh;
     cudaSafe( cudaMalloc(&d_topBvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH)) );
@@ -111,6 +112,15 @@ void Pathtracer::Init()
 
 void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 {
+    sceneData.h_object_buffer[0].position += make_float3(0, 0.01f, 0);
+    // Update all the gameobjects
+    for(int i=0; i<sceneData.num_objects; i++)
+    {
+        h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
+    }
+    cudaSafe( cudaMemcpy(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyToSymbol(DInstances, &d_instances, sizeof(d_instances)) );
+
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
 

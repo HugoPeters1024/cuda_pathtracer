@@ -31,8 +31,8 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
     glm::vec4 oldOrigin = glm::vec4(ray.origin.x, ray.origin.y, ray.origin.z, 1);
 
-    glm::vec4 newDir = oldDir * transform;
-    glm::vec4 newOrigin = oldOrigin * transform;
+    glm::vec4 newDir = transform * oldDir;
+    glm::vec4 newOrigin = transform * oldOrigin;
 
     Ray transformedRay = ray;
     transformedRay.direction = normalize(make_float3(newDir.x, newDir.y, newDir.z));
@@ -427,7 +427,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        glm::vec4 wn = glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0) * instance->transform;
+        glm::vec4 wn = instance->transform * glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0);
         originalNormal = normalize(make_float3(wn.x, wn.y, wn.z));
     }
 
@@ -473,7 +473,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             ));
 
             // Transform the normal from model space to world space
-            glm::vec4 wn = glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0) * instance->transform;
+            glm::vec4 wn = instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0);
             texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
 
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;

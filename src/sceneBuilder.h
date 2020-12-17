@@ -61,23 +61,10 @@ inline SceneData getOutsideScene()
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
    // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
     uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
+    GameObject house(house_model);
+    house.position = make_float3(-15, -2.5, 4);
 
-    glm::mat4x4 house_transform = glm::mat4x4(
-            glm::vec4(1,0,0,15),
-            glm::vec4(0,1,0,-2.5),
-            glm::vec4(0,0,1,4),
-            glm::vec4(0,0,0,1));
-
-    house_transform = glm::rotate(house_transform, 1.8f, glm::vec3(0.0f,1.0f,0.0f));
-
-    Instance house
-    {
-        house_model,
-        house_transform,
-        glm::inverse(house_transform),
-    };
-
-    scene->addInstance(house);
+    scene->addObject(house);
 
     scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 
@@ -146,26 +133,11 @@ inline SceneData getSibenikScene()
     // Add all the objects
     uint sibenikModel = scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, true);
 
+    GameObject sibenikObj(sibenikModel);
+    sibenikObj.position.y = 12;
+    scene->addObject(sibenikObj);
 
-    glm::mat4x4 transform = glm::mat4x4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0, -12, 0));
-    transform = glm::rotate(transform, 3.14152926f * 0.5f, glm::vec3(0.0f,1.0f,0.0f));
-
-    Instance sibenikInstance =
-    {
-        sibenikModel,
-        transform,
-        inverse(transform),
-    };
-
-    scene->addInstance(sibenikInstance);
-
-    scene->addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
-//    scene.addModel("cube_brian.obj", 1, make_float3(0), make_float3(-4, 6, 0), 0, true);
-    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + (scene.triangles.size() * 3) / 4  );
-   // scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
-   //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
-    //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
+    uint cubeObj = scene->addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
 
     //scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
@@ -189,18 +161,10 @@ inline SceneData getConferenceScene()
     //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
     uint model = scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 0, 0), whiteId, true);
 
-    glm::mat4x4 transform = glm::mat4x4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0, 10, 0));
-    transform = glm::rotate(transform, 3.14152926f * 0.5f, glm::vec3(1.0f,0.0f,0.0f));
-
-    Instance lostEmpire
-    {
-        model,
-        transform,
-        glm::inverse(transform),
-    };
+    GameObject obj(model);
+    obj.scale = make_float3(0.2);
     
-    scene->addInstance(lostEmpire);
+    scene->addObject(obj);
 
 
     scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));

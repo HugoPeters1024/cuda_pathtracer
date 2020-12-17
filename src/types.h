@@ -351,6 +351,17 @@ struct Instance
     glm::mat4 invTransform;
 };
 
+struct GameObject
+{
+    uint model_id;
+    float3 position;
+    float3 rotation;
+    float3 scale;
+
+    GameObject(uint model_id)
+        : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)) {}
+};
+
 struct __align__(16) TopLevelBVH
 {
     float3 vmin;
