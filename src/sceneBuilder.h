@@ -169,11 +169,10 @@ inline SceneData getConferenceScene()
 
  //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
     //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
-    uint model = scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 0, 0), whiteId, true);
+    uint model = scene->addModel("vokselia_spawn.obj", 20.0f, make_float3(0), make_float3(0, 0, 0), whiteId, true);
 
     GameObject obj(model);
-    obj.scale = make_float3(0.2);
-    
+//    obj.scale=make_float3(5.0f);
     scene->addObject(obj);
 
 

@@ -107,19 +107,20 @@ void Pathtracer::Init()
 
     // Enable NEE by default
     HNEE = true;
-}
 
-void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
-{
-    // Update all the gameobjects
+    // Update all the gameobjects for frame 1, afterwards we will do it while
+    // the cpu is idle
     for(int i=0; i<sceneData.num_objects; i++)
     {
         h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
     }
     cudaSafe( cudaMemcpy(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
-
     BuildTopLevelBVH(sceneData.h_top_bvh, h_instances, sceneData.h_models, sceneData.num_objects);
     cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+}
+
+void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
+{
 
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
@@ -170,9 +171,9 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     uint max_bounces;
     if (_NEE)
-        max_bounces = shouldClear ? 1 : 5;
+        max_bounces = shouldClear ? 5 : 10;
     else
-        max_bounces = shouldClear ? 2 : 5;
+        max_bounces = shouldClear ? 5 : 10;
 
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
@@ -191,6 +192,16 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     // Write the final state accumulator into the texture
     kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
+
+    // Update all the gameobjects while the GPU is busy
+    for(int i=0; i<sceneData.num_objects; i++)
+    {
+        h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
+    }
+    BuildTopLevelBVH(sceneData.h_top_bvh, h_instances, sceneData.h_models, sceneData.num_objects);
+
+    cudaSafe( cudaMemcpyAsync(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyAsync(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
 
     cudaSafe ( cudaDeviceSynchronize() );
