@@ -47,7 +47,7 @@ HYBRID inline uint wang_hash(uint seed)
     return seed;
 }
 
-inline HYBRID uint rand_xorshift(uint& seed)
+HYBRID inline uint rand_xorshift(uint seed)
 {
     // Xorshift algorithm from George Marsaglia's paper
     seed ^= (seed << 13);

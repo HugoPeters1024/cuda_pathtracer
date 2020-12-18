@@ -287,30 +287,21 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
 
 __device__ float3 BRDF(const float3& normal, uint& seed)
 {
-    float r1 = 2 * 3.1415926535 * rand(seed);
-    float r2 = rand(seed);
-    float r2s = sqrtf(r2);
+    float r0 = rand(seed), r1 = rand(seed);
+    float r = sqrtf(r0);
+    float theta = 2 * 3.1415926535 * r1;
+    float x = r * cosf(theta);
+    float y = r * sinf(theta);
+    float3 sample =  make_float3( x, y, sqrt(1 - r0));
 
     const float3& w = normal;
     float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = cross(w,u);
+    float3 v = normalize(cross(w,u));
 
-    // compute random ray direction on hemisphere using polar coordinates
-    // cosine weighted importance sampling (favours ray directions closer to normal direction)
-    return normalize(u*cosf(r1)*r2s + v*sinf(r1)*r2s + w*sqrtf(1 - r2));
-}
-
-__device__ float3 BRDFUniform(const float3& normal, uint& seed)
-{
-    float r1 = 2 * 3.1415926535 * rand(seed);
-    float r2 = rand(seed);
-    float r2s = sqrtf(r2);
-
-    float3 w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = cross(w,u);
-
-    return normalize(u*r1*r2s + v*sinf(r1)*r2s + w*sqrtf(1 - r2));
+    return normalize(make_float3(
+            dot(sample, make_float3(u.x, v.x, w.x)),
+            dot(sample, make_float3(u.y, v.y, w.y)),
+            dot(sample, make_float3(u.z, v.z, w.z))));
 }
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
@@ -347,7 +338,7 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
-__device__ Ray getDiffuseRay(const Ray& ray, const float3 normal, const float3 intersectionPos, uint seed)
+__device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint seed)
 {
     float3 newDir = BRDF(normal, seed);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
@@ -488,7 +479,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = normalize(get3f(texColor)*2-make_float3(1)) * make_float3(-1, 1, 1);
+            float3 texNormalT = normalize(get3f(texColor)*2-make_float3(1));
             float3 texNormal = normalize(make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
@@ -503,6 +494,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             colliderNormal = texNormal;
         }
     }
+
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -524,31 +516,22 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, reflected);
         if (rand(seed) < reflected) {
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
-            // Color is only a diffuse color
-            state.mask = state.mask * material.diffuse_color;
-            if (dot(state.mask, state.mask) < 0.01) return;
         }
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1 - material.glossy) + material.glossy * noiseDir;
     }
     else if (random - material.transmit < material.reflect)
     {
+        state.mask = state.mask * material.diffuse_color;
         state.fromSpecular = true;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         float3 noiseDir = BRDF(secondary.direction, seed);
         secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
-
-        // Color is only a diffuse color
-        state.mask = state.mask * material.diffuse_color;
-        if (dot(state.mask, state.mask) < 0.01) return;
     }
     else 
     {
-        // Color is only a diffuse color
-        state.mask = state.mask * material.diffuse_color;
-        if (dot(state.mask, state.mask) < 0.01) return;
+        state.mask = state.mask * 2.0f * material.diffuse_color;
         state.fromSpecular = false;
-
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
         // due to normal mapping a sample might go into the surface
         cullSecondary = dot(surfaceNormal, secondary.direction) < 0;
@@ -560,11 +543,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (_NEE)
         {
             // Choose an area light at random
-            uint lightSource = wang_hash(seed) % DSphereLights.size;
+            seed = wang_hash(seed);
+            uint lightSource = seed % DSphereLights.size;
             const SphereLight& light = DSphereLights[lightSource];
             float3 fromLight = normalize(intersectionPos - light.pos);
             // Sample the hemisphere from that point.
-            float3 r = BRDFUniform(fromLight, seed);
+            float3 r = BRDF(fromLight, seed);
 
             // From the center of the light, go to sample point
             // (by definition of the BRDF on the visible by the origin (if not occluded)
@@ -580,13 +564,15 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             if (dot(colliderNormal, shadowDir) < 0)
             {
                 float cost1 = dot(r, shadowDir);
-                float cost2 = dot(colliderNormal, -shadowDir);
-                float SA = (3.1415926 * light.radius * light.radius * cost1 * cost2) * invShadowLength * invShadowLength;
+                float cost2 = dot(originalNormal, -shadowDir);
+
+                // pi is already applied to the mask
+                float SA = light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
 
                 state.light = state.mask * light.color * SA * DSphereLights.size;
 
                 // Russian roullette for shadow rays
-                float p = clamp(fmax(fmax(state.light.x, state.light.y), state.light.z), 0.1, 1.0f);
+                float p = clamp(fmax(fmax(state.light.x, state.light.y), state.light.z), 0.1f, 0.9f);
                 if (rand(seed) < p)
                 {
                     // We invert the shadowrays to get coherent origins.
@@ -601,11 +587,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     if (!cullSecondary) {
         // Russian roullete
-        float p = clamp(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f, 1.0f);
+        float p = fmin(fmax(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f), 0.9f);
         if (rand(seed) < p)
         {
             DRayQueueNew.push(RayPacked(secondary));
-            state.mask *= (1.0f / p);
+            state.mask = state.mask * (1.0f / p);
         }
     }
     stateBuf.setState(ray.pixeli, state);

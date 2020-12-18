@@ -140,12 +140,12 @@ inline SceneData getSibenikScene()
     GameObject sibenikObj2(sibenikModel);
     sibenikObj2.position.y = 12;
     sibenikObj2.position.z = 20;
-    scene->addObject(sibenikObj2);
+//    scene->addObject(sibenikObj2);
 
     GameObject sibenikObj3(sibenikModel);
     sibenikObj3.position.y = 12;
     sibenikObj3.position.z = 40;
-    scene->addObject(sibenikObj3);
+ //   scene->addObject(sibenikObj3);
 
     uint cubeObj = scene->addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
     scene->addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
