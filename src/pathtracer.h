@@ -171,9 +171,9 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     uint max_bounces;
     if (_NEE)
-        max_bounces = shouldClear ? 5 : 10;
+        max_bounces = shouldClear ? 1 : 10;
     else
-        max_bounces = shouldClear ? 5 : 10;
+        max_bounces = shouldClear ? 2 : 10;
 
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 

@@ -415,13 +415,14 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
                 stateBuf.setState(ray.pixeli, state);
             }
+            return;
         }
         else
         {
             state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
             stateBuf.setState(ray.pixeli, state);
+            return;
         }
-        return;
     }
 
     Instance* instance;
@@ -454,6 +455,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         uint py = (uint)(fabs(intersectionPos.z/4));
         material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
+
 
     // sample the texture of the material by redoing the intersection
     if (material.hasTexture || material.hasNormalMap)
@@ -530,7 +532,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
     else 
     {
-        state.mask = state.mask * 2.0f * material.diffuse_color;
+        state.mask = state.mask * material.diffuse_color;
         state.fromSpecular = false;
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
         // due to normal mapping a sample might go into the surface
@@ -564,11 +566,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             if (dot(colliderNormal, shadowDir) < 0)
             {
                 float cost1 = dot(r, shadowDir);
-                float cost2 = dot(originalNormal, -shadowDir);
+                float cost2 = dot(colliderNormal, -shadowDir);
 
-                // pi is already applied to the mask
-                float SA = light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
-
+                float SA = 3.1415926535 * light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
                 state.light = state.mask * light.color * SA * DSphereLights.size;
 
                 // Russian roullette for shadow rays
@@ -583,6 +583,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 }
             }
         }
+
+        // Radiance to irradiance
+        state.mask = state.mask * 2;
     }
 
     if (!cullSecondary) {

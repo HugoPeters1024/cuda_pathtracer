@@ -146,6 +146,8 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
 {
   int width, height, nrChannels;
 
+
+  stbi_ldr_to_hdr_gamma(1.0f);
   float* data3 = stbi_loadf(filename, &width, &height, &nrChannels, 0);
   if (!data3) {
     fprintf(stderr, "Could not load texture: %s", filename);

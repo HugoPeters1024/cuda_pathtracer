@@ -63,23 +63,30 @@ inline SceneData getOutsideScene()
     uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
     GameObject house(house_model);
     house.position = make_float3(-15, -2.5, 4);
-
     scene->addObject(house);
+
+    uint cubeModel = scene->addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+    for(int i=0; i<2; i++)
+    {
+        GameObject cube(cubeModel);
+        cube.position.x = 2 * i;
+        scene->addObject(cube);
+    }
 
     scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 
-    scene->addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
-    scene->addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
-    scene->addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
+//    scene->addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
+ //   scene->addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
+  //  scene->addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
 
     // Add the lights
-    scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene->addPointLight(PointLight(make_float3(-8,5,-5), make_float3(150, 0, 0)));
-    scene->addPointLight(PointLight(make_float3(-8,5,5), make_float3(0, 150, 0)));
+    scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(50)));
+    scene->addPointLight(PointLight(make_float3(-8,5,-5), make_float3(50, 0, 0)));
+    scene->addPointLight(PointLight(make_float3(-8,5,5), make_float3(0, 50, 0)));
 
-    scene->addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(150)));
-    scene->addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(150, 0, 0)));
-    scene->addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 150, 0)));
+    scene->addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(50)));
+    scene->addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(50, 0, 0)));
+    scene->addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 50, 0)));
         
     return scene->finalize();
 }
