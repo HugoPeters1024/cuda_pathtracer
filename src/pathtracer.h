@@ -33,7 +33,7 @@ public:
 
 void Pathtracer::Init()
 {
-    dSkydomeTex = loadTexture("skydome.jpg");
+    dSkydomeTex = loadTextureHDR("skydome.hdr");
 
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
