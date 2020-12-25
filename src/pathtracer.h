@@ -20,15 +20,15 @@ private:
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
-    Instance* h_instances;
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
 
 public:
-    Pathtracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
+    Pathtracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
 
     virtual void Init() override;
-    virtual void Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Finish() override;
 };
 
 void Pathtracer::Init()
@@ -38,31 +38,31 @@ void Pathtracer::Init()
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
 
-    dSphereBuffer = DSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres, &DSpheres);
-    dPlaneBuffer = DSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes, &DPlanes);
-    dSphereLightBuffer = DSizedBuffer<SphereLight>(sceneData.h_sphere_light_buffer, sceneData.num_sphere_lights, &DSphereLights);
+    dSphereBuffer = DSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size(), &DSpheres);
+    dPlaneBuffer = DSizedBuffer<Plane>(scene.planes.data(), scene.planes.size(), &DPlanes);
+    dSphereLightBuffer = DSizedBuffer<SphereLight>(scene.sphereLights.data(), scene.sphereLights.size(), &DSphereLights);
 
 
     // Host buffer of device buffers... ;)
-    Model hd_models[sceneData.num_models];
+    Model hd_models[scene.models.size()];
 
     // copy over the model but set the gpu buffers as source
-    memcpy(hd_models, sceneData.h_models, sceneData.num_models * sizeof(Model));
+    memcpy(hd_models, scene.models.data(), scene.models.size() * sizeof(Model));
 
-    for(int i=0; i<sceneData.num_models; i++)
+    for(int i=0; i<scene.models.size(); i++)
     {
         TriangleV* d_vertex_buffer;
         TriangleD* d_data_buffer;
         BVHNode* d_bvh_buffer;
 
         // Upload the host buffers to cuda
-        cudaSafe( cudaMalloc(&d_vertex_buffer, sceneData.h_models[i].nrTriangles * sizeof(TriangleV)) );
-        cudaSafe( cudaMalloc(&d_data_buffer, sceneData.h_models[i].nrTriangles * sizeof(TriangleD)) );
-        cudaSafe( cudaMalloc(&d_bvh_buffer, sceneData.h_models[i].nrBvhNodes * sizeof(TriangleD)) );
+        cudaSafe( cudaMalloc(&d_vertex_buffer, scene.models[i].nrTriangles * sizeof(TriangleV)) );
+        cudaSafe( cudaMalloc(&d_data_buffer, scene.models[i].nrTriangles * sizeof(TriangleD)) );
+        cudaSafe( cudaMalloc(&d_bvh_buffer, scene.models[i].nrBvhNodes * sizeof(TriangleD)) );
 
-        cudaSafe( cudaMemcpy(d_vertex_buffer, sceneData.h_models[i].trianglesV, sceneData.h_models[i].nrTriangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpy(d_data_buffer, sceneData.h_models[i].trianglesD, sceneData.h_models[i].nrTriangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpy(d_bvh_buffer, sceneData.h_models[i].bvh, sceneData.h_models[i].nrBvhNodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpy(d_vertex_buffer, scene.models[i].trianglesV, scene.models[i].nrTriangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpy(d_data_buffer, scene.models[i].trianglesD, scene.models[i].nrTriangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpy(d_bvh_buffer, scene.models[i].bvh, scene.models[i].nrBvhNodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
         hd_models[i].trianglesV = d_vertex_buffer;
         hd_models[i].trianglesD = d_data_buffer;
@@ -71,17 +71,16 @@ void Pathtracer::Init()
 
     // Upload the collection of buffers to a new buffer
     Model* d_models;
-    cudaSafe( cudaMalloc(&d_models, sceneData.num_models * sizeof(Model)) );
-    cudaSafe( cudaMemcpy(d_models, hd_models, sceneData.num_models * sizeof(Model), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&d_models, scene.models.size() * sizeof(Model)) );
+    cudaSafe( cudaMemcpy(d_models, hd_models, scene.models.size() * sizeof(Model), cudaMemcpyHostToDevice) );
 
-    cudaSafe( cudaMalloc(&d_instances, sceneData.num_objects * sizeof(Instance)) );
-    h_instances = (Instance*)malloc(sceneData.num_objects * sizeof(Instance));
+    cudaSafe( cudaMalloc(&d_instances, scene.objects.size() * sizeof(Instance)) );
 
-    cudaSafe( cudaMalloc(&d_topBvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH)) );
+    cudaSafe( cudaMalloc(&d_topBvh, scene.topLevelBVH.size() * sizeof(TopLevelBVH)) );
 
     Material* matBuf;
-    cudaSafe( cudaMalloc(&matBuf, sceneData.num_materials * sizeof(Material)));
-    cudaSafe( cudaMemcpy(matBuf, sceneData.h_material_buffer, sceneData.num_materials * sizeof(Material), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&matBuf, scene.materials.size() * sizeof(Material)));
+    cudaSafe( cudaMemcpy(matBuf, scene.materials.data(), scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
 
     // Assign to the global binding sites
     cudaSafe( cudaMemcpyToSymbol(DModels, &d_models, sizeof(d_models)) );
@@ -108,18 +107,11 @@ void Pathtracer::Init()
     // Enable NEE by default
     HNEE = true;
 
-    // Update all the gameobjects for frame 1, afterwards we will do it while
-    // the cpu is idle
-    for(int i=0; i<sceneData.num_objects; i++)
-    {
-        h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
-    }
-    cudaSafe( cudaMemcpy(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
-    BuildTopLevelBVH(sceneData.h_top_bvh, h_instances, sceneData.h_models, sceneData.num_objects);
-    cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 }
 
-void Pathtracer::Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
+void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
 
     // Map the screen texture resource.
@@ -151,7 +143,7 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, float frameTime, 
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
 
         // Update the sphere area lights
-        dSphereLightBuffer.update(sceneData.h_sphere_light_buffer);
+        dSphereLightBuffer.update(scene.sphereLights.data());
 
         // sync NEE toggle
         cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
@@ -193,23 +185,13 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, float frameTime, 
 
     // Write the final state accumulator into the texture
     kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
-
-    for(int i=0; i<sceneData.num_handlers; i++)
-    {
-        sceneData.handlers[i](sceneData, currentTime);
-    }
+}
 
 
-    // Update all the gameobjects while the GPU is busy
-    for(int i=0; i<sceneData.num_objects; i++)
-    {
-        h_instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
-    }
-    BuildTopLevelBVH(sceneData.h_top_bvh, h_instances, sceneData.h_models, sceneData.num_objects);
-
-    cudaSafe( cudaMemcpyAsync(d_instances, h_instances, sceneData.num_objects * sizeof(Instance), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyAsync(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
-
+void Pathtracer::Finish()
+{
+    cudaSafe( cudaMemcpyAsync(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpyAsync(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
     cudaSafe ( cudaDeviceSynchronize() );
 

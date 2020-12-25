@@ -66,7 +66,6 @@ void main() {
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
-
 int main(int argc, char** argv) {
     cxxopts::Options options("AVGR 2020-2021 by Hugo Peters", "Raytracer/Pathtracer demo program");
 
@@ -123,27 +122,15 @@ int main(int argc, char** argv) {
     glBindTexture(GL_TEXTURE_2D, 0);
 
 
-    SceneData sceneData;
     const char* sceneName = cmdArgs["scene"].as<std::string>().c_str();
     printf("Loading scene '%s', this might take a moment\n", sceneName);
-    if (strcmp(sceneName, "outside") == 0)
-        sceneData = getOutsideScene();
-    else if (strcmp(sceneName, "sibenik") == 0)
-        sceneData = getSibenikScene();
-    else if (strcmp(sceneName, "minecraft") == 0)
-        sceneData = getMinecraftScene();
-    else if (strcmp(sceneName, "2mtris") == 0)
-        sceneData = get2MillionScene();
-    else{
-        printf("Scene '%s' does not exist!\n", sceneName);
-        return -5;
-    }
+    Scene scene = getScene(sceneName);
 
     bool PATHRACER = false;
 
     // Create the applications
-    Pathtracer pathtracerApp = Pathtracer(sceneData, texture);
-    Raytracer raytracerApp = Raytracer(sceneData, texture);
+    Pathtracer pathtracerApp = Pathtracer(scene, texture);
+    Raytracer raytracerApp = Raytracer(scene, texture);
 
 
     // Set the initial camera values;
@@ -172,9 +159,17 @@ int main(int argc, char** argv) {
         float start = glfwGetTime();
 
         if (PATHRACER)
-            pathtracerApp.Draw(camera, glfwGetTime(), frameTime, shouldClear);
+            pathtracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear);
         else
-            raytracerApp.Draw(camera, glfwGetTime(), frameTime, shouldClear);
+            raytracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear);
+
+        // update while possibly asynchronous rendering is going on
+        scene.update(glfwGetTime());
+
+        if (PATHRACER)
+            pathtracerApp.Finish();
+        else
+            raytracerApp.Finish();
 
         // Verify the texture to check for outliers
         /*
@@ -204,20 +199,20 @@ int main(int argc, char** argv) {
         camera.update(window);
         shouldClear = camera.hasMoved();
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { 
-            sceneData.h_sphere_light_buffer[0].color *= 0.97; 
-            sceneData.h_point_light_buffer[0].color *= 0.97;
+            scene.sphereLights[0].color *= 0.97; 
+            scene.pointLights[0].color *= 0.97;
             shouldClear = true;
         }
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { 
-            sceneData.h_sphere_light_buffer[0].color *= 1.03;
-            sceneData.h_point_light_buffer[0].color *= 1.03;
+            scene.sphereLights[0].color *= 1.03;
+            scene.pointLights[0].color *= 1.03;
             shouldClear = true;
         }
-        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].radius *= 1.03; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].radius *= 0.97; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { scene.sphereLights[0].radius *= 1.03; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { scene.sphereLights[0].radius *= 0.97; shouldClear = true;}
 
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].pos.y += 0.02; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { sceneData.h_sphere_light_buffer[0].pos.y -= 0.02; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { scene.sphereLights[0].pos.y += 0.02; shouldClear = true;}
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { scene.sphereLights[0].pos.y -= 0.02; shouldClear = true;}
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
         glfwPollEvents();

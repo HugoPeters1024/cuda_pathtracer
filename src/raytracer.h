@@ -20,45 +20,31 @@ private:
     float* screenBuffer;
     uint max_depth;
     float3 radiance(const Ray& ray, int iteration = 0);
-    Instance* instances;
 
 public:
-    Raytracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
+    Raytracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
     virtual void Init() override;
-    virtual void Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Finish() override {}
 };
 
 void Raytracer::Init()
 {
-    instances = (Instance*)malloc(sceneData.num_objects * sizeof(Instance));
     // Assign the scene buffers to the global binding sites
-    HModels = sceneData.h_models;
-    HInstances = instances;
-    HTopBVH = sceneData.h_top_bvh;
-    HSpheres = HSizedBuffer<Sphere>(sceneData.h_sphere_buffer, sceneData.num_spheres);
-    HPlanes = HSizedBuffer<Plane>(sceneData.h_plane_buffer, sceneData.num_planes);
-    HMaterials = sceneData.h_material_buffer;
+    HModels = scene.models.data();
+    HInstances = scene.instances;
+    HTopBVH = scene.topLevelBVH.data();
+    HSpheres = HSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size());
+    HPlanes = HSizedBuffer<Plane>(scene.planes.data(), scene.planes.size());
+    HMaterials = scene.materials.data();
     HSphereLights = HSizedBuffer<SphereLight>(nullptr, 0);
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
     omp_set_num_threads(8);
 }
 
-void Raytracer::Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
+void Raytracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
-    for(int i=0; i<sceneData.num_handlers; i++)
-    {
-        sceneData.handlers[i](sceneData, currentTime);
-    }
-    // instantiate all the instances
-    for(int i=0; i<sceneData.num_objects; i++)
-    {
-        instances[i] = ConvertToInstance(sceneData.h_object_buffer[i]);
-    }
-
-    BuildTopLevelBVH(sceneData.h_top_bvh, instances, sceneData.h_models, sceneData.num_objects);
-
-
 
     max_depth = shouldClear ? 2 : 7;
 #pragma omp parallel for schedule (dynamic)
@@ -128,8 +114,8 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     float diffuse = 1 - transmission - reflect;
 
     if (diffuse > 0) {
-        for (int i = 0; i < sceneData.num_point_lights; i++) {
-            const PointLight &light = sceneData.h_point_light_buffer[i];
+        for (int i = 0; i < scene.pointLights.size(); i++) {
+            const PointLight &light = scene.pointLights[i];
             float3 fromLight = intersectionPos - light.pos;
             // we occlude ourselves
             if (dot(fromLight, colliderNormal) >= 0) continue;

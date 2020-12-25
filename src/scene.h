@@ -5,29 +5,6 @@
 #include "bvhBuilder.h"
 
 
-// Final product of the scene
-struct SceneData
-{
-    std::function<void(SceneData&, float)>* handlers;
-    TopLevelBVH* h_top_bvh;
-    Model* h_models;
-    Material* h_material_buffer;
-    Sphere* h_sphere_buffer;
-    Plane* h_plane_buffer;
-    PointLight* h_point_light_buffer;
-    SphereLight* h_sphere_light_buffer;
-    GameObject* h_object_buffer;
-    uint num_objects;
-    uint num_top_bvh_nodes;
-    uint num_models;
-    uint num_materials;
-    uint num_spheres;
-    uint num_planes;
-    uint num_point_lights;
-    uint num_sphere_lights;
-    uint num_handlers;
-};
-
 inline Instance ConvertToInstance(const GameObject& obj)
 {
     glm::mat4x4 transform = glm::mat4x4(1.0f);
@@ -139,15 +116,18 @@ inline void BuildTopLevelBVH(TopLevelBVH* dest, const Instance* instances, const
 
 class Scene
 {
+    // derivatives of gameobjects
 public:
-    std::vector<Model> models;
-    std::vector<GameObject> objects;
-    std::vector<Material> materials;
-    std::vector<Sphere> spheres;
-    std::vector<Plane> planes;
-    std::vector<PointLight> pointLights;
-    std::vector<SphereLight> sphereLights;
-    std::vector<std::function<void(SceneData&, float)>> handlers;
+    std::vector<Model> models = std::vector<Model>(0);
+    std::vector<GameObject> objects = std::vector<GameObject>(0);
+    Instance* instances;
+    std::vector<Material> materials = std::vector<Material>(0);
+    std::vector<Sphere> spheres = std::vector<Sphere>(0);
+    std::vector<Plane> planes = std::vector<Plane>(0);
+    std::vector<PointLight> pointLights = std::vector<PointLight>(0);
+    std::vector<SphereLight> sphereLights = std::vector<SphereLight>(0);
+    std::vector<TopLevelBVH> topLevelBVH;
+    std::vector<std::function<void(std::vector<GameObject>&, float)>> handlers;
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -160,7 +140,7 @@ public:
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
     void addObject(GameObject object) { objects.push_back(object); }
-    void addHandler(std::function<void(SceneData&, float)> handler) { handlers.push_back(handler); }
+    void addHandler(std::function<void(std::vector<GameObject>&, float)> handler) { handlers.push_back(handler); }
 
     uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
@@ -345,39 +325,29 @@ public:
         assert(sphereLights.size() > 0);
     }
 
-    SceneData finalize()
+    void finalize()
     {
         validate();
-        SceneData ret;
+        // Allocate the upperbound of the toplevel bvh size
+        topLevelBVH = std::vector<TopLevelBVH>(2 * objects.size() - 1);
 
-        ret.handlers = handlers.data();
-        ret.num_handlers = handlers.size();
+        // Allocate the instance buffer
+        instances = (Instance*)malloc(objects.size() * sizeof(Instance));
 
-        ret.h_sphere_buffer = spheres.data();
-        ret.h_plane_buffer = planes.data();
-        ret.h_material_buffer = materials.data();
+        // derive instances
+        for(int i=0; i<objects.size(); i++) instances[i] = ConvertToInstance(objects[i]);
+    }
 
-        // copy over the point lights
-        ret.h_point_light_buffer = pointLights.data();
+    void update(float currentTime)
+    {
+        // update gameobjects
+        for(auto& handler : handlers) handler(objects, currentTime);
 
-        // copy over the sphere lights
-        ret.h_sphere_light_buffer = sphereLights.data();
+        // derive instances
+        for(int i=0; i<objects.size(); i++) instances[i] = ConvertToInstance(objects[i]);
 
-        ret.h_models = models.data();
-
-        ret.num_top_bvh_nodes = 2 * objects.size() - 1;
-        ret.h_top_bvh = (TopLevelBVH*)malloc(ret.num_top_bvh_nodes * sizeof(TopLevelBVH));
-
-        ret.h_object_buffer = objects.data();
-
-        ret.num_objects = objects.size();
-        ret.num_models = models.size();
-        ret.num_materials = materials.size();
-        ret.num_spheres = spheres.size();
-        ret.num_planes = planes.size();
-        ret.num_point_lights = pointLights.size();
-        ret.num_sphere_lights = sphereLights.size();
-        return ret;
+        // build top level bvh
+        BuildTopLevelBVH(topLevelBVH.data(), instances, models.data(), objects.size());
     }
 };
 #endif

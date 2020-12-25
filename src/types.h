@@ -71,6 +71,7 @@ struct Sphere
 struct SphereLight : public Sphere
 {
     float3 color;
+    SphereLight() {}
     SphereLight(float3 pos, float radius, float3 color)
         : Sphere(pos, radius, 0), color(color) {}
 };
@@ -119,6 +120,7 @@ struct PointLight
     float3 pos;
     float3 color;
 
+    PointLight() {}
     PointLight(float3 pos, float3 color) : pos(pos), color(color) {}
 };
 
@@ -370,6 +372,7 @@ struct GameObject
     float3 rotation;
     float3 scale;
 
+    GameObject() {}
     GameObject(uint model_id)
         : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)), kind(0) {}
 };
