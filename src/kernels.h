@@ -569,7 +569,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.mask = state.mask * 2.0f * PI * BRDF;
     }
 
-    if (!cullSecondary) {
+    if (!cullSecondary && fmaxcompf(state.mask) > 0.01) {
         // Russian roullete
         float p = fmin(fmax(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f), 0.9f);
         if (rand(seed) < p)

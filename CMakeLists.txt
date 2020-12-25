@@ -8,7 +8,7 @@ set(CMAKE_CXX_FLAGS "-O3")
 file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cpp")
 file(GLOB gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
 enable_language(CUDA)
-add_executable(pathtracer ${cpu_source_files} ${gpu_source_files})
+add_executable(pathtracer src/main.cpp)
 
 
 
@@ -18,17 +18,9 @@ set_target_properties(
         CUDA_SEPARABLE_COMPILATION ON)
 
 target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -Xptxas
-                       --generate-line-info
-                       --use_fast_math
-                       --relocatable-device-code=true
-                       #--gpu-architecture=sm_62
-                       -arch=sm_50
-                       --device-link
-                       -O3
-                      -g
-                       -Xcompiler
-                       -fopenmp
+                       --use_fast_math -O3 -arch=compute_50 -code=sm_50
+                       -Xptxas=-O3
+                       -Xcompiler=-fopenmp,-g,-O3
                        >)
 
 # We want to use c++ inline with cuda, so set nvcc as primary compiler
