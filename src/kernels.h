@@ -180,7 +180,6 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
             {
                 if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
                 {
-                    hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
                     hitInfo.primitive_type = TRIANGLE;
                     hitInfo.t = t;
@@ -212,9 +211,8 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
 HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
 {
     HitInfo hitInfo;
-    hitInfo.intersected = false;
+    hitInfo.primitive_id = 0xffffffff;
     hitInfo.t = ray.length;
-    hitInfo.primitive_id = 0;
 
     float t, tmin;
 
@@ -222,7 +220,6 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     {
         if (raySphereIntersect(ray, _GSpheres[i], t) && t < hitInfo.t)
         {
-            hitInfo.intersected = true;
             hitInfo.primitive_id = i;
             hitInfo.primitive_type = SPHERE;
             hitInfo.t = t;
@@ -234,7 +231,6 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     {
         if (rayPlaneIntersect(ray, _GPlanes[i], t) && t < hitInfo.t)
         {
-            hitInfo.intersected = true;
             hitInfo.primitive_id = i;
             hitInfo.primitive_type = PLANE;
             hitInfo.t = t;
@@ -248,7 +244,6 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
         if (!anyIntersection && raySphereIntersect(ray, _GSphereLights[i], t) && t < hitInfo.t)
         {
             hitInfo.t = t;
-            hitInfo.intersected = true;
             hitInfo.primitive_id = i;
             hitInfo.primitive_type = LIGHT;
         }
@@ -273,7 +268,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
             Instance instance = _GInstances[current.leaf];
             Ray transformedRay = transformRay(ray, instance.invTransform);
             traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance, current.leaf);
-            if (anyIntersection && hitInfo.intersected) return hitInfo;
+            if (anyIntersection && hitInfo.intersected()) return hitInfo;
         }
         else
         {
@@ -382,7 +377,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     uint seed = getSeed(i,wang_hash(i),time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
-    if (!hitInfo.intersected) {
+    if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
@@ -594,7 +589,7 @@ __global__ void kernel_connect(TraceStateSOA stateBuf)
 
     const Ray& shadowRay = DShadowRayQueue[i].getRay();
     HitInfo hitInfo = traverseTopLevel(shadowRay, true);
-    if (hitInfo.intersected) return;
+    if (hitInfo.intersected()) return;
 
     float3 light = get3f(stateBuf.lights[shadowRay.pixeli]);
     stateBuf.accucolors[shadowRay.pixeli] += make_float4(light,0);

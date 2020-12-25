@@ -72,7 +72,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
 {
     if (iteration >= max_depth) return make_float3(0);
     HitInfo hitInfo = traverseTopLevel(ray, false);
-    if (!hitInfo.intersected) return make_float3(0.2, 0.3, 0.6);
+    if (!hitInfo.intersected()) return make_float3(0.2, 0.3, 0.6);
 
     if (hitInfo.primitive_type == LIGHT)
     {
@@ -126,7 +126,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
             shadowRay.length = dis2light - 2 * EPS;
             HitInfo shadowHit = traverseTopLevel(shadowRay, true);
-            if (!shadowHit.intersected) {
+            if (!shadowHit.intersected()) {
                 diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;
             }
         }

@@ -18,6 +18,7 @@ set_target_properties(
         CUDA_SEPARABLE_COMPILATION ON)
 
 target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       -Xptxas
                        --generate-line-info
                        --use_fast_math
                        --relocatable-device-code=true
