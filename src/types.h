@@ -350,9 +350,8 @@ struct __align__(16) BVHNode
 
 struct Model
 {
-    TriangleV* trianglesV;
-    TriangleD* trianglesD;
     BVHNode* bvh;
+    uint triangleStart;
     uint nrTriangles;
     uint nrBvhNodes;
 };

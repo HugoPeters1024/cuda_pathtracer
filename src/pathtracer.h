@@ -23,6 +23,7 @@ private:
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
 
+
 public:
     Pathtracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
 
@@ -42,7 +43,6 @@ void Pathtracer::Init()
     dPlaneBuffer = DSizedBuffer<Plane>(scene.planes.data(), scene.planes.size(), &DPlanes);
     dSphereLightBuffer = DSizedBuffer<SphereLight>(scene.sphereLights.data(), scene.sphereLights.size(), &DSphereLights);
 
-
     // Host buffer of device buffers... ;)
     Model hd_models[scene.models.size()];
 
@@ -51,25 +51,24 @@ void Pathtracer::Init()
 
     for(int i=0; i<scene.models.size(); i++)
     {
-        TriangleV* d_vertex_buffer;
-        TriangleD* d_data_buffer;
         BVHNode* d_bvh_buffer;
 
         // Upload the host buffers to cuda
-        cudaSafe( cudaMalloc(&d_vertex_buffer, scene.models[i].nrTriangles * sizeof(TriangleV)) );
-        cudaSafe( cudaMalloc(&d_data_buffer, scene.models[i].nrTriangles * sizeof(TriangleD)) );
         cudaSafe( cudaMalloc(&d_bvh_buffer, scene.models[i].nrBvhNodes * sizeof(TriangleD)) );
-
-        cudaSafe( cudaMemcpy(d_vertex_buffer, scene.models[i].trianglesV, scene.models[i].nrTriangles * sizeof(TriangleV), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpy(d_data_buffer, scene.models[i].trianglesD, scene.models[i].nrTriangles * sizeof(TriangleD), cudaMemcpyHostToDevice) );
         cudaSafe( cudaMemcpy(d_bvh_buffer, scene.models[i].bvh, scene.models[i].nrBvhNodes * sizeof(BVHNode), cudaMemcpyHostToDevice) );
 
-        hd_models[i].trianglesV = d_vertex_buffer;
-        hd_models[i].trianglesD = d_data_buffer;
         hd_models[i].bvh = d_bvh_buffer;
     }
 
     // Upload the collection of buffers to a new buffer
+    TriangleV* d_vertices;
+    cudaSafe( cudaMalloc(&d_vertices, scene.allVertices.size() * sizeof(TriangleV)) );
+    cudaSafe( cudaMemcpy(d_vertices, scene.allVertices.data(), scene.allVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+
+    TriangleV* d_vertexData;
+    cudaSafe( cudaMalloc(&d_vertexData, scene.allVertexData.size() * sizeof(TriangleD)) );
+    cudaSafe( cudaMemcpy(d_vertexData, scene.allVertexData.data(), scene.allVertexData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+
     Model* d_models;
     cudaSafe( cudaMalloc(&d_models, scene.models.size() * sizeof(Model)) );
     cudaSafe( cudaMemcpy(d_models, hd_models, scene.models.size() * sizeof(Model), cudaMemcpyHostToDevice) );
@@ -83,6 +82,8 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpy(matBuf, scene.materials.data(), scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
 
     // Assign to the global binding sites
+    cudaSafe( cudaMemcpyToSymbol(DVertices, &d_vertices, sizeof(d_models)) );
+    cudaSafe( cudaMemcpyToSymbol(DVertexData, &d_vertexData, sizeof(d_models)) );
     cudaSafe( cudaMemcpyToSymbol(DModels, &d_models, sizeof(d_models)) );
     cudaSafe( cudaMemcpyToSymbol(DInstances, &d_instances, sizeof(d_instances)) );
     cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );

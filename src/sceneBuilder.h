@@ -157,7 +157,7 @@ inline Scene getSibenikScene()
     auto mirrorMatId = scene.addMaterial(mirrorMat);
 
     // Add all the objects
-    uint sibenikModel = scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, false);
+    uint sibenikModel = scene.addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, true);
 
     GameObject sibenikObj(sibenikModel);
     sibenikObj.position.y = 12;

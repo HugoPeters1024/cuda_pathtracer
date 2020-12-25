@@ -31,6 +31,8 @@ public:
 void Raytracer::Init()
 {
     // Assign the scene buffers to the global binding sites
+    HVertices = scene.allVertices.data();
+    HVertexData = scene.allVertexData.data();
     HModels = scene.models.data();
     HInstances = scene.instances;
     HTopBVH = scene.topLevelBVH.data();
@@ -78,16 +80,14 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     }
 
     Instance* instance;
-    Model* model;
 
     if (hitInfo.primitive_type == TRIANGLE)
     {
         instance = _GInstances + hitInfo.instance_id;
-        model = _GModels + instance->model_id;
     }
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos, model);
+    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
     if (hitInfo.primitive_type == TRIANGLE)
     {
         glm::vec4 wn = glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0) * instance->transform;
@@ -97,7 +97,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    Material material = getColliderMaterial(hitInfo, model);
+    Material material = getColliderMaterial(hitInfo);
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);

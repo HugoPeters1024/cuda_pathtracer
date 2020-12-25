@@ -118,14 +118,16 @@ class Scene
 {
     // derivatives of gameobjects
 public:
-    std::vector<Model> models = std::vector<Model>(0);
-    std::vector<GameObject> objects = std::vector<GameObject>(0);
+    std::vector<Model> models;
+    std::vector<GameObject> objects;
     Instance* instances;
-    std::vector<Material> materials = std::vector<Material>(0);
-    std::vector<Sphere> spheres = std::vector<Sphere>(0);
-    std::vector<Plane> planes = std::vector<Plane>(0);
-    std::vector<PointLight> pointLights = std::vector<PointLight>(0);
-    std::vector<SphereLight> sphereLights = std::vector<SphereLight>(0);
+    std::vector<TriangleV> allVertices;
+    std::vector<TriangleD> allVertexData;
+    std::vector<Material> materials;
+    std::vector<Sphere> spheres;
+    std::vector<Plane> planes;
+    std::vector<PointLight> pointLights;
+    std::vector<SphereLight> sphereLights;
     std::vector<TopLevelBVH> topLevelBVH;
     std::vector<std::function<void(std::vector<GameObject>&, float)>> handlers;
 
@@ -144,6 +146,7 @@ public:
 
     uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
+        
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
         objConfig.vertex_color = false;
@@ -233,21 +236,13 @@ public:
         bool hasUvs = uvs.size() > 0;
 
         Model model;
+        model.triangleStart = allVertices.size();
         model.nrTriangles = 0;
+
         for(int s=0; s<objReader.GetShapes().size(); s++)
         {
             const auto& shape = objReader.GetShapes()[s];
-            model.nrTriangles += shape.mesh.indices.size() / 3;
-        }
-
-        model.trianglesV = (TriangleV*)malloc(model.nrTriangles * sizeof(TriangleV));
-        model.trianglesD = (TriangleD*)malloc(model.nrTriangles * sizeof(TriangleD));
-
-        uint triangle_index = 0;
-        for(int s=0; s<objReader.GetShapes().size(); s++)
-        {
-            const auto& shape = objReader.GetShapes()[s];
-            for(int i=0; i<shape.mesh.indices.size(); i+=3, triangle_index++)
+            for(int i=0; i<shape.mesh.indices.size(); i+=3)
             {
                 const auto& it0 = shape.mesh.indices[i+0];
                 const auto& it1 = shape.mesh.indices[i+1];
@@ -305,14 +300,18 @@ public:
                     bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
                 }
 
-                model.trianglesV[triangle_index] = TriangleV(v0, v1, v2);
-                model.trianglesD[triangle_index] = TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, useMtl ? material_ids[mit] : material);
+                MATERIAL_ID mat = useMtl ? material_ids[mit] : material;
+                allVertices.push_back(TriangleV(v0, v1, v2));
+                allVertexData.push_back(TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, mat));
+                model.nrTriangles++;
             }
         }
+
         printf("Building a BVH over %u triangles\n", model.nrTriangles);
         float ping = glfwGetTime();
-        model.bvh = createBVHBinned(model.trianglesV, model.trianglesD, model.nrTriangles, &model.nrBvhNodes);
-        printf("Build took %fms\n", (glfwGetTime() - ping) *1000);
+
+        model.bvh = createBVHBinned(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
+        printf("Build took %fms\n", (glfwGetTime() - ping)*1000);
         printf("BVH Size: %u\n", model.nrBvhNodes);
 
         models.push_back(model);

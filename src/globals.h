@@ -7,6 +7,10 @@
 // global NEE switch
 __device__ __constant__ bool DNEE;
 
+__device__ __constant__ TriangleV* DVertices;
+
+__device__ __constant__ TriangleD* DVertexData;
+
 __device__ __constant__ Model* DModels;
 
 __device__ __constant__ Instance* DInstances;
@@ -28,6 +32,8 @@ __device__ __constant__ DSizedBuffer<Plane> DPlanes;
 __device__ __constant__ DSizedBuffer<SphereLight> DSphereLights;
 
 static bool HNEE;
+static TriangleV* HVertices;
+static TriangleD* HVertexData;
 static Model* HModels;
 static Instance* HInstances;
 static TopLevelBVH* HTopBVH;
@@ -38,6 +44,8 @@ static HSizedBuffer<SphereLight> HSphereLights;
 
 #ifdef __CUDA_ARCH__
 #define _NEE DNEE
+#define _GVertices DVertices
+#define _GVertexData DVertexData
 #define _GModels DModels
 #define _GInstances DInstances
 #define _GSpheres DSpheres
@@ -47,6 +55,8 @@ static HSizedBuffer<SphereLight> HSphereLights;
 #define _GSphereLights DSphereLights
 #else
 #define _NEE HNEE
+#define _GVertices HVertices
+#define _GVertexData HVertexData
 #define _GModels HModels
 #define _GInstances HInstances
 #define _GSpheres HSpheres

@@ -32,7 +32,7 @@ inline uint getBinId(uint K, uint axis, const float3& centroid, float bmin, floa
 }
 
 // http://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
-inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, uint nrTriangles, uint* bvh_size)
+inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, uint nrTriangles, uint triangleOffset, uint* bvh_size)
 {
     float ping = glfwGetTime();
     // find dominant axis
@@ -92,7 +92,7 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         // Count lower bound
         if (count <= 4)
         {
-            ret[index] = BVHNode::MakeChild(parent, start, count);
+            ret[index] = BVHNode::MakeChild(parent, start + triangleOffset, count);
             continue;
         }
 
@@ -125,7 +125,7 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         // dominant axis bound
         if (bmax - bmin < K * EPS)
         {
-            ret[index] = BVHNode::MakeChild(parent, start, count);
+            ret[index] = BVHNode::MakeChild(parent, start + triangleOffset, count);
             continue;
         }
 
@@ -190,7 +190,7 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
         // Splitting was not worth it become a child and push no new work.
         if (min_k == -1)
         {
-            ret[index] = BVHNode::MakeChild(parent, start, count);
+            ret[index] = BVHNode::MakeChild(parent, start + triangleOffset, count);
             continue;
         }
 

@@ -40,23 +40,23 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     return transformedRay;
 }
 
-HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo, const Model* model)
+HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return _GMaterials[model->trianglesD[hitInfo.primitive_id].material];
+        case TRIANGLE: return _GMaterials[_GVertexData[hitInfo.primitive_id].material];
         case SPHERE:   return _GMaterials[_GSpheres[hitInfo.primitive_id].material];
         case PLANE:    return _GMaterials[_GPlanes[hitInfo.primitive_id].material];
     }
     assert(false);
 }
 
-HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint, const Model* model)
+HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint)
 {
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            return model->trianglesD[hitInfo.primitive_id].normal;
+            return _GVertexData[hitInfo.primitive_id].normal;
         }
         case SPHERE: {
             const Sphere& sphere = _GSpheres[hitInfo.primitive_id];
@@ -178,7 +178,7 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
             end = start + current.t_count();
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, model.trianglesV[i], t, u, v) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
                 {
                     hitInfo.intersected = true;
                     hitInfo.primitive_id = i;
@@ -416,18 +416,16 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     Instance* instance;
-    Model* model;
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     // Only triangles are always part of instances
     if (hitInfo.primitive_type == TRIANGLE)
     {
         instance = _GInstances + hitInfo.instance_id;
-        model = _GModels + instance->model_id;
     }
 
-    Material material = getColliderMaterial(hitInfo, model);
-    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos, model);
+    Material material = getColliderMaterial(hitInfo);
+    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
@@ -450,8 +448,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // sample the texture of the material by redoing the intersection
     if (material.hasTexture || material.hasNormalMap)
     {
-        const TriangleD& triangleData = model->trianglesD[hitInfo.primitive_id];
-        const TriangleV& triangleV = model->trianglesV[hitInfo.primitive_id];
+        const TriangleD& triangleData = _GVertexData[hitInfo.primitive_id];
+        const TriangleV& triangleV = _GVertices[hitInfo.primitive_id];
 
         float t, u, v;
         Ray transformedRay = transformRay(ray, instance->invTransform);
