@@ -31,6 +31,46 @@ To select a scene pass a value to the `--scene` command line option. The followi
 - outside (default)
 - sibenik 
 
+## new in version 2
+
+** VIDEOS IN SCREENSHOT DIRECTORY **
+
+- Skydome is now hdr
+- BVH with binning approach (<700ms for 2M triangles single core)
+- SIMD instructions here and there
+- No more round trips to the GPU during rendering
+- Render performance x3 (130 fps 1 diffuse, 1 shadow ray in sibenik)
+- Toplevel BVH with full transformation support
+- Russian Roulette (now 30+ fps with 1spp in sibenik)
+
+
+---------------------------------------------------------
+<img src="./screenshots/2mtris.png" width="40%" />
+<img src="./screenshots/2mtris_render.png" width="40%" />
+
+Building a BVH over 2M triangles under 1 second
+
+-----------------------------------------------------------------
+
+For a demo of the toplevel bvh please check out the video's in the screenshot directory.
+Here  is an impression of the code structure:
+
+<img src="./screenshots/callbacks.png" width="100%" />
+
+------------------------------
+
+<img src="./screenshots/minecraft.png" width="40%" />
+
+Textures with alpha channels are a WIP
+
+-------------------------------
+
+<img src="./screenshots/textures.png" width="40%" />
+<img src="./screenshots/windows.png" width="40%" />
+
+The sibenik cathedral in it's full glory with textures and normal maps.
+
+
 ## Quicklist of the features
 
 - Interactive raytracer using OpenMP
@@ -46,6 +86,8 @@ To select a scene pass a value to the `--scene` command line option. The followi
 - Skydome
 - Post processing shader with gamma correction, chromatic aberration, and vignetting
 - Barrel distortion at the primary ray level [^ref4]
+
+
 
 ## Implementation of the raytracer
 

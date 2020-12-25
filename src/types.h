@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <stack>
+#include <functional>
 
 #define GL_GLEXT_PROTOTYPES 1
 #define GL3_PROTOTYPES      1
@@ -33,6 +34,7 @@ struct Material
 {
     float3 diffuse_color;
     float3 specular_color;
+    float3 emission;
     float reflect;
     float glossy;
     float transmit;
@@ -44,12 +46,13 @@ struct Material
     bool hasNormalMap = false;
 
     Material() {}
-    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 specular_color, float3 absorption)
+    Material(float3 color, float reflect, float glossy, float transmit, float refractive_index, float3 specular_color, float3 absorption, float3 emission)
         : diffuse_color(color), reflect(reflect), glossy(glossy), 
           transmit(transmit), refractive_index(refractive_index),
-          specular_color(specular_color), absorption(absorption) {}
+          specular_color(specular_color), absorption(absorption),
+          emission(emission) {}
 
-    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0, make_float3(0), make_float3(0)); }
+    static Material DIFFUSE(float3 color) { return Material(color, 0, 0, 0, 0, make_float3(0), make_float3(0), make_float3(0) ); }
 };
 
 struct Sphere
@@ -362,12 +365,13 @@ struct Instance
 struct GameObject
 {
     uint model_id;
+    uint kind;
     float3 position;
     float3 rotation;
     float3 scale;
 
     GameObject(uint model_id)
-        : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)) {}
+        : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)), kind(0) {}
 };
 
 struct __align__(16) TopLevelBVH

@@ -28,7 +28,7 @@ public:
     Pathtracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
 
     virtual void Init() override;
-    virtual void Draw(const Camera& camera, float currentTime, bool shouldClear) override;
+    virtual void Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
 };
 
 void Pathtracer::Init()
@@ -119,7 +119,7 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpy(d_topBvh, sceneData.h_top_bvh, sceneData.num_top_bvh_nodes * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 }
 
-void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
+void Pathtracer::Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
 
     // Map the screen texture resource.
@@ -178,7 +178,8 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,
-        kernel_extend<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, bounce);
+        uint kz = bounce == 0 ? 64 : 32;
+        kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
         kernel_shade<<<NR_PIXELS / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
@@ -192,6 +193,12 @@ void Pathtracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
 
     // Write the final state accumulator into the texture
     kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
+
+    for(int i=0; i<sceneData.num_handlers; i++)
+    {
+        sceneData.handlers[i](sceneData, currentTime);
+    }
+
 
     // Update all the gameobjects while the GPU is busy
     for(int i=0; i<sceneData.num_objects; i++)

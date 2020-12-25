@@ -285,7 +285,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     return hitInfo;
 }
 
-__device__ float3 BRDF(const float3& normal, uint& seed)
+__device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 {
     float r0 = rand(seed), r1 = rand(seed);
     float r = sqrtf(r0);
@@ -340,7 +340,7 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
 
 __device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint seed)
 {
-    float3 newDir = BRDF(normal, seed);
+    float3 newDir = SampleHemisphere(normal, seed);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
@@ -386,18 +386,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // We consider the skydome a lightsource in the set of random bounces
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
-        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-        //if (bounce > 0) sk = sk * 10;
-        /*
-        // Artificially increase contrast to make the sun a more apparent light source
-        // without affecting the direct view of the image.
-        if (bounce > 0)
-        {
-            // normalized brightness.
-            float brightness = dot(sk, sk) / 3.0f;
-            sk *= pow(brightness, 6) * 60;
-        }
-        */
+        float3 sk = make_float3(sk4.x, sk4.y, sk4.z) * 3.0f;
+
         state.accucolor += state.mask * sk;
         stateBuf.setState(ray.pixeli, state);
         return;
@@ -406,7 +396,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     if (hitInfo.primitive_type == LIGHT) {
         if (_NEE)
         {
-            if (state.fromSpecular || bounce == 0)
+            if (state.fromSpecular)
             {
                 // the light can only be seen by primary bounces.
                 // the rest happens through NEE. If we do encounter a light
@@ -481,7 +471,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = normalize(get3f(texColor)*2-make_float3(1));
+            float3 texNormalT = normalize(get3f((texColor)*2)-make_float3(1));
             float3 texNormal = normalize(make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
@@ -497,6 +487,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
     }
 
+    float3 BRDF = material.diffuse_color * (1.0f/PI);
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -519,20 +510,19 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (rand(seed) < reflected) {
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         }
-        float3 noiseDir = BRDF(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphere(secondary.direction, seed);
         secondary.direction = secondary.direction * (1 - material.glossy) + material.glossy * noiseDir;
     }
     else if (random - material.transmit < material.reflect)
     {
-        state.mask = state.mask * material.diffuse_color;
         state.fromSpecular = true;
+        state.mask *= material.diffuse_color;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
-        float3 noiseDir = BRDF(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphere(secondary.direction, seed);
         secondary.direction = secondary.direction * (1-material.glossy) + material.glossy * noiseDir;
     }
     else 
     {
-        state.mask = state.mask * material.diffuse_color;
         state.fromSpecular = false;
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
         // due to normal mapping a sample might go into the surface
@@ -550,7 +540,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             const SphereLight& light = DSphereLights[lightSource];
             float3 fromLight = normalize(intersectionPos - light.pos);
             // Sample the hemisphere from that point.
-            float3 r = BRDF(fromLight, seed);
+            float3 r = SampleHemisphere(fromLight, seed);
 
             // From the center of the light, go to sample point
             // (by definition of the BRDF on the visible by the origin (if not occluded)
@@ -568,24 +558,22 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 float cost1 = dot(r, shadowDir);
                 float cost2 = dot(colliderNormal, -shadowDir);
 
-                float SA = 3.1415926535 * light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
-                state.light = state.mask * light.color * SA * DSphereLights.size;
+                float SA = PI * light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
+                state.light = state.mask * BRDF * light.color * SA * DSphereLights.size;
 
                 // Russian roullette for shadow rays
                 float p = clamp(fmax(fmax(state.light.x, state.light.y), state.light.z), 0.1f, 0.9f);
-                if (rand(seed) < p)
+                //if (rand(seed) < p)
                 {
                     // We invert the shadowrays to get coherent origins.
                     Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
                     shadowRay.length = shadowLength - 2 * EPS;
                     DShadowRayQueue.push(RayPacked(shadowRay));
-                    state.light *= (1.0f / p);
+                  //  state.light *= (1.0f / p);
                 }
             }
         }
-
-        // Radiance to irradiance
-        state.mask = state.mask * 2;
+        state.mask = state.mask * 2.0f * PI * BRDF;
     }
 
     if (!cullSecondary) {
@@ -621,8 +609,7 @@ __global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceOb
     const uint x = i % WINDOW_WIDTH;
     const uint y = i / WINDOW_WIDTH;
 
-    TraceState state = stateBuf.getState(i);
-    float3 color = state.accucolor;
+    float3 color = get3f(stateBuf.accucolors[i]);
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = make_float3(old_color_all.x, old_color_all.y, old_color_all.z);

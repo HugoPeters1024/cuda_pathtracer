@@ -25,7 +25,7 @@ private:
 public:
     Raytracer(SceneData& sceneData, GLuint texture) : Application(sceneData, texture) {}
     virtual void Init() override;
-    virtual void Draw(const Camera& camera, float currentTime, bool shouldClear) override;
+    virtual void Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
 };
 
 void Raytracer::Init()
@@ -44,8 +44,12 @@ void Raytracer::Init()
     omp_set_num_threads(8);
 }
 
-void Raytracer::Draw(const Camera& camera, float currentTime, bool shouldClear)
+void Raytracer::Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
+    for(int i=0; i<sceneData.num_handlers; i++)
+    {
+        sceneData.handlers[i](sceneData, currentTime);
+    }
     // instantiate all the instances
     for(int i=0; i<sceneData.num_objects; i++)
     {

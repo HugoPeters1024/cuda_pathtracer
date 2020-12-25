@@ -130,8 +130,10 @@ int main(int argc, char** argv) {
         sceneData = getOutsideScene();
     else if (strcmp(sceneName, "sibenik") == 0)
         sceneData = getSibenikScene();
-    else if (strcmp(sceneName, "conference") == 0)
-        sceneData = getConferenceScene();
+    else if (strcmp(sceneName, "minecraft") == 0)
+        sceneData = getMinecraftScene();
+    else if (strcmp(sceneName, "2mtris") == 0)
+        sceneData = get2MillionScene();
     else{
         printf("Scene '%s' does not exist!\n", sceneName);
         return -5;
@@ -163,15 +165,16 @@ int main(int argc, char** argv) {
     Keyboard keyboard(window);
 
     bool shouldClear = true;
+    float frameTime;
     while (!glfwWindowShouldClose(window))
     {
         tick++;
-        double start = glfwGetTime();
+        float start = glfwGetTime();
 
         if (PATHRACER)
-            pathtracerApp.Draw(camera, glfwGetTime(), shouldClear);
+            pathtracerApp.Draw(camera, glfwGetTime(), frameTime, shouldClear);
         else
-            raytracerApp.Draw(camera, glfwGetTime(), shouldClear);
+            raytracerApp.Draw(camera, glfwGetTime(), frameTime, shouldClear);
 
         // Verify the texture to check for outliers
         /*
@@ -226,7 +229,7 @@ int main(int argc, char** argv) {
         if (tick % 60 == 0) printf("running average fps: %f\n", runningAverageFps);
 
         // Vsync is broken in GLFW for my card, so just hack it in.
-        float frameTime = glfwGetTime() - start;
+        frameTime = glfwGetTime() - start;
         if (frameTime < 1.0 / 60.0) {
             std::this_thread::sleep_for(std::chrono::milliseconds((uint)(((1.0/60.0f)-frameTime)*1000)));
         }

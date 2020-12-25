@@ -60,18 +60,35 @@ inline SceneData getOutsideScene()
    //scene.triangles = std::vector<Triangle>(scene.triangles.begin(), scene.triangles.begin() + 1);
     //scene.addModel("teapot.obj", 1, make_float3(0), make_float3(-3,0,0), teapotMatId);
    // scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
-    uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
-    GameObject house(house_model);
-    house.position = make_float3(-15, -2.5, 4);
-    scene->addObject(house);
+    //uint house_model = scene->addModel("house.obj", 0.04, make_float3(0), make_float3(0), whiteId);
+    //GameObject house(house_model);
+    //house.position = make_float3(-15, -2.5, 4);
+    //scene->addObject(house);
 
     uint cubeModel = scene->addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
-    for(int i=0; i<2; i++)
+    for(int i=0; i<10; i++)
     {
         GameObject cube(cubeModel);
-        cube.position.x = 2 * i;
+        cube.kind = 1;
+        cube.position.x = 10 * sin(i * 2 * 3.1415926) ;
+        cube.position.z = 10 * cos(i * 2 * 3.1415926) ;
+        cube.rotation.x = i * 3.1415926;
         scene->addObject(cube);
     }
+
+    scene->addHandler([](SceneData& scene, float t){
+            float f = 0;
+            for(int i=0; i<scene.num_objects; i++)
+            {
+                GameObject& obj = scene.h_object_buffer[i];
+                if (obj.kind !=1) continue;
+                obj.position.x = 10 * sin(f + t/10.0f) ;
+                obj.position.z = 10 * cos(f + t/10.0f) ;
+                obj.rotation.x = f;
+                f += 2 * 0.3141592;
+            }
+    });
+
 
     scene->addPlane(Plane(make_float3(0,-1,0),-3, whiteId));
 
@@ -104,9 +121,10 @@ inline SceneData getSibenikScene()
     cubeMat.refractive_index = 1.1;
     cubeMat.glossy = 0.02;
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
+    cubeMat.emission = make_float3(10);
     auto cubeMatId = scene->addMaterial(cubeMat);
 
-    Material sibenikMat = Material::DIFFUSE(make_float3(0.7));
+    Material sibenikMat = Material::DIFFUSE(make_float3(0.2));
     auto sibenikMatId = scene->addMaterial(sibenikMat);
 
     Material teapotMat = Material::DIFFUSE(make_float3(1));
@@ -138,7 +156,7 @@ inline SceneData getSibenikScene()
     auto mirrorMatId = scene->addMaterial(mirrorMat);
 
     // Add all the objects
-    uint sibenikModel = scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, true);
+    uint sibenikModel = scene->addModel("sibenik.obj", 1, make_float3(0), make_float3(0,0,0), sibenikMatId, false);
 
     GameObject sibenikObj(sibenikModel);
     sibenikObj.position.y = 12;
@@ -168,7 +186,7 @@ inline SceneData getSibenikScene()
     return scene->finalize();
 }
 
-inline SceneData getConferenceScene()
+inline SceneData getMinecraftScene()
 {
     auto scene = new Scene;
     Material white = Material::DIFFUSE(make_float3(0.4));
@@ -179,6 +197,28 @@ inline SceneData getConferenceScene()
     uint model = scene->addModel("vokselia_spawn.obj", 20.0f, make_float3(0), make_float3(0, 0, 0), whiteId, true);
 
     GameObject obj(model);
+//    obj.scale=make_float3(5.0f);
+    scene->addObject(obj);
+
+
+    scene->addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
+    scene->addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
+
+    return scene->finalize();
+}
+
+inline SceneData get2MillionScene()
+{
+    auto scene = new Scene;
+    Material white = Material::DIFFUSE(make_float3(0.4));
+    auto whiteId = scene->addMaterial(white);
+
+ //   scene->addModel("conference.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId);
+    //scene->addModel("2Mtris.obj", 0.2, make_float3(0), make_float3(0, 10, 0), whiteId, false);
+    uint model = scene->addModel("2Mtris.obj", 0.2f, make_float3(0), make_float3(0, 0, 0), whiteId, false);
+
+    GameObject obj(model);
+    obj.rotation.x = - 3.1415926535 / 2;
 //    obj.scale=make_float3(5.0f);
     scene->addObject(obj);
 

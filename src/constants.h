@@ -6,5 +6,6 @@
 #define NR_PIXELS (WINDOW_WIDTH * WINDOW_HEIGHT)
 
 #define EPS 0.001
+#define PI 3.14159265358979323846
 
 #endif

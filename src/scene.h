@@ -8,6 +8,7 @@
 // Final product of the scene
 struct SceneData
 {
+    std::function<void(SceneData&, float)>* handlers;
     TopLevelBVH* h_top_bvh;
     Model* h_models;
     Material* h_material_buffer;
@@ -24,16 +25,17 @@ struct SceneData
     uint num_planes;
     uint num_point_lights;
     uint num_sphere_lights;
+    uint num_handlers;
 };
 
 inline Instance ConvertToInstance(const GameObject& obj)
 {
     glm::mat4x4 transform = glm::mat4x4(1.0f);
+    transform = glm::translate(transform, glm::vec3(obj.position.x, obj.position.y, obj.position.z));
     transform = glm::rotate(transform, obj.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
     transform = glm::rotate(transform, obj.rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
     transform = glm::rotate(transform, obj.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
     transform = glm::scale(transform, glm::vec3(obj.scale.x, obj.scale.y, obj.scale.z));
-    transform = glm::translate(transform, glm::vec3(obj.position.x, obj.position.y, obj.position.z));
     return Instance
     {
         obj.model_id,
@@ -145,6 +147,7 @@ public:
     std::vector<Plane> planes;
     std::vector<PointLight> pointLights;
     std::vector<SphereLight> sphereLights;
+    std::vector<std::function<void(SceneData&, float)>> handlers;
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -157,6 +160,7 @@ public:
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
     void addObject(GameObject object) { objects.push_back(object); }
+    void addHandler(std::function<void(SceneData&, float)> handler) { handlers.push_back(handler); }
 
     uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
@@ -345,6 +349,9 @@ public:
     {
         validate();
         SceneData ret;
+
+        ret.handlers = handlers.data();
+        ret.num_handlers = handlers.size();
 
         ret.h_sphere_buffer = spheres.data();
         ret.h_plane_buffer = planes.data();

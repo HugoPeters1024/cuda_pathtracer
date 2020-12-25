@@ -13,7 +13,7 @@ protected:
 public:
     Application(SceneData& sceneData, GLuint texture) : sceneData(sceneData), texture(texture) {}
     virtual void Init() = 0;
-    virtual void Draw(const Camera& camera, float currentTime, bool shouldClera) = 0;
+    virtual void Draw(const Camera& camera, float currentTime, float frameTime, bool shouldClera) = 0;
 };
 
 
