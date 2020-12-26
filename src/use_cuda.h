@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <cuda.h>
+#include <glm/glm.hpp>
 #include <device_launch_parameters.h>
 #include <driver_types.h>
 #include <surface_functions.h>
@@ -21,6 +22,7 @@
 
 #include "constants.h"
 
+
 #ifdef __CUDACC__
 #define HYBRID __host__ __device__
 #else
@@ -35,6 +37,16 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
+}
+
+HYBRID inline float3 make_float3(const glm::vec3& src)
+{
+    return make_float3(src.x, src.y, src.z);
+}
+
+HYBRID inline float3 get3f(const glm::vec4& src)
+{
+    return make_float3(src.x, src.y, src.z);
 }
 
 HYBRID inline uint wang_hash(uint seed)

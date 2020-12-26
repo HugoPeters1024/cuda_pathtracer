@@ -122,7 +122,7 @@ inline Scene getSibenikScene()
     cubeMat.refractive_index = 1.1;
     cubeMat.glossy = 0.02;
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
-    cubeMat.emission = make_float3(1);
+    cubeMat.emission = make_float3(8);
     auto cubeMatId = scene.addMaterial(cubeMat);
 
     Material sibenikMat = Material::DIFFUSE(make_float3(0.2));
@@ -175,7 +175,7 @@ inline Scene getSibenikScene()
 
     // Add the lights
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(60)));
+    //scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(60)));
 
     scene.finalize();
     return scene;

@@ -320,8 +320,7 @@ public:
 
     void validate()
     {
-        // I can't deal with that lol
-        assert(sphereLights.size() > 0);
+        assert(allVertexData.size() == allVertices.size());
     }
 
     void finalize()

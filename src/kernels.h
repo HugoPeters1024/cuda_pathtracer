@@ -5,8 +5,6 @@
 #include "types.h"
 #include "globals.h"
 
-
-
 #ifdef __CUDA_ARCH__
 template <typename T>
 __device__ inline void swapc(T& left, T& right)
@@ -132,7 +130,7 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
     v = dot(ray.direction, qvec) * invDet;
 
     t = dot(v0v2, qvec) * invDet;
-    return fabs(det) > 0.0001f && (u >= 0 && u <= 1) && (v >= 0 && u + v <= 1) && t > 0;
+    return fabs(det) > 0.001f && (u >= 0 && u <= 1) && (v >= 0 && u + v <= 1) && t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -389,29 +387,19 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     if (hitInfo.primitive_type == LIGHT) {
-        if (_NEE)
+        if (!_NEE || (_NEE && state.fromSpecular))
         {
-            if (state.fromSpecular)
-            {
-                // the light can only be seen by primary bounces.
-                // the rest happens through NEE. If we do encounter a light
-                // in this ray we simply add nothing to the contribution and
-                // terminate.
-                state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
-                stateBuf.setState(ray.pixeli, state);
-            }
-            return;
-        }
-        else
-        {
+            // the light can only be seen by primary bounces.
+            // the rest happens through NEE. If we do encounter a light
+            // in this ray we simply add nothing to the contribution and
+            // terminate.
             state.accucolor += state.mask * _GSphereLights[hitInfo.primitive_id].color;
             stateBuf.setState(ray.pixeli, state);
-            return;
         }
+        return;
     }
 
     Instance* instance;
-
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     // Only triangles are always part of instances
     if (hitInfo.primitive_type == TRIANGLE)
@@ -420,24 +408,31 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     Material material = getColliderMaterial(hitInfo);
-    if (fmaxcompf(material.emission) > EPS)
-    {
-        state.accucolor += state.mask * material.emission;
-        stateBuf.setState(ray.pixeli, state);
-        return;
-    }
-    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
+
+
+    float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        glm::vec4 wn = instance->transform * glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0);
-        originalNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+        glm::vec4 wn = instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0);
+        surfaceNormal = normalize(make_float3(wn.x, wn.y, wn.z));
     }
 
-    bool inside = dot(ray.direction, originalNormal) > 0;
-    float3 colliderNormal = inside ? -originalNormal : originalNormal;
-    float3 surfaceNormal = colliderNormal;
+    bool inside = dot(ray.direction, surfaceNormal) > 0;
+    float3 colliderNormal = inside ? -surfaceNormal : surfaceNormal;
+
+    // Triangle is emmisive
+    if (fmaxcompf(material.emission) > EPS && !inside)
+    {
+        if (!_NEE || (_NEE && state.fromSpecular))
+        {
+            state.accucolor += state.mask * material.emission;
+            stateBuf.setState(ray.pixeli, state);
+        }
+        return;
+    }
+
 
     if (hitInfo.primitive_type == PLANE) {
         uint px = (uint)(fabs(intersectionPos.x/4));
@@ -485,7 +480,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
     }
 
-    float3 BRDF = material.diffuse_color * (1.0f/PI);
+    float3 BRDF = material.diffuse_color / PI;
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
@@ -530,45 +525,48 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // for the new sampled direction.
 
         // Create a shadow ray for diffuse objects
-        if (_NEE)
+        if (_NEE && DTriangleLights.size > 0)
         {
             // Choose an area light at random
             seed = wang_hash(seed);
-            uint lightSource = seed % DSphereLights.size;
-            const SphereLight& light = DSphereLights[lightSource];
-            float3 fromLight = normalize(intersectionPos - light.pos);
-            // Sample the hemisphere from that point.
-            float3 r = SampleHemisphere(fromLight, seed);
+            uint lightSource = seed % DTriangleLights.size;
+            const TriangleLight& light = DTriangleLights[lightSource];
+            const TriangleV& lightV = _GVertices[light.triangle_index];
+            const TriangleD& lightD = _GVertexData[light.triangle_index];
+            const Instance& lightInstance = _GInstances[light.instance_index];
 
-            // From the center of the light, go to sample point
-            // (by definition of the BRDF on the visible by the origin (if not occluded)
-            float3 samplePoint = light.pos + light.radius * r;
+            // transform the vertices to world space
+            float3 v0 = get3f(lightInstance.transform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
+            float3 v1 = get3f(lightInstance.transform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
+            float3 v2 = get3f(lightInstance.transform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
+
+            float3 weights = normalize(make_float3(rand(seed), rand(seed), rand(seed)));
+            float3 samplePoint = weights.x * v0 + weights.y * v1 + weights.z * v2;
+
+            // transform normal to world space
+            float3 lightNormal = normalize(get3f(lightInstance.transform * glm::vec4(lightD.normal.x, lightD.normal.y, lightD.normal.z, 0)));
 
             float3 shadowDir = intersectionPos - samplePoint;
             float shadowLength = length(shadowDir);
             float invShadowLength = 1.0f / shadowLength;
             shadowDir *= invShadowLength;
 
-
-            // otherwise we are our own occluder
-            if (dot(colliderNormal, shadowDir) < 0)
+            // otherwise we are our own occluder or view the backface of the light
+            if (dot(colliderNormal, -shadowDir) > 0 && dot(lightNormal, shadowDir) > 0)
             {
-                float cost1 = dot(r, shadowDir);
-                float cost2 = dot(colliderNormal, -shadowDir);
+                const float3& emission = _GMaterials[lightD.material].emission;
+                // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
+                float3 AB = v1 - v0;
+                float3 AC = v2 - v0;
+                float A = 0.5f * length(cross(AB, AC));
 
-                float SA = PI * light.radius * light.radius * cost1 * cost2 * invShadowLength * invShadowLength;
-                state.light = state.mask * BRDF * light.color * SA * DSphereLights.size;
+                float SA = dot(lightNormal, shadowDir) * A * invShadowLength * invShadowLength;
+                state.light = state.mask * BRDF * emission * SA * DTriangleLights.size * dot(colliderNormal, -shadowDir);
 
-                // Russian roullette for shadow rays
-                float p = clamp(fmax(fmax(state.light.x, state.light.y), state.light.z), 0.1f, 0.9f);
-                //if (rand(seed) < p)
-                {
-                    // We invert the shadowrays to get coherent origins.
-                    Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
-                    shadowRay.length = shadowLength - 2 * EPS;
-                    DShadowRayQueue.push(RayPacked(shadowRay));
-                  //  state.light *= (1.0f / p);
-                }
+                // We invert the shadowrays to get coherent origins.
+                Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
+                shadowRay.length = shadowLength - 2 * EPS;
+                DShadowRayQueue.push(RayPacked(shadowRay));
             }
         }
         state.mask = state.mask * PI * BRDF;
