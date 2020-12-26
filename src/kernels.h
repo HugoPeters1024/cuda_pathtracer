@@ -420,6 +420,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     Material material = getColliderMaterial(hitInfo);
+    if (fmaxcompf(material.emission) > EPS)
+    {
+        state.accucolor += state.mask * material.emission;
+        stateBuf.setState(ray.pixeli, state);
+        return;
+    }
     float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
@@ -472,8 +478,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             ));
 
             // Transform the normal from model space to world space
-            glm::vec4 wn = instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0);
-            texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+            glm::vec4 wn = instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0); texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
 
             if (dot(texNormal, colliderNormal) < 0) texNormal = -texNormal;
             colliderNormal = texNormal;
@@ -566,10 +571,10 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 }
             }
         }
-        state.mask = state.mask * 2.0f * PI * BRDF;
+        state.mask = state.mask * PI * BRDF;
     }
 
-    if (!cullSecondary && fmaxcompf(state.mask) > 0.01) {
+    if (!cullSecondary) {
         // Russian roullete
         float p = fmin(fmax(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f), 0.9f);
         if (rand(seed) < p)

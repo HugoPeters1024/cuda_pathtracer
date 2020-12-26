@@ -22,6 +22,7 @@ private:
     cudaTextureObject_t dSkydomeTex;
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
+    DSizedBuffer<TriangleLight> d_lights;
 
 
 public:
@@ -59,6 +60,22 @@ void Pathtracer::Init()
 
         hd_models[i].bvh = d_bvh_buffer;
     }
+
+    // Extract all emissive triangles for explicit sampling
+    std::vector<TriangleLight> lights;
+    for(uint i=0; i<scene.objects.size(); i++)
+    {
+        const Model& model = scene.models[scene.instances[i].model_id];
+        for(uint t=model.triangleStart; t<model.triangleStart+model.nrTriangles; t++)
+        {
+            const Material& mat = scene.materials[scene.allVertexData[t].material];
+            if (fmaxcompf(mat.emission) < EPS) continue;
+            lights.push_back(TriangleLight { t, i });
+        }
+    }
+
+    DSizedBuffer<TriangleLight>(lights.data(), lights.size(), &DTriangleLights);
+    printf("Extracted %lu emmissive triangles from the scene\n", lights.size());
 
     // Upload the collection of buffers to a new buffer
     TriangleV* d_vertices;

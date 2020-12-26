@@ -92,6 +92,12 @@ struct __align__(16) TriangleD
         : normal(normal), tangent(tangent), bitangent(bitangent), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
 };
 
+struct TriangleLight
+{
+    uint triangle_index;
+    uint instance_index;
+};
+
 static float3* SORTING_SOURCE;
 
 static bool __compare_triangles_x (uint a, uint b) {
