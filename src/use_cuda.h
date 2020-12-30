@@ -88,7 +88,7 @@ HYBRID inline float rand(uint& seed)
 
 HYBRID inline uint getSeed(uint x, uint y, float time)
 {
-    return wang_hash((x + WINDOW_WIDTH * y) * (uint)(time * 100));
+    return wang_hash((x + WINDOW_WIDTH * y) * (uint)(time * 1000));
 }
 
 HYBRID inline float at(const float3& v, uint i)

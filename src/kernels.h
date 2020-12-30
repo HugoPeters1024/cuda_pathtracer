@@ -288,8 +288,8 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
     float3 sample =  make_float3( x, y, sqrt(1 - r0));
 
     const float3& w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = normalize(cross(w,u));
+    float3 u = cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w);
+    float3 v = cross(w,u);
 
     return normalize(make_float3(
             dot(sample, make_float3(u.x, v.x, w.x)),
@@ -331,7 +331,7 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
-__device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint seed)
+__device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint& seed)
 {
     float3 newDir = SampleHemisphere(normal, seed);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
@@ -368,12 +368,14 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 
 __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
 {
-    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
     Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
-    uint seed = getSeed(i,wang_hash(i),time);
+    uint x = ray.pixeli % WINDOW_WIDTH;
+    uint y = ray.pixeli / WINDOW_WIDTH;
+    uint seed = getSeed(x,y,time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
@@ -381,11 +383,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z) * 3.0f;
 
-        state.accucolor += state.mask * sk;
-        stateBuf.setState(ray.pixeli, state);
+        //state.accucolor += state.mask * sk;
+        //stateBuf.setState(ray.pixeli, state);
         return;
     }
 
+    /*
     if (hitInfo.primitive_type == LIGHT) {
         if (!_NEE || (_NEE && state.fromSpecular))
         {
@@ -398,18 +401,13 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
         return;
     }
+    */
 
-    Instance* instance;
+    // Only triangles are always part of instances but that is the
+    // responsibility of the code dereferencing the pointer.
+    Instance* instance = _GInstances + hitInfo.instance_id;
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    // Only triangles are always part of instances
-    if (hitInfo.primitive_type == TRIANGLE)
-    {
-        instance = _GInstances + hitInfo.instance_id;
-    }
-
     Material material = getColliderMaterial(hitInfo);
-
-
     float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
@@ -423,9 +421,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     float3 colliderNormal = inside ? -surfaceNormal : surfaceNormal;
 
     // Triangle is emmisive
-    if (fmaxcompf(material.emission) > EPS && !inside)
+    if (fmaxcompf(material.emission) > EPS)
     {
-        if (!_NEE || (_NEE && state.fromSpecular))
+        if ((!_NEE) || (_NEE && state.fromSpecular))
         {
             state.accucolor += state.mask * material.emission;
             stateBuf.setState(ray.pixeli, state);
@@ -519,7 +517,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.fromSpecular = false;
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
         // due to normal mapping a sample might go into the surface
-        cullSecondary = dot(surfaceNormal, secondary.direction) < 0;
+        cullSecondary = dot(colliderNormal, secondary.direction) < 0;
 
         // Lambert term is not applied because it is implicit due to the cosine weights
         // for the new sampled direction.
@@ -541,7 +539,10 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             float3 v2 = get3f(lightInstance.transform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
 
             float3 weights = normalize(make_float3(rand(seed), rand(seed), rand(seed)));
+            // sum of squares should be 1 since weights is normalized
+            weights = weights * weights;
             float3 samplePoint = weights.x * v0 + weights.y * v1 + weights.z * v2;
+
 
             // transform normal to world space
             float3 lightNormal = normalize(get3f(lightInstance.transform * glm::vec4(lightD.normal.x, lightD.normal.y, lightD.normal.z, 0)));
@@ -550,6 +551,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             float shadowLength = length(shadowDir);
             float invShadowLength = 1.0f / shadowLength;
             shadowDir *= invShadowLength;
+            lightNormal = dot(lightNormal, shadowDir) < 0 ? -lightNormal : lightNormal;
 
             // otherwise we are our own occluder or view the backface of the light
             if (dot(colliderNormal, -shadowDir) > 0 && dot(lightNormal, shadowDir) > 0)
@@ -561,7 +563,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 float A = 0.5f * length(cross(AB, AC));
 
                 float SA = dot(lightNormal, shadowDir) * A * invShadowLength * invShadowLength;
-                state.light = state.mask * BRDF * emission * SA * DTriangleLights.size * dot(colliderNormal, -shadowDir);
+                float lightPDF = 1.0f / SA;
+                state.light = state.mask * ((dot(colliderNormal, -shadowDir) / lightPDF) * BRDF * emission * DTriangleLights.size);
 
                 // We invert the shadowrays to get coherent origins.
                 Ray shadowRay(samplePoint + EPS * shadowDir, shadowDir, ray.pixeli);
@@ -569,16 +572,17 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 DShadowRayQueue.push(RayPacked(shadowRay));
             }
         }
-        state.mask = state.mask * PI * BRDF;
+        float PDF = dot(colliderNormal, secondary.direction) / PI;
+        state.mask = state.mask * ((BRDF * dot(colliderNormal, secondary.direction)) / PDF);
     }
 
     if (!cullSecondary) {
-        // Russian roullete
-        float p = fmin(fmax(fmax(fmax(material.diffuse_color.x, material.diffuse_color.y), material.diffuse_color.z), 0.1f), 0.9f);
-        if (rand(seed) < p)
+        // Russian roullet
+        float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
+        if (rand(seed) <= p)
         {
+            state.mask = state.mask * (1.0 / p);
             DRayQueueNew.push(RayPacked(secondary));
-            state.mask = state.mask * (1.0f / p);
         }
     }
     stateBuf.setState(ray.pixeli, state);

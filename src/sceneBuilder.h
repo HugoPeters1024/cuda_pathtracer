@@ -101,9 +101,9 @@ inline Scene getOutsideScene()
     scene.addPointLight(PointLight(make_float3(-8,5,-5), make_float3(50, 0, 0)));
     scene.addPointLight(PointLight(make_float3(-8,5,5), make_float3(0, 50, 0)));
 
-    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(50)));
-    scene.addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(50, 0, 0)));
-    scene.addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 50, 0)));
+//    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(50)));
+ //   scene.addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(50, 0, 0)));
+  //  scene.addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 50, 0)));
         
     scene.finalize();
     return scene;
@@ -161,11 +161,14 @@ inline Scene getSibenikScene()
 
     GameObject sibenikObj(sibenikModel);
     sibenikObj.position.y = 12;
-    scene.addObject(sibenikObj);
+   // scene.addObject(sibenikObj);
 
-    uint cubeModel = scene.addModel("cube.obj", 1, make_float3(0.1, 0.3, 0.7), make_float3(-5, 1, 0), cubeMatId);
+    uint cubeModel = scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
     GameObject cubeObj(cubeModel);
+    cubeObj.position = make_float3(0);
     scene.addObject(cubeObj);
+
+    scene.addPlane(Plane(make_float3(0,1,0),3, whiteId));
 
     //scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
 

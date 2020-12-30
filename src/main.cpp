@@ -1,5 +1,6 @@
 
 #include "constants.h"
+
 #include <cuda_runtime_api.h>
 #include <driver_types.h>
 #include <stdio.h>
@@ -15,6 +16,7 @@
 #include "use_cuda.h"
 #include "bvhBuilder.h"
 #include "scene.h"
+#include "stateLoader.h"
 #include "sceneBuilder.h"
 #include "globals.h"
 #include "kernels.h"
@@ -62,6 +64,8 @@ void main() {
     color *= 1 - dot(fromCenter, fromCenter);
 }
 )";
+
+bool PATHRACER = true;
 
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
@@ -121,12 +125,15 @@ int main(int argc, char** argv) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+#ifdef DEBUG_ENERGY
+    float4* screenBuf = (float4*)malloc(NR_PIXELS * sizeof(float4));
+#endif
+
 
     const char* sceneName = cmdArgs["scene"].as<std::string>().c_str();
     printf("Loading scene '%s', this might take a moment\n", sceneName);
     Scene scene = getScene(sceneName);
 
-    bool PATHRACER = false;
 
     // Create the applications
     Pathtracer pathtracerApp = Pathtracer(scene, texture);
@@ -134,7 +141,7 @@ int main(int argc, char** argv) {
 
 
     // Set the initial camera values;
-    Camera camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);
+    Camera camera = readState();
     double runningAverageFps = 0;
     int tick = 0;
 
@@ -171,19 +178,21 @@ int main(int argc, char** argv) {
         else
             raytracerApp.Finish();
 
-        // Verify the texture to check for outliers
-        /*
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, screenBuf);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        float maxv = 0;
-        for(int i=0; i<NR_PIXELS; i++)
+#ifdef DEBUG_ENERGY
+        if (tick % 10 == 0)
         {
-            maxv = std::max(screenBuf[i] / tick, maxv);
-        }
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, screenBuf);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            float sum = 0;
+            for(int i=0; i<NR_PIXELS; i++)
+            {
+                sum += (screenBuf[i].x + screenBuf[i].y + screenBuf[i].z) / screenBuf[i].w;
+            }
 
-        printf("brightest pixel: %f\n", maxv);
-        */
+            printf("Total energy: %f\n", sum);
+        }
+#endif
 
 
         // Draw the texture
@@ -231,5 +240,8 @@ int main(int argc, char** argv) {
     }
 
     glfwDestroyWindow(window);
+
+    // save the camera
+    saveState(camera);
     return 0;
 }
