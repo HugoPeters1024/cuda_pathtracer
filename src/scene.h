@@ -173,7 +173,7 @@ public:
             {
                 auto mat = objReader.GetMaterials()[m];
                 Material material = Material::DIFFUSE(make_float3(1));
-                material.diffuse_color = make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]);
+                material.diffuse_color = clamp(make_float3(mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]), 0.0f, 1.0f);
                 material.specular_color = make_float3(mat.specular[0], mat.specular[1], mat.specular[2]);
                 material.transmit = 1-mat.dissolve;
                 material.reflect = (mat.specular[0]+mat.specular[1]+mat.specular[2])/3.0f;
@@ -190,6 +190,13 @@ public:
                 }
 
                 assert(material.transmit + material.reflect <= 1);
+
+                // make glass white
+                if (material.transmit > EPS)
+                {
+                    material.diffuse_color = make_float3(1);
+                }
+
                 material.refractive_index = mat.ior;
                 if (mat.diffuse_texname != "")
                 {
@@ -226,6 +233,10 @@ public:
                 }
 
 
+                material.hasTexture = false;
+                material.hasNormalMap = false;
+                material.transmit= 0;
+                material.reflect = 0;
                 material_ids[m] = addMaterial(material);
             }
         }

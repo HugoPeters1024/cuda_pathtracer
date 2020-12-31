@@ -55,7 +55,7 @@ void main() {
     vec4 sampleR = texture(tex, uv + 0.011 * fromCenter);
     vec4 sampleG = texture(tex, uv + 0.007 * fromCenter);
     vec4 sampleB = texture(tex, uv + 0.003 * fromCenter);
-    float gamma = 1.8f;
+    float gamma = 2.0f;
     color.x = pow(sampleR.x / sampleR.w, 1.0f/gamma);
     color.y = pow(sampleG.y / sampleG.w, 1.0f/gamma);
     color.z = pow(sampleB.z / sampleB.w, 1.0f/gamma);
@@ -191,7 +191,13 @@ int main(int argc, char** argv) {
             float sum = 0;
             for(int i=0; i<NR_PIXELS; i++)
             {
-                float sample = (screenBuf[i].x + screenBuf[i].y + screenBuf[i].z);
+                float r = screenBuf[i].x;
+                float g = screenBuf[i].y;
+                float b = screenBuf[i].z;
+                assert(r >= 0);
+                assert(g >= 0);
+                assert(b >= 0);
+                float sample = (r + g + b) / 3.0f;
                 if (std::isnan(sample))
                 {
                     printf("NAN detected!!!\n");

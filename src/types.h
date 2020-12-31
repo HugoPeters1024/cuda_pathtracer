@@ -79,7 +79,7 @@ struct SphereLight : public Sphere
 struct __align__(16) TriangleV
 {
     float3 v0, v1, v2;
-    TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
+    HYBRID TriangleV(float3 v0, float3 v1, float3 v2) : v0(v0), v1(v1), v2(v2) {}
 };
 
 struct __align__(16) TriangleD
@@ -435,13 +435,13 @@ struct TraceStateSOA
             get3f(mask),
             get3f(accucolor),
             get3f(light),
-            (bool)__float_as_int(mask.w),
+            reinterpret_cast<bool&>(mask.w),
         };
     }
 
     __device__ void setState(uint i, const TraceState& state)
     {
-        masks[i] = make_float4(state.mask, __int_as_float(state.fromSpecular));
+        masks[i] = make_float4(state.mask, reinterpret_cast<const float&>(state.fromSpecular));
         accucolors[i] = make_float4(state.accucolor, 0);
         lights[i] = make_float4(state.light, 0);
     }
