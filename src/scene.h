@@ -232,11 +232,6 @@ public:
                     material.hasNormalMap = true;
                 }
 
-
-                material.hasTexture = false;
-                material.hasNormalMap = false;
-                material.transmit= 0;
-                material.reflect = 0;
                 material_ids[m] = addMaterial(material);
             }
         }

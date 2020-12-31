@@ -373,7 +373,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
 
-      //  state.accucolor += state.mask * sk;
+        state.accucolor += state.mask * sk;
         stateBuf.setState(ray.pixeli, state);
         return;
     }
@@ -459,7 +459,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     if (random < material.transmit)
     {
-        assert(false);
         state.fromSpecular = true;
         if (inside)
         {
@@ -481,7 +480,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
     else if (random - material.transmit < material.reflect)
     {
-        assert(false);
         state.fromSpecular = true;
         state.mask *= material.diffuse_color;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
@@ -557,7 +555,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         //float PDF = NL / PI;
 
         state.mask = state.mask * (PI * BRDF);
-        state.mask = clamp(state.mask, 0.0f, 1.0f);
     }
 
     if (!cullSecondary) {
@@ -596,7 +593,6 @@ __global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceOb
     float3 color = get3f(stateBuf.accucolors[i]);
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
-    assert(fmod(old_color_all.w, 1.0f) < EPS);
     float3 old_color = fmaxf(make_float3(0.0f), get3f(old_color_all));
     surf2Dwrite(make_float4(old_color + color, old_color_all.w+1.0f), texRef, x*sizeof(float4), y);
 }

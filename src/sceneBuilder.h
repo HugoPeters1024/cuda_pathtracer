@@ -174,8 +174,8 @@ inline Scene getSibenikScene()
     //scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
 
     //scene.addSphere(Sphere(make_float3(0, 0, 0), 1, mirrorMatId));
-   // scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
-    //scene.addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
+    scene.addSphere(Sphere(make_float3(-2, -1, -3), 2, whiteGlassId));
+    scene.addSphere(Sphere(make_float3(-2, -1, 3), 2, mirrorMatId));
 
     // Add the lights
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
