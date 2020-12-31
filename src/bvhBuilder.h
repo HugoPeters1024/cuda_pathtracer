@@ -273,27 +273,27 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     return ret;
 }
 
-inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<TriangleD>& trianglesD, uint* bvh_size)
+inline BVHNode* createBVH(TriangleV* trianglesV, TriangleD* trianglesD, uint nrTriangles, uint triangleOffset, uint* bvh_size)
 {
     float ping = glfwGetTime();
     // bvh size is bounded by 2*triangle_count-1
-    BVHNode* ret = (BVHNode*)malloc((2 * trianglesV.size() - 1) * sizeof(BVHNode));
-    uint* indices = (uint*)malloc(trianglesV.size() * sizeof(uint));
-    float3* centroids = (float3*)malloc(trianglesV.size() * sizeof(float3));
-    for(uint i=0; i<trianglesV.size(); i++) 
+    BVHNode* ret = (BVHNode*)malloc((2 * nrTriangles - 1) * sizeof(BVHNode));
+    uint* indices = (uint*)malloc(nrTriangles * sizeof(uint));
+    float3* centroids = (float3*)malloc(nrTriangles * sizeof(float3));
+    for(uint i=0; i<nrTriangles; i++)
     {
         indices[i] = i;
         centroids[i] = 0.333333 * (trianglesV[i].v0 + trianglesV[i].v1 + trianglesV[i].v2);
     }
 
-    float* leftCosts = (float*)malloc(trianglesV.size() * sizeof(float));
-    float* rightCosts = (float*)malloc(trianglesV.size() * sizeof(float));
+    float* leftCosts = (float*)malloc(nrTriangles * sizeof(float));
+    float* rightCosts = (float*)malloc(nrTriangles * sizeof(float));
     std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
 
     SORTING_SOURCE = centroids;
 
-    work.push(std::make_tuple(node_count++, 0, trianglesV.size()));
+    work.push(std::make_tuple(node_count++, 0, nrTriangles));
 
     while(!work.empty())
     {
@@ -361,7 +361,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
         // Splitting was not worth it become a child and push no new work.
         if (min_level == -1 || count <= 4)
         {
-            ret[index] = BVHNode::MakeChild(boundingBox, start, count);
+            ret[index] = BVHNode::MakeChild(boundingBox, start + triangleOffset, count);
             continue;
         }
 
@@ -402,7 +402,7 @@ inline BVHNode* createBVH(std::vector<TriangleV>& trianglesV, std::vector<Triang
     }
 
     printf("BVH build took %f ms\n", (glfwGetTime() - ping)*1000);
-    permuteTriangles(indices, trianglesV.data(), trianglesD.data(), trianglesV.size());
+    permuteTriangles(indices, trianglesV, trianglesD, nrTriangles);
     free(leftCosts);
     free(rightCosts);
     free(centroids);

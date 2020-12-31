@@ -44,6 +44,13 @@ HYBRID inline float3 make_float3(const glm::vec3& src)
     return make_float3(src.x, src.y, src.z);
 }
 
+#define ensureNoNan(v) { assert(v.x == v.x); assert(v.y == v.y); assert(v.z == v.z); }
+
+HYBRID inline bool hasNan(const float3& v)
+{
+    return v.x != v.x || v.y != v.y || v.z != v.z;
+}
+
 HYBRID inline float3 get3f(const glm::vec4& src)
 {
     return make_float3(src.x, src.y, src.z);
@@ -167,7 +174,7 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
   } else { printf("Loaded texture %s (%ix%i)\n", filename, width, height);
   }
 
-  assert(nrChannels >= 3);
+  assert(nrChannels == 3);
 
   // Convert the float data to 4 component float
   float* fdata = (float*)malloc(width*height*4*sizeof(float));
@@ -175,9 +182,14 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
   for(int y=0; y<height; y++)
   {
     for(int x=0; x<width; x++) {
-      fdata[x*4+(height-y-1)*4*width+0] = data3[x*nrChannels+y*nrChannels*width+0];
-      fdata[x*4+(height-y-1)*4*width+1] = data3[x*nrChannels+y*nrChannels*width+1];
-      fdata[x*4+(height-y-1)*4*width+2] = data3[x*nrChannels+y*nrChannels*width+2];
+      float r = data3[x*nrChannels+y*nrChannels*width+0];
+      float g = data3[x*nrChannels+y*nrChannels*width+1];
+      float b = data3[x*nrChannels+y*nrChannels*width+2];
+      assert(!(std::isnan(r) || std::isnan(g)  || std::isnan(b)));
+
+      fdata[x*4+(height-y-1)*4*width+0] = r;
+      fdata[x*4+(height-y-1)*4*width+1] = g;
+      fdata[x*4+(height-y-1)*4*width+2] = b;
       fdata[x*4+(height-y-1)*4*width+3] = 1;
     }
   }

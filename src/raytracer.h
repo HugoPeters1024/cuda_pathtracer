@@ -39,7 +39,6 @@ void Raytracer::Init()
     HSpheres = HSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size());
     HPlanes = HSizedBuffer<Plane>(scene.planes.data(), scene.planes.size());
     HMaterials = scene.materials.data();
-    HSphereLights = HSizedBuffer<SphereLight>(nullptr, 0);
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
     omp_set_num_threads(8);

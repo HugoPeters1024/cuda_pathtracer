@@ -42,10 +42,9 @@ static TopLevelBVH* HTopBVH;
 static Material* HMaterials;
 static HSizedBuffer<Sphere> HSpheres;
 static HSizedBuffer<Plane> HPlanes;
-static HSizedBuffer<SphereLight> HSphereLights;
 
 #ifdef __CUDA_ARCH__
-#define _NEE DNEE
+#define _NEE (DNEE && DTriangleLights.size > 0)
 #define _GVertices DVertices
 #define _GVertexData DVertexData
 #define _GModels DModels

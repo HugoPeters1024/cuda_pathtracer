@@ -38,10 +38,8 @@ newmtl kamen_zid
 	Ke 0.000000 0.000000 0.000000
 	map_Ka kamen.png
 	map_Kd kamen.png
-        map_bump kamen-bump.png
-        bump kamen-bump.png
-        map_norm kamen-normal.png
-        norm kamen-normal.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 newmtl stupovi
 	Ns 8.000000
@@ -56,6 +54,8 @@ newmtl stupovi
 	Ke 0.000000 0.000000 0.000000
 	map_Ka KAMEN-stup.png
 	map_Kd KAMEN-stup.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 newmtl pod
 	Ns 8.000000
@@ -98,10 +98,8 @@ newmtl pod_rub
 	Ke 0.000000 0.000000 0.000000
 	map_Ka kamen.png
 	map_Kd kamen.png
-        map_bump kamen-bump.png
-        bump kamen-bump.png
-        map_norm kamen-normal.png
-        norm kamen-normal.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 newmtl kamen_zid_prozor
 	Ns 8.000000
@@ -118,8 +116,8 @@ newmtl kamen_zid_prozor
 	map_Kd kamen.png
         map_bump kamen-bump.png
         bump kamen-bump.png
-        map_norm kamen-normal.png
-        norm kamen-normal.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 newmtl zid_vani
 	Ns 8.000000
@@ -136,8 +134,6 @@ newmtl zid_vani
 	map_Kd kamen.png
         map_bump kamen-bump.png
         bump kamen-bump.png
-        map_norm kamen-normal.png
-        norm kamen-normal.png
 
 newmtl kamen_zid_parapet
 	Ns 8.000000
@@ -152,6 +148,8 @@ newmtl kamen_zid_parapet
 	Ke 0.000000 0.000000 0.000000
 	map_Ka KAMEN-stup.png
 	map_Kd KAMEN-stup.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 newmtl staklo_crveno
 	Ns 256.000000
@@ -178,6 +176,8 @@ newmtl rozeta
 	Ke 0.000000 0.000000 0.000000
 	map_Ka KAMEN-stup.png
 	map_Kd KAMEN-stup.png
+    map_norm kamen-normal.png
+    norm kamen-normal.png
 
 # Green window
 newmtl staklo_zeleno

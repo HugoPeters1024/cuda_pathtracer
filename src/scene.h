@@ -296,8 +296,18 @@ public:
                     float2 deltaUV2 = uv2 - uv0;
 
                     float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+                    assert(fabs(f) > 0.001);
                     tangent = f * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
                     bitangent = f * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
+
+                    // Some data is fucked, we just fake some data to at least not get any nans
+                    if (hasNan(tangent) || hasNan(bitangent)) {
+                        const float3 &w = normal;
+                        float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+                        float3 v = normalize(cross(w, u));
+                        tangent = u;
+                        bitangent = v;
+                    }
                 }
 
                 MATERIAL_ID mat = useMtl ? material_ids[mit] : material;
@@ -310,7 +320,7 @@ public:
         printf("Building a BVH over %u triangles\n", model.nrTriangles);
         float ping = glfwGetTime();
 
-        model.bvh = createBVHBinned(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
+        model.bvh = createBVH(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
         printf("Build took %fms\n", (glfwGetTime() - ping)*1000);
         printf("BVH Size: %u\n", model.nrBvhNodes);
 

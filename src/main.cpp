@@ -143,7 +143,9 @@ int main(int argc, char** argv) {
     // Set the initial camera values;
     Camera camera = readState();
     double runningAverageFps = 0;
-    int tick = 0;
+    uint tick = 0;
+    uint samples = 0;
+
 
     // Show off
     printf("BVHNode is %lu bytes\n", sizeof(BVHNode));
@@ -163,6 +165,8 @@ int main(int argc, char** argv) {
     while (!glfwWindowShouldClose(window))
     {
         tick++;
+        if (shouldClear) samples = 0;
+        samples++;
         float start = glfwGetTime();
 
         if (PATHRACER)
@@ -187,10 +191,14 @@ int main(int argc, char** argv) {
             float sum = 0;
             for(int i=0; i<NR_PIXELS; i++)
             {
-                sum += (screenBuf[i].x + screenBuf[i].y + screenBuf[i].z) / screenBuf[i].w;
+                float sample = (screenBuf[i].x + screenBuf[i].y + screenBuf[i].z);
+                if (std::isnan(sample))
+                {
+                    printf("NAN detected!!!\n");
+                } else sum += sample;
             }
 
-            printf("Total energy: %f\n", sum);
+            printf("Total energy: %f\n", sum / (float)samples);
         }
 #endif
 

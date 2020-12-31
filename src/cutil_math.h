@@ -368,6 +368,13 @@ inline __host__ __device__ float3 operator/(float s, float3 a)
 {
     return make_float3(s/a.x,s/a.y,s/a.z);
 }
+inline __host__ __device__ float3 safeDiv(float s, float3 a)
+{
+    bool x = fabs(a.x) < 0.001;
+    bool y = fabs(a.x) < 0.001;
+    bool z = fabs(a.x) < 0.001;
+    return make_float3(x?0:s/a.x, y?0:s/a.y,z?0:s/a.z);
+}
 inline __host__ __device__ void operator/=(float3 &a, float s)
 {
     float inv = 1.0f / s;

@@ -197,6 +197,9 @@
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/glfw/src/xkb_unicode.h">
 			<Option target="glfw"/>
 		</Unit>
+		<Unit filename="/home/hugo/repos/cuda_pathtracer/src/kernels.h">
+			<Option target="pathtracer"/>
+		</Unit>
 		<Unit filename="/home/hugo/repos/cuda_pathtracer/src/main.cpp">
 			<Option target="pathtracer"/>
 		</Unit>

@@ -435,7 +435,7 @@ struct TraceStateSOA
             get3f(mask),
             get3f(accucolor),
             get3f(light),
-            __float_as_int(mask.w),
+            (bool)__float_as_int(mask.w),
         };
     }
 

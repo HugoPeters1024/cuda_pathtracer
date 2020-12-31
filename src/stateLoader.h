@@ -51,7 +51,6 @@ static Camera readState()
     std::ifstream file;
     file.open("save.txt");
     std::string line;
-    char tmp;
     if (file.is_open())
     {
         getline(file, line);

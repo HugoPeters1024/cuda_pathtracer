@@ -8,7 +8,7 @@ set(CMAKE_CXX_FLAGS "-O3")
 file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cpp")
 file(GLOB gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
 enable_language(CUDA)
-add_executable(pathtracer src/main.cpp)
+add_executable(pathtracer src/main.cpp src/kernels.h)
 
 
 
