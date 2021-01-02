@@ -19,6 +19,17 @@ enum ACTION {
 
     SWITCH_MODE,
     SWITCH_NEE,
+
+    ATTACH_0,
+    ATTACH_1,
+    ATTACH_2,
+    ATTACH_3,
+    ATTACH_4,
+    ATTACH_5,
+    ATTACH_6,
+    ATTACH_7,
+    ATTACH_8,
+    ATTACH_9,
 };
 
 class Keyboard
@@ -101,7 +112,18 @@ void Keyboard::generateActionMap()
     action_map[LOOK_LEFT]     = GLFW_KEY_LEFT;
     action_map[LOOK_RIGHT]    = GLFW_KEY_RIGHT;
 
-    action_map[SWITCH_MODE]          = GLFW_KEY_SPACE;
-    action_map[SWITCH_NEE]           = GLFW_KEY_N;
+    action_map[SWITCH_MODE]   = GLFW_KEY_SPACE;
+    action_map[SWITCH_NEE]    = GLFW_KEY_N;
+
+    action_map[ATTACH_0] = GLFW_KEY_0;
+    action_map[ATTACH_1] = GLFW_KEY_1;
+    action_map[ATTACH_2] = GLFW_KEY_2;
+    action_map[ATTACH_3] = GLFW_KEY_3;
+    action_map[ATTACH_4] = GLFW_KEY_4;
+    action_map[ATTACH_5] = GLFW_KEY_5;
+    action_map[ATTACH_6] = GLFW_KEY_6;
+    action_map[ATTACH_7] = GLFW_KEY_7;
+    action_map[ATTACH_8] = GLFW_KEY_8;
+    action_map[ATTACH_9] = GLFW_KEY_9;
 }
 #endif

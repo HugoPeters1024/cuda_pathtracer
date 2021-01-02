@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "bvhBuilder.h"
+#include "keyboard.h"
 
 
 inline Instance ConvertToInstance(const GameObject& obj)
@@ -128,7 +129,9 @@ public:
     std::vector<Plane> planes;
     std::vector<PointLight> pointLights;
     std::vector<TopLevelBVH> topLevelBVH;
-    std::vector<std::function<void(std::vector<GameObject>&, float)>> handlers;
+    std::vector<std::function<void(Scene&, const Keyboard&, float)>> handlers;
+    bool invalid;
+    uint attached;
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -136,15 +139,21 @@ public:
         return materials.size() - 1;
     }
 
+    Scene()
+    {
+        invalid = false;
+        attached = 0;
+    }
+
     void addSphere(Sphere sphere) { spheres.push_back(sphere); }
     void addPlane(Plane plane) { planes.push_back(plane); }
     void addPointLight(PointLight light) { pointLights.push_back(light); }
     void addObject(GameObject object) { objects.push_back(object); }
-    void addHandler(std::function<void(std::vector<GameObject>&, float)> handler) { handlers.push_back(handler); }
+    void addHandler(std::function<void(Scene&, const Keyboard&, float)> handler) { handlers.push_back(handler); }
+    void invalidate() { invalid = true; }
 
     uint addModel(std::string filename, float scale, float3 rotation, float3 offset, MATERIAL_ID material, bool useMtl = false)
     {
-        
         printf("Loading model %s\n", filename.c_str());
         tinyobj::ObjReaderConfig objConfig;
         objConfig.vertex_color = false;
@@ -153,7 +162,7 @@ public:
         objReader.ParseFromFile(filename, objConfig);
         if (!objReader.Valid())
         {
-            printf("Tinyobj could not load the model...\n");
+            printf("Tinyobj could not load the model %s...\n", filename.c_str());
             exit(1);
         }
 
@@ -350,10 +359,34 @@ public:
         for(int i=0; i<objects.size(); i++) instances[i] = ConvertToInstance(objects[i]);
     }
 
-    void update(float currentTime)
+    void update(const Keyboard& keyboard, float currentTime)
     {
+        // handlers can invalidate, but initially we assume to be valid.
+        invalid = false;
+
+        for(int i=0; i<10; i++)
+            if (keyboard.isPressed((ACTION)(ATTACH_0 + i))) 
+                attached = i;
+
+        // update the attached object, offset by one as 0 is reserved for the camera
+        if (attached > 0 && attached <= objects.size())
+        {
+            GameObject& obj = objects[attached-1];
+            if (keyboard.isDown(MOVE_LEFT)) { obj.position.x -= 0.04f; invalidate(); }
+            if (keyboard.isDown(MOVE_RIGHT)) { obj.position.x += 0.04f; invalidate(); }
+            if (keyboard.isDown(MOVE_FORWARD)) { obj.position.z += 0.04f; invalidate(); }
+            if (keyboard.isDown(MOVE_BACKWARD)) { obj.position.z -= 0.04f; invalidate(); }
+            if (keyboard.isDown(MOVE_UP)) { obj.position.y += 0.04f; invalidate(); }
+            if (keyboard.isDown(MOVE_DOWN)) { obj.position.y -= 0.04f; invalidate(); }
+
+            if (keyboard.isDown(LOOK_LEFT)) { obj.rotation.y -= 0.04f; invalidate(); }
+            if (keyboard.isDown(LOOK_RIGHT)) { obj.rotation.y += 0.04f; invalidate(); }
+            if (keyboard.isDown(LOOK_UP)) { obj.rotation.x -= 0.04f; invalidate(); }
+            if (keyboard.isDown(LOOK_DOWN)) { obj.rotation.x += 0.04f; invalidate(); }
+        }
+
         // update gameobjects
-        for(auto& handler : handlers) handler(objects, currentTime);
+        for(auto& handler : handlers) handler(*this, keyboard, currentTime);
 
         // derive instances
         for(int i=0; i<objects.size(); i++) instances[i] = ConvertToInstance(objects[i]);

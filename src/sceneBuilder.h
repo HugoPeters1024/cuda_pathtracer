@@ -76,17 +76,18 @@ inline Scene getOutsideScene()
         scene.addObject(cube);
     }
 
-    scene.addHandler([](std::vector<GameObject>& gameObjects, float t){
+    scene.addHandler([](Scene& scene, const Keyboard& keyboard, float t){
             float f = 0;
-            for(int i=0; i<gameObjects.size(); i++)
+            for(int i=0; i<scene.objects.size(); i++)
             {
-                GameObject& obj = gameObjects[i];
+                GameObject& obj = scene.objects[i];
                 if (obj.kind !=1) continue;
                 obj.position.x = 10 * sin(f + t/10.0f) ;
                 obj.position.z = 10 * cos(f + t/10.0f) ;
                 obj.rotation.x = f;
                 f += 2 * 0.3141592;
             }
+            scene.invalidate();
     });
 
 
@@ -163,6 +164,7 @@ inline Scene getSibenikScene()
     uint cubeModel = scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
     GameObject cubeObj(cubeModel);
     cubeObj.position = make_float3(0);
+    cubeObj.kind = 5;
     scene.addObject(cubeObj);
 
    // scene.addPlane(Plane(make_float3(0,1,0),3, whiteId));

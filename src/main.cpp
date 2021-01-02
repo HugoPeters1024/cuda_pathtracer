@@ -7,6 +7,8 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "cxxopts.hpp"
 
@@ -68,7 +70,6 @@ void main() {
 bool PATHRACER = true;
 
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 
 int main(int argc, char** argv) {
     cxxopts::Options options("AVGR 2020-2021 by Hugo Peters", "Raytracer/Pathtracer demo program");
@@ -175,7 +176,7 @@ int main(int argc, char** argv) {
             raytracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear);
 
         // update while possibly asynchronous rendering is going on
-        scene.update(glfwGetTime());
+        scene.update(keyboard, glfwGetTime());
 
         if (PATHRACER)
             pathtracerApp.Finish();
@@ -219,8 +220,8 @@ int main(int argc, char** argv) {
         glBindTexture(GL_TEXTURE_2D, 0);
 
         // Handle IO and swap the backbuffer
-        camera.update(window);
-        shouldClear = camera.hasMoved();
+        if (scene.attached == 0) camera.update(window);
+        shouldClear = camera.hasMoved() || scene.invalid;
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { 
             scene.pointLights[0].color *= 0.97;
             shouldClear = true;
