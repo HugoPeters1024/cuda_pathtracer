@@ -29,8 +29,6 @@ __device__ __constant__ DSizedBuffer<Sphere> DSpheres;
 
 __device__ __constant__ DSizedBuffer<Plane> DPlanes;
 
-__device__ __constant__ DSizedBuffer<SphereLight> DSphereLights;
-
 __device__ __constant__ DSizedBuffer<TriangleLight> DTriangleLights;
 
 static bool HNEE;
@@ -53,7 +51,6 @@ static HSizedBuffer<Plane> HPlanes;
 #define _GPlanes DPlanes
 #define _GMaterials DMaterials
 #define _GTopBVH DTopBVH
-#define _GSphereLights DSphereLights
 #else
 #define _NEE HNEE
 #define _GVertices HVertices
@@ -65,7 +62,6 @@ static HSizedBuffer<Plane> HPlanes;
 #define _GMaterials HMaterials
 #define _GBVH HBVH
 #define _GTopBVH HTopBVH
-#define _GSphereLights HSphereLights
 #endif
 
 #define NEE

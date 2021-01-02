@@ -127,7 +127,6 @@ public:
     std::vector<Sphere> spheres;
     std::vector<Plane> planes;
     std::vector<PointLight> pointLights;
-    std::vector<SphereLight> sphereLights;
     std::vector<TopLevelBVH> topLevelBVH;
     std::vector<std::function<void(std::vector<GameObject>&, float)>> handlers;
 
@@ -140,7 +139,6 @@ public:
     void addSphere(Sphere sphere) { spheres.push_back(sphere); }
     void addPlane(Plane plane) { planes.push_back(plane); }
     void addPointLight(PointLight light) { pointLights.push_back(light); }
-    void addSphereLight(SphereLight light) { sphereLights.push_back(light); }
     void addObject(GameObject object) { objects.push_back(object); }
     void addHandler(std::function<void(std::vector<GameObject>&, float)> handler) { handlers.push_back(handler); }
 

@@ -222,20 +222,14 @@ int main(int argc, char** argv) {
         camera.update(window);
         shouldClear = camera.hasMoved();
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) { 
-            scene.sphereLights[0].color *= 0.97; 
             scene.pointLights[0].color *= 0.97;
             shouldClear = true;
         }
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) { 
-            scene.sphereLights[0].color *= 1.03;
             scene.pointLights[0].color *= 1.03;
             shouldClear = true;
         }
-        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) { scene.sphereLights[0].radius *= 1.03; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) { scene.sphereLights[0].radius *= 0.97; shouldClear = true;}
 
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) { scene.sphereLights[0].pos.y += 0.02; shouldClear = true;}
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) { scene.sphereLights[0].pos.y -= 0.02; shouldClear = true;}
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
         glfwPollEvents();

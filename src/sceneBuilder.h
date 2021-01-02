@@ -101,9 +101,6 @@ inline Scene getOutsideScene()
     scene.addPointLight(PointLight(make_float3(-8,5,-5), make_float3(50, 0, 0)));
     scene.addPointLight(PointLight(make_float3(-8,5,5), make_float3(0, 50, 0)));
 
-//    scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(50)));
- //   scene.addSphereLight(SphereLight(make_float3(-5,5,-5), 1, make_float3(50, 0, 0)));
-  //  scene.addSphereLight(SphereLight(make_float3(-5,5,5), 1, make_float3(0, 50, 0)));
         
     scene.finalize();
     return scene;
@@ -179,7 +176,6 @@ inline Scene getSibenikScene()
 
     // Add the lights
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    //scene.addSphereLight(SphereLight(make_float3(-8,5,0), 1, make_float3(60)));
 
     scene.finalize();
     return scene;
@@ -201,7 +197,6 @@ inline const Scene getMinecraftScene()
 
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
 
     scene.finalize();
     return scene;
@@ -224,7 +219,6 @@ inline const Scene get2MillionScene()
 
 
     scene.addPointLight(PointLight(make_float3(-8,5,1), make_float3(150)));
-    scene.addSphereLight(SphereLight(make_float3(0), 1, make_float3(150)));
 
     scene.finalize();
     return scene;

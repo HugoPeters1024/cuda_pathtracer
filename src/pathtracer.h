@@ -16,7 +16,6 @@ private:
     AtomicQueue<RayPacked> rayQueueNew;
     DSizedBuffer<Sphere> dSphereBuffer;
     DSizedBuffer<Plane> dPlaneBuffer;
-    DSizedBuffer<SphereLight> dSphereLightBuffer;
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
@@ -42,7 +41,6 @@ void Pathtracer::Init()
 
     dSphereBuffer = DSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size(), &DSpheres);
     dPlaneBuffer = DSizedBuffer<Plane>(scene.planes.data(), scene.planes.size(), &DPlanes);
-    dSphereLightBuffer = DSizedBuffer<SphereLight>(scene.sphereLights.data(), scene.sphereLights.size(), &DSphereLights);
 
     // Host buffer of device buffers... ;)
     Model hd_models[scene.models.size()];
@@ -149,7 +147,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     // Calculate the thread size and warp size
     // These are used by simply kernels only, so we max
     // out the block size.
-    int tx = 16;
+    int tx = 32;
     int ty = 16;
     dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);
     dim3 dimThreads(tx,ty);
@@ -158,13 +156,10 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     // clear the ray queue and update on gpu
     if (shouldClear)
     {
-        kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
-
-        // Update the sphere area lights
-        dSphereLightBuffer.update(scene.sphereLights.data());
-
         // sync NEE toggle
-        cudaSafe( cudaMemcpyToSymbol(DNEE, &HNEE, sizeof(HNEE)) );
+        cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
+
+        kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
     }
 
 
@@ -192,7 +187,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 128 + 1, 128>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
+        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
 
         // Sample the light source for every shadow ray
         if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
