@@ -167,6 +167,11 @@ inline Scene getSibenikScene()
     cubeObj.kind = 5;
     scene.addObject(cubeObj);
 
+    uint sphereModel = scene.addModel("sphere.obj", 50, make_float3(0), make_float3(0), cubeMatId);
+    GameObject sphereObj(sphereModel);
+    sphereObj.scale = make_float3(1);
+    //scene.addObject(sphereObj);
+
    // scene.addPlane(Plane(make_float3(0,1,0),3, whiteId));
 
 

@@ -64,12 +64,10 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
     ret[0].vmin = make_float4(rootBoxNormal.vmin, 0);
     ret[0].vmax = make_float4(rootBoxNormal.vmax, 0);
 
-    //std::stack<std::tuple<uint, uint, uint>> work;
     uint node_count = 0;
     WorkItem stack[256];
     uint stack_size = 0;
     stack[stack_size++] = WorkItem { node_count++, 0, nrTriangles };
-    //work.push(std::make_tuple(node_count++, 0, nrTriangles));
 
     float leftCosts[K];
     float rightCosts[K];
@@ -98,14 +96,10 @@ inline BVHNode* createBVHBinned(TriangleV* trianglesV, TriangleD* trianglesD, ui
 
         float invParentSurface = 1.0f / parent.getSurfaceArea();
 
-        // use centroids to find the dominant axis.
-        //SSEBox parent = SSEBox::insideOut();
         SSEBox parentCentroid = SSEBox::insideOut();
         for(int i=start; i<start+count; i++)
         {
             const __m128& centroid = centroids[indices[i]];
-            //const SSEBox& box = boundingBoxes[indices[i]];
-           // parent.consumeBox(box);
             parentCentroid.consumePoint(centroid);
         }
 

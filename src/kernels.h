@@ -141,7 +141,7 @@ HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, floa
 HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, const HitInfo& hitInfo)
 {
     // Constrain that the closest point of the box must be closer than a known intersection.
-    // Otherwise not triangle inside this box or it's children will ever change the intersection point
+    // Otherwise no triangle inside this box or it's children will ever change the intersection point
     // and can thus be discarded
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
@@ -388,8 +388,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        glm::vec4 wn = instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0);
-        surfaceNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+        surfaceNormal = normalize(make_float3(instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0)));
     }
 
     bool inside = dot(ray.direction, surfaceNormal) > 0;
@@ -437,18 +436,16 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = normalize(get3f((texColor)*2)-make_float3(1));
-            float3 texNormal = normalize(make_float3(
+            float3 texNormalT = get3f((texColor)*2)-make_float3(1);
+            float3 texNormal = make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
                     dot(texNormalT, make_float3(triangleData.tangent.z, triangleData.bitangent.z, triangleData.normal.z))
-            ));
+            );
 
             // Transform the normal from model space to world space
-            glm::vec4 wn = instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f);
-            texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
-            if (dot(texNormal, colliderNormal) < 0.0f) texNormal = -texNormal;
-            colliderNormal = texNormal;
+            texNormal = normalize(make_float3(instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f)));
+            colliderNormal = dot(texNormal, colliderNormal) < 0.0f ? -texNormal : texNormal;
         }
     }
 
@@ -522,7 +519,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             shadowDir *= invShadowLength;
 
             float3 lightNormal = cr / crLength;
-            lightNormal = dot(lightNormal, shadowDir) < 0 ? -lightNormal : lightNormal;
 
             float NL = dot(colliderNormal, -shadowDir);
             float LNL = dot(lightNormal, shadowDir);
@@ -547,14 +543,15 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             }
         }
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
-        // due to normal mapping a sample might go into the surface
+        // due to normal mapping a sample might go into the surface which leads to z fighting like
+        // effects
         cullSecondary = dot(surfaceNormal, secondary.direction) <= 0;
 
         // Writing this explicitly leads to NaNs
         //float NL = dot(colliderNormal, secondary.direction);
         //float PDF = NL / PI;
 
-        state.mask = state.mask * (PI * BRDF);
+        state.mask *= PI * BRDF;
     }
 
     if (!cullSecondary) {

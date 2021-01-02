@@ -20,7 +20,7 @@ set_target_properties(
 target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        --use_fast_math -O3 -arch=compute_50 -code=sm_50
                        -Xptxas=-O3
-                       -Xcompiler=-fopenmp,-g,-O0
+                       -Xcompiler=-fopenmp,-g,-O3
                        >)
 
 # We want to use c++ inline with cuda, so set nvcc as primary compiler

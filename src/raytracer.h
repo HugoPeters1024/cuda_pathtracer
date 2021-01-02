@@ -73,11 +73,6 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     HitInfo hitInfo = traverseTopLevel(ray, false);
     if (!hitInfo.intersected()) return make_float3(0.2, 0.3, 0.6);
 
-    if (hitInfo.primitive_type == LIGHT)
-    {
-        return make_float3(1);
-    }
-
     Instance* instance;
 
     if (hitInfo.primitive_type == TRIANGLE)
