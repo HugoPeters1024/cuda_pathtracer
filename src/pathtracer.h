@@ -28,13 +28,23 @@ public:
     Pathtracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
 
     virtual void Init() override;
-    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear, uint sample) override;
     virtual void Finish() override;
 };
 
 void Pathtracer::Init()
 {
     dSkydomeTex = loadTextureHDR("skydome.hdr");
+    cudaTextureObject_t blueNoise[8];
+    blueNoise[0] = loadTextureGreyscale("blue_noise/HDR_L_0.png");
+    blueNoise[1] = loadTextureGreyscale("blue_noise/HDR_L_1.png");
+    blueNoise[2] = loadTextureGreyscale("blue_noise/HDR_L_2.png");
+    blueNoise[3] = loadTextureGreyscale("blue_noise/HDR_L_3.png");
+    blueNoise[4] = loadTextureGreyscale("blue_noise/HDR_L_4.png");
+    blueNoise[5] = loadTextureGreyscale("blue_noise/HDR_L_5.png");
+    blueNoise[6] = loadTextureGreyscale("blue_noise/HDR_L_6.png");
+    blueNoise[7] = loadTextureGreyscale("blue_noise/HDR_L_7.png");
+    cudaSafe( cudaMemcpyToSymbol(DblueNoise, blueNoise, 8 * sizeof(cudaTextureObject_t)) );
 
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
@@ -127,7 +137,7 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpy(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 }
 
-void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
+void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear, uint sample)
 {
 
     // Map the screen texture resource.
@@ -187,7 +197,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
+        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, sample);
 
         // Sample the light source for every shadow ray
         if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);

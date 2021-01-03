@@ -365,16 +365,23 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome, uint sample)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
     Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
-    uint x = ray.pixeli % WINDOW_WIDTH;
-    uint y = ray.pixeli / WINDOW_WIDTH;
+    const uint x = ray.pixeli % WINDOW_WIDTH;
+    const uint y = ray.pixeli / WINDOW_WIDTH;
+    //const float fx = x / (float)WINDOW_WIDTH;
+    //const float fy = y / (float)WINDOW_HEIGHT;
+    //const float seedf = tex2D<float>(DblueNoise[sample%8], fx, fy);
     uint seed = getSeed(x,y,time);
+
+
+
+    //uint seed = getSeed(x,y,time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces

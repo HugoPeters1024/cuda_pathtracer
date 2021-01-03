@@ -171,9 +171,9 @@ int main(int argc, char** argv) {
         float start = glfwGetTime();
 
         if (PATHRACER)
-            pathtracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear);
+            pathtracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear, samples);
         else
-            raytracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear);
+            raytracerApp.Render(camera, glfwGetTime(), frameTime, shouldClear, samples);
 
         // update while possibly asynchronous rendering is going on
         scene.update(keyboard, glfwGetTime());

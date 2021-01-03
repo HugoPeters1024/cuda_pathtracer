@@ -24,7 +24,7 @@ private:
 public:
     Raytracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
     virtual void Init() override;
-    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
+    virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear, uint sample) override;
     virtual void Finish() override {}
 };
 
@@ -44,7 +44,7 @@ void Raytracer::Init()
     omp_set_num_threads(8);
 }
 
-void Raytracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
+void Raytracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear, uint sample)
 {
 
     max_depth = shouldClear ? 2 : 7;

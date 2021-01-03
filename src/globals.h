@@ -7,6 +7,8 @@
 // global NEE switch
 __device__ __constant__ bool DNEE;
 
+__device__ __constant__ cudaTextureObject_t DblueNoise[8];
+
 __device__ __constant__ TriangleV* DVertices;
 
 __device__ __constant__ TriangleD* DVertexData;
