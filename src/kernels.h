@@ -24,7 +24,7 @@ HYBRID inline float2 normalToUv(const float3& normal)
     return make_float2(u,v);
 }
 
-HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
+HYBRID Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
 {
     glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
     glm::vec4 oldOrigin = glm::vec4(ray.origin.x, ray.origin.y, ray.origin.z, 1);
@@ -149,7 +149,7 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
-HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Instance& instance, uint instanceIdx)
+HYBRID bool traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Instance& instance)
 {
     float t, u, v;
 
@@ -160,7 +160,7 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
     // declare variables used in the loop
     float tnear, tfar;
     bool bnear, bfar;
-    uint near_id, far_id;
+    uint near_id;
     uint start, end;
     BVHNode near, far;
 
@@ -168,7 +168,10 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
 
     const Model& model = _GModels[instance.model_id];
     BVHNode current = model.bvh[0];
-    if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return;
+    if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
+
+    bool needPop = false;
+    bool intersected = false;
 
     while(true)
     {
@@ -181,36 +184,40 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
                 if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
                 {
                     hitInfo.primitive_id = i;
-                    hitInfo.primitive_type = TRIANGLE;
                     hitInfo.t = t;
-                    hitInfo.instance_id = instanceIdx;
-                    if (anyIntersection) return;
+                    if (anyIntersection) return true;
+                    intersected = true;
                 }
             }
-            if (stackPtr == stack) return;
-            current = model.bvh[*--stackPtr];
+            needPop = true;
         }
         else
         {
             near_id = current.child1();
-            far_id = current.child1() + 1;
             near = model.bvh[near_id];
-            far = model.bvh[far_id];
+            far = model.bvh[near_id+1];
             bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
             bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
-            if (bnear && bfar) {
+            if (bnear & bfar) {
                 bool rev = tnear > tfar;
                 current = rev ? far : near;
-                *stackPtr++ = rev ? near_id : far_id;
-            } else if (bnear || bfar) {
+                *stackPtr++ = near_id + !rev;
+            } else if (bnear | bfar) {
                 current = bnear ? near : far;
-            } else if (stackPtr == stack) {
-                return;
             } else {
-                current = model.bvh[*--stackPtr];
+                needPop = true;
             }
             //assert (size < STACK_SIZE);
+        }
+
+        if (needPop) 
+        {
+            if (stack != stackPtr)
+                current = model.bvh[*--stackPtr];
+            else
+                return intersected;
+            needPop = false;
         }
     }
 }
@@ -254,6 +261,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     TopLevelBVH current;
     stack[size++] = 0;
 
+
     while(size > 0)
     {
         current = _GTopBVH[stack[--size]];
@@ -263,8 +271,12 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
         {
             Instance instance = _GInstances[current.leaf];
             Ray transformedRay = transformRay(ray, instance.invTransform);
-            traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance, current.leaf);
-            if (anyIntersection && hitInfo.intersected()) return hitInfo;
+            if (traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance))
+            {
+                hitInfo.primitive_type = TRIANGLE;
+                hitInfo.instance_id = current.leaf;
+                if (anyIntersection) return hitInfo;
+            }
         }
         else
         {

@@ -30,7 +30,7 @@ inline Scene getOutsideScene()
     Material lucyMat = Material::DIFFUSE(make_float3(0.5, 0.2, 0.3));
     lucyMat.transmit = 0.0f;
     lucyMat.refractive_index = 1.2;
-    lucyMat.reflect = 0.0;
+    lucyMat.reflect = 0.8;
     lucyMat.glossy = 0.15;
     lucyMat.absorption = make_float3(0.01, 0.4, 0.4);
     auto lucyMatId = scene.addMaterial(lucyMat);
