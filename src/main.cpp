@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     if (!window) return 3;
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);
 
     // Compile the quad shader to display a texture
     GLuint quad_shader = GenerateProgram(CompileShader(GL_VERTEX_SHADER, quad_vs), CompileShader(GL_FRAGMENT_SHADER, quad_fs));

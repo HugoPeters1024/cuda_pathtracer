@@ -172,6 +172,10 @@ inline Scene getSibenikScene()
     sphereObj.scale = make_float3(1);
     //scene.addObject(sphereObj);
 
+    uint lucyModel = scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
+    GameObject lucyObj(lucyModel);
+    scene.addObject(lucyObj);
+
    // scene.addPlane(Plane(make_float3(0,1,0),3, whiteId));
 
 

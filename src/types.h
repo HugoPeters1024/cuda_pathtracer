@@ -300,7 +300,7 @@ struct __align__(16) HitInfoPacked
 {
     float4 data;
 
-    __device__ HitInfo getHitInfo() const
+    HYBRID HitInfo getHitInfo() const
     {
         HitInfo ret = HitInfo
         {
@@ -312,7 +312,7 @@ struct __align__(16) HitInfoPacked
         return ret;
     }
 
-    __device__ HitInfoPacked(const HitInfo& hitInfo)
+    HYBRID HitInfoPacked(const HitInfo& hitInfo)
     {
         data = make_float4(
                 reinterpret_cast<const float&>(hitInfo.primitive_type),
@@ -353,7 +353,7 @@ struct __align__(16) BVHNode
     }
 };
 
-struct Model
+struct __align__(16) Model
 {
     BVHNode* bvh;
     uint triangleStart;
@@ -361,7 +361,7 @@ struct Model
     uint nrBvhNodes;
 };
 
-struct Instance
+struct __align__(16) Instance
 {
     uint model_id;
     glm::mat4 transform;

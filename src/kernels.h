@@ -116,22 +116,25 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
 #endif
 }
 
-HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
+HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
     float det = dot(v0v1, pvec);
+    if (fabs(det) < 0.0001f) return false;
     float invDet = 1.0f / det;
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
+    if (u < 0 | u > 1) return false;
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
+    if (v < 0 | u + v > 1) return false;
 
     t = dot(v0v2, qvec) * invDet;
-    return fabs(det) > 0.0001f && (u >= 0 && u <= 1) && (v >= 0 && u + v <= 1) && t > 0;
+    return t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -152,24 +155,23 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
 
     const uint STACK_SIZE = 18;
     uint stack[STACK_SIZE];
-    uint size = 0;
+    uint* stackPtr = stack;
 
     // declare variables used in the loop
     float tnear, tfar;
     bool bnear, bfar;
     uint near_id, far_id;
     uint start, end;
+    BVHNode near, far;
 
     const float3 invRayDir = 1.0f / ray.direction;
 
     const Model& model = _GModels[instance.model_id];
     BVHNode current = model.bvh[0];
-    if (boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
+    if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return;
 
-    while(size > 0)
+    while(true)
     {
-        current = model.bvh[stack[--size]];
-
         if (current.isLeaf())
         {
             start = current.t_start();
@@ -185,22 +187,29 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
                     if (anyIntersection) return;
                 }
             }
+            if (stackPtr == stack) return;
+            current = model.bvh[*--stackPtr];
         }
         else
         {
             near_id = current.child1();
             far_id = current.child1() + 1;
-            bnear = boxtest(model.bvh[near_id].getBox(), ray.origin, invRayDir, tnear, hitInfo);
-            bfar = boxtest(model.bvh[far_id].getBox(), ray.origin, invRayDir, tfar, hitInfo);
+            near = model.bvh[near_id];
+            far = model.bvh[far_id];
+            bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
+            bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
-            // push on the stack, first the far child
-            if (bfar) stack[size++] = far_id;
-            if (bnear)  stack[size++] = near_id;
-
-            if (bnear && bfar && tnear > tfar) {
-                swapc(stack[size-1], stack[size-2]);
+            if (bnear && bfar) {
+                bool rev = tnear > tfar;
+                current = rev ? far : near;
+                *stackPtr++ = rev ? near_id : far_id;
+            } else if (bnear || bfar) {
+                current = bnear ? near : far;
+            } else if (stackPtr == stack) {
+                return;
+            } else {
+                current = model.bvh[*--stackPtr];
             }
-
             //assert (size < STACK_SIZE);
         }
     }
@@ -369,11 +378,13 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
+        /*
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        */
 
-        state.accucolor += state.mask * sk;
+        state.accucolor += state.mask * make_float3(2,3,5);
         stateBuf.setState(ray.pixeli, state);
         return;
     }
