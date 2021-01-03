@@ -39,7 +39,7 @@ void main()
     gl_Position = vec4(pos, 0, 1);
     // slightly zoom in to hide artificats
     // from chrommatic abberation at the edges
-    uv = (pos * 0.97 + vec2(1)) * 0.5;
+    uv = (pos * 0.985 + vec2(1)) * 0.5;
 }
 )";
 
@@ -54,9 +54,9 @@ layout (location = 0) uniform float time;
 
 void main() { 
     vec2 fromCenter = uv - vec2(0.5);
-    vec4 sampleR = texture(tex, uv + 0.011 * fromCenter);
-    vec4 sampleG = texture(tex, uv + 0.007 * fromCenter);
-    vec4 sampleB = texture(tex, uv + 0.003 * fromCenter);
+    vec4 sampleR = texture(tex, uv + 0.007 * fromCenter);
+    vec4 sampleG = texture(tex, uv + 0.003 * fromCenter);
+    vec4 sampleB = texture(tex, uv + 0.000 * fromCenter);
     float gamma = 2.0f;
     color.x = pow(sampleR.x / sampleR.w, 1.0f/gamma);
     color.y = pow(sampleG.y / sampleG.w, 1.0f/gamma);

@@ -7,6 +7,8 @@
 inline Scene getOutsideScene()
 {
     auto scene = Scene();
+    scene.move_depth = 32;
+    scene.spp = 4;
 
     // Add all the materials
     Material white = Material::DIFFUSE(make_float3(0.4));

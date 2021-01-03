@@ -172,42 +172,39 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
     }
 
+    for(int s=0; s<scene.spp; s++)
+    {
 
-    kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
-
-    // Generate primary rays in the ray queue
-    //rayQueue.clear();
-    //rayQueue.syncToDevice(DRayQueue);
-    //cudaSafe ( cudaDeviceSynchronize() );
-    
-    kernel_clear_rays<<<1,1>>>();
-    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, currentTime);
+        kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
+        kernel_clear_rays<<<1,1>>>();
+        kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, currentTime);
 
 
-    uint max_bounces;
-    if (_NEE)
-        max_bounces = shouldClear ? 1 : 32;
-    else
-        max_bounces = shouldClear ? 2 : 32;
+        uint max_bounces;
+        if (_NEE)
+            max_bounces = shouldClear ? scene.move_depth : 32;
+        else
+            max_bounces = shouldClear ? scene.move_depth+1 : 32;
 
-    for(int bounce = 0; bounce < max_bounces; bounce++) {
+        for(int bounce = 0; bounce < max_bounces; bounce++) {
 
-        // Test for intersections with each of the rays,
-        uint kz = bounce == 0 ? 128 : 64;
-        kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
+            // Test for intersections with each of the rays,
+            uint kz = bounce == 0 ? 128 : 64;
+            kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
-        // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, sample);
+            // Foreach intersection, possibly create shadow rays and secondary rays.
+            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, sample);
 
-        // Sample the light source for every shadow ray
-        if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
+            // Sample the light source for every shadow ray
+            if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
 
-        // swap the ray buffers and clear.
-        kernel_swap_and_clear<<<1,1>>>();
+            // swap the ray buffers and clear.
+            kernel_swap_and_clear<<<1,1>>>();
+        }
+
+        // Write the final state accumulator into the texture
+        kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
     }
-
-    // Write the final state accumulator into the texture
-    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
 }
 
 

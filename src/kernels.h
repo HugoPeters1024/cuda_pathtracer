@@ -149,7 +149,8 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
-HYBRID bool traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Instance& instance)
+template <bool anyIntersection>
+HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& instance)
 {
     float t, u, v;
 
@@ -203,8 +204,10 @@ HYBRID bool traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
                 bool rev = tnear > tfar;
                 current = rev ? far : near;
                 *stackPtr++ = near_id + !rev;
-            } else if (bnear | bfar) {
-                current = bnear ? near : far;
+            } else if (bnear) {
+                current = near;
+            } else if (bfar) {
+                current = far;
             } else {
                 needPop = true;
             }
@@ -222,7 +225,8 @@ HYBRID bool traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
     }
 }
 
-HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
+template <bool anyIntersection>
+HYBRID HitInfo traverseTopLevel(const Ray& ray)
 {
     HitInfo hitInfo;
     hitInfo.primitive_id = 0xffffffff;
@@ -271,7 +275,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
         {
             Instance instance = _GInstances[current.leaf];
             Ray transformedRay = transformRay(ray, instance.invTransform);
-            if (traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance))
+            if (traverseBVHStack<anyIntersection>(transformedRay, hitInfo, instance))
             {
                 hitInfo.primitive_type = TRIANGLE;
                 hitInfo.instance_id = current.leaf;
@@ -290,16 +294,16 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
 
 __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 {
-    float r0 = rand(seed), r1 = rand(seed);
-    float r = sqrtf(r0);
-    float theta = 2 * 3.1415926535 * r1;
-    float x = r * cosf(theta);
-    float y = r * sinf(theta);
-    float3 sample =  make_float3( x, y, sqrt(1 - r0));
+    const float r0 = rand(seed), r1 = rand(seed);
+    const float r = sqrtf(r0);
+    const float theta = 2 * 3.1415926535 * r1;
+    const float x = r * cosf(theta);
+    const float y = r * sinf(theta);
+    const float3 sample =  make_float3( x, y, sqrt(1 - r0));
 
     const float3& w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = normalize(cross(w,u));
+    const float3 u = cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w);
+    const float3 v = cross(w,u);
 
     return normalize(make_float3(
             dot(sample, make_float3(u.x, v.x, w.x)),
@@ -309,7 +313,7 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
-    float3 newDir = reflect(ray.direction, -normal);
+    const float3 newDir = reflect(ray.direction, -normal);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
@@ -319,10 +323,10 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     float n1 = 1.0;
     float n2 = material.refractive_index;
     if (inside) swapc(n1, n2);
-    float eta = n1 / n2;
+    const float eta = n1 / n2;
 
-    float costi = dot(normal, -ray.direction);
-    float k = 1 - (eta* eta) * (1 - costi * costi);
+    const float costi = dot(normal, -ray.direction);
+    const float k = 1 - (eta* eta) * (1 - costi * costi);
     // Total internal reflection
     if (k < 0) {
         reflected = 1;
@@ -332,10 +336,10 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
 
     // fresnell equation for reflection contribution
-    float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
-    float costt = sqrt(1 - eta * eta * sinti * sinti);
-    float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
-    float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
+    const float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
+    const float costt = sqrt(1 - eta * eta * sinti * sinti);
+    const float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
+    const float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
     reflected = 0.5 * (spol * spol + ppol * ppol);
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
@@ -343,8 +347,8 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
 
 __device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint& seed)
 {
-    float3 newDir = SampleHemisphere(normal, seed);
-    float f = dot(normal, newDir);
+    const float3 newDir = SampleHemisphere(normal, seed);
+    const float f = dot(normal, newDir);
     return Ray(intersectionPos + EPS * f * newDir + EPS * (1-f) * normal, newDir, ray.pixeli);
 }
 
@@ -372,7 +376,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel(ray, false);
+    HitInfo hitInfo = traverseTopLevel<false>(ray);
     intersections[i] = HitInfoPacked(hitInfo);
 }
 
@@ -381,7 +385,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
-    Ray ray = DRayQueue[i].getRay();
+    const Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
     const uint x = ray.pixeli % WINDOW_WIDTH;
@@ -390,10 +394,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     //const float fy = y / (float)WINDOW_HEIGHT;
     //const float seedf = tex2D<float>(DblueNoise[sample%8], fx, fy);
     uint seed = getSeed(x,y,time);
-
-
-
-    //uint seed = getSeed(x,y,time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
@@ -421,7 +421,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         surfaceNormal = normalize(make_float3(instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0)));
     }
 
-    bool inside = dot(ray.direction, surfaceNormal) > 0;
+    const bool inside = dot(ray.direction, surfaceNormal) > 0;
     float3 colliderNormal = inside ? -surfaceNormal : surfaceNormal;
     surfaceNormal = colliderNormal;
 
@@ -603,7 +603,7 @@ __global__ void kernel_connect(TraceStateSOA stateBuf)
     if (i >= DShadowRayQueue.size) return;
 
     const Ray& shadowRay = DShadowRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel(shadowRay, true);
+    HitInfo hitInfo = traverseTopLevel<true>(shadowRay);
     if (hitInfo.intersected()) return;
 
     float3 light = get3f(stateBuf.lights[shadowRay.pixeli]);

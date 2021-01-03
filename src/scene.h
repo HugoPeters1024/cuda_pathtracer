@@ -132,6 +132,8 @@ public:
     std::vector<std::function<void(Scene&, const Keyboard&, float)>> handlers;
     bool invalid;
     uint attached;
+    uint spp;
+    uint move_depth;
 
     MATERIAL_ID addMaterial(Material material)
     {
@@ -143,6 +145,8 @@ public:
     {
         invalid = false;
         attached = 0;
+        spp = 1;
+        move_depth = 1;
     }
 
     void addSphere(Sphere sphere) { spheres.push_back(sphere); }
@@ -333,7 +337,7 @@ public:
         printf("Building a BVH over %u triangles\n", model.nrTriangles);
         float ping = glfwGetTime();
 
-        model.bvh = createBVHBinned(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
+        model.bvh = createBVH(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
         printf("Build took %fms\n", (glfwGetTime() - ping)*1000);
         printf("BVH Size: %u\n", model.nrBvhNodes);
 
