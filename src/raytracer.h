@@ -91,7 +91,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    Material material = getColliderMaterial(hitInfo);
+    Material material = _GMaterials[getColliderMaterialID(hitInfo)];
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);

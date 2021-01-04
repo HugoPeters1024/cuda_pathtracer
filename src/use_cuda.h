@@ -56,6 +56,13 @@ HYBRID inline float3 get3f(const glm::vec4& src)
     return make_float3(src.x, src.y, src.z);
 }
 
+HYBRID inline float2 normalToUv(const float3& normal)
+{
+    float u = atan2(normal.x, normal.z) / (2.0f*PI) + 0.5f;
+    float v = normal.y * 0.5f + 0.5f;
+    return make_float2(u,v);
+}
+
 HYBRID inline uint wang_hash(uint seed)
 {
     seed = (seed ^ 61) ^ (seed >> 16);
@@ -216,7 +223,7 @@ inline cudaTextureObject_t loadTextureGreyscale(const char* filename)
   return ret;
 }
 
-inline cudaTextureObject_t loadTextureHDR(const char* filename)
+inline cudaTextureObject_t loadTextureHDR(const char* filename, float4*& h_buffer)
 {
   int width, height, nrChannels;
 
@@ -276,7 +283,7 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
   cudaSafe(cudaCreateTextureObject(&ret, &resDesc, &texDesc, nullptr));
 
   stbi_image_free(data3);
-  free(fdata);
+  h_buffer = (float4*)fdata;
   return ret;
 }
 

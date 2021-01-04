@@ -34,7 +34,9 @@ public:
 
 void Pathtracer::Init()
 {
-    dSkydomeTex = loadTextureHDR("skydome.hdr");
+    float4* _h_buffer;
+    dSkydomeTex = loadTextureHDR("cave.hdr", _h_buffer);
+    free(_h_buffer);
     cudaTextureObject_t blueNoise[8];
     blueNoise[0] = loadTextureGreyscale("blue_noise/HDR_L_0.png");
     blueNoise[1] = loadTextureGreyscale("blue_noise/HDR_L_1.png");

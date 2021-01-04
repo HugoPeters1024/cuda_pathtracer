@@ -17,13 +17,6 @@ __device__ inline void swapc(T& left, T& right)
 #define swapc std::swap
 #endif
 
-HYBRID inline float2 normalToUv(const float3& normal)
-{
-    float u = atan2(normal.x, normal.z) / (2.0f*PI) + 0.5f;
-    float v = normal.y * 0.5f + 0.5f;
-    return make_float2(u,v);
-}
-
 HYBRID Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
 {
     glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
@@ -38,13 +31,13 @@ HYBRID Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     return transformedRay;
 }
 
-HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo)
+HYBRID inline uint getColliderMaterialID(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return _GMaterials[_GVertexData[hitInfo.primitive_id].material];
-        case SPHERE:   return _GMaterials[_GSpheres[hitInfo.primitive_id].material];
-        case PLANE:    return _GMaterials[_GPlanes[hitInfo.primitive_id].material];
+        case TRIANGLE: return _GVertexData[hitInfo.primitive_id].material;
+        case SPHERE:   return _GSpheres[hitInfo.primitive_id].material;
+        case PLANE:    return _GPlanes[hitInfo.primitive_id].material;
     }
     assert(false);
 }
@@ -397,13 +390,10 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
-        /*
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-        */
-
-        state.accucolor += state.mask * make_float3(2,3,5);
+        state.accucolor += state.mask * sk;
         stateBuf.setState(ray.pixeli, state);
         return;
     }
@@ -412,7 +402,20 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // responsibility of the code dereferencing the pointer.
     Instance* instance = _GInstances + hitInfo.instance_id;
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    Material material = getColliderMaterial(hitInfo);
+    uint material_id = getColliderMaterialID(hitInfo);
+
+    // We hit the skydome
+    if (material_id == 0)
+    {
+        float2 uvCoords = normalToUv(ray.direction);
+        float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
+        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+        state.accucolor += state.mask * sk;
+        stateBuf.setState(ray.pixeli, state);
+        return;
+    }
+
+    Material material = _GMaterials[material_id];
     float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space

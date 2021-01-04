@@ -147,6 +147,11 @@ public:
         attached = 0;
         spp = 1;
         move_depth = 1;
+
+        // Reserve material 0 for the skydome which uses normal based texture sampling.
+        Material skydome = Material::DIFFUSE(make_float3(0));
+        skydome.emission = make_float3(1);
+        addMaterial(skydome);
     }
 
     void addSphere(Sphere sphere) { spheres.push_back(sphere); }
@@ -343,6 +348,76 @@ public:
 
         models.push_back(model);
         return models.size() - 1;
+    }
+
+    void addSkySphere(const char* filename)
+    {
+        float4* h_buffer;
+        cudaTextureObject_t tex = loadTextureHDR(filename, h_buffer);
+
+        printf("Loading model sphere.obj\n");
+        tinyobj::ObjReaderConfig objConfig;
+        objConfig.vertex_color = false;
+        objConfig.triangulate = true;
+        tinyobj::ObjReader objReader;
+        objReader.ParseFromFile("sphere3.obj", objConfig);
+        if (!objReader.Valid())
+        {
+            printf("Tinyobj could not load the model sphere.obj...\n");
+            exit(1);
+        }
+
+        Model model;
+        model.triangleStart = allVertices.size();
+        model.nrTriangles = 0;
+
+        const auto& vertices = objReader.GetAttrib().GetVertices();
+        const auto& uvs = objReader.GetAttrib().texcoords;
+        const auto& shape = objReader.GetShapes()[0];
+        uint seed = 2;
+        for(int i=0; i<shape.mesh.indices.size(); i+=3)
+        {
+            const auto& it0 = shape.mesh.indices[i+0];
+            const auto& it1 = shape.mesh.indices[i+1];
+            const auto& it2 = shape.mesh.indices[i+2];
+            const float3 v0 = 10 * make_float3(vertices[it0.vertex_index*3+0], vertices[it0.vertex_index*3+1], vertices[it0.vertex_index*3+2]);
+            const float3 v1 = 10 * make_float3(vertices[it1.vertex_index*3+0], vertices[it1.vertex_index*3+1], vertices[it1.vertex_index*3+2]);
+            const float3 v2 = 10 * make_float3(vertices[it2.vertex_index*3+0], vertices[it2.vertex_index*3+1], vertices[it2.vertex_index*3+2]);
+            
+            float2 uv0 = make_float2(uvs[it0.texcoord_index*2+0], uvs[it0.texcoord_index*2+1]);
+            float2 uv1 = make_float2(uvs[it1.texcoord_index*2+0], uvs[it1.texcoord_index*2+1]);
+            float2 uv2 = make_float2(uvs[it2.texcoord_index*2+0], uvs[it2.texcoord_index*2+1]);
+
+            const float3 v0v1 = v1 - v0;
+            const float3 v0v2 = v2 - v0;
+            const float3 normal = normalize(cross(v0v1, v0v2));
+            const float3 &w = normal;
+            const float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+            const float3 v = normalize(cross(w, u));
+            const float3 tangent = u;
+            const float3 bitangent = v;
+
+            // sample the texture by picking N random points on the triangle and calculating the sphere normal
+            // to get a uv coords coresponding to an emission
+            float3 centroid = (v0 + v1 + v2) / 3.0f;
+            float2 uv = normalToUv(normalize(centroid));
+            uint lx = (uint)(uv.x * WINDOW_WIDTH)%WINDOW_WIDTH;
+            uint ly = (uint)(uv.y * WINDOW_HEIGHT)%WINDOW_HEIGHT;
+            float3 sample = get3f(h_buffer[lx + WINDOW_WIDTH * ly]);
+
+            // Material 0 has been reserved in the constructor
+            MATERIAL_ID mat = 0;
+
+            allVertices.push_back(TriangleV(v0, v1, v2));
+            allVertexData.push_back(TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, mat));
+            model.nrTriangles++;
+
+        }
+        model.bvh = createBVHBinned(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
+        models.push_back(model);
+        uint model_id = models.size()-1;
+        GameObject skydome(model_id);
+        addObject(skydome);
     }
 
     void validate()

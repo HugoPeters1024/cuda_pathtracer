@@ -7,8 +7,7 @@
 inline Scene getOutsideScene()
 {
     auto scene = Scene();
-    scene.move_depth = 32;
-    scene.spp = 4;
+    scene.addSkySphere("skydome.hdr");
 
     // Add all the materials
     Material white = Material::DIFFUSE(make_float3(0.4));
@@ -89,7 +88,7 @@ inline Scene getOutsideScene()
                 obj.rotation.x = f;
                 f += 2 * 0.3141592;
             }
-            scene.invalidate();
+//            scene.invalidate();
     });
 
 
