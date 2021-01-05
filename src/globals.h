@@ -33,6 +33,9 @@ __device__ __constant__ DSizedBuffer<Plane> DPlanes;
 
 __device__ __constant__ DSizedBuffer<TriangleLight> DTriangleLights;
 
+__device__ __constant__ DSizedBuffer<uint> DTriangleLightSlots;
+
+
 static bool HNEE;
 static TriangleV* HVertices;
 static TriangleD* HVertexData;

@@ -21,7 +21,6 @@ private:
     cudaTextureObject_t dSkydomeTex;
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
-    DSizedBuffer<TriangleLight> d_lights;
 
 
 public:
@@ -34,9 +33,8 @@ public:
 
 void Pathtracer::Init()
 {
-    float4* _h_buffer;
-    dSkydomeTex = loadTextureHDR("cave.hdr", _h_buffer);
-    free(_h_buffer);
+    float4* h_skydome_buffer;
+    dSkydomeTex = loadTextureHDR("cave.hdr", h_skydome_buffer);
     cudaTextureObject_t blueNoise[8];
     blueNoise[0] = loadTextureGreyscale("blue_noise/HDR_L_0.png");
     blueNoise[1] = loadTextureGreyscale("blue_noise/HDR_L_1.png");
@@ -73,16 +71,70 @@ void Pathtracer::Init()
 
     // Extract all emissive triangles for explicit sampling
     std::vector<TriangleLight> lights;
+    std::vector<float> coarseContributions;
+    float totalCoarseContribution = 0;
     for(uint i=0; i<scene.objects.size(); i++)
     {
         const Model& model = scene.models[scene.instances[i].model_id];
         for(uint t=model.triangleStart; t<model.triangleStart+model.nrTriangles; t++)
         {
-            const Material& mat = scene.materials[scene.allVertexData[t].material];
-            if (fmaxcompf(mat.emission) < EPS) continue;
-            lights.push_back(TriangleLight { t, i });
+            const TriangleD& vertexData = scene.allVertexData[t];
+            const TriangleV& vertex = scene.allVertices[t];
+            Material mat = scene.materials[vertexData.material];
+
+            // Calculate the coarse contribution as a product of emmission and area.
+            const float3 v0v1 = vertex.v1 - vertex.v0;
+            const float3 v0v2 = vertex.v2 - vertex.v0;
+            const float A = 0.5f * length(cross(v0v1, v0v2));
+
+            // For the skydome we sample the _h_buffer explicitly to get emmission
+            if (vertexData.material == 0)
+            {
+                // vector pointing to the centroid of the skydome triangle.
+                const float3 normal = normalize(vertex.v0 + vertex.v1 + vertex.v2);
+                float2 uv = normalToUv(normal);
+                uint lx = uint(uv.x * WINDOW_WIDTH) % WINDOW_WIDTH;
+                uint ly = uint(uv.x * WINDOW_HEIGHT) % WINDOW_HEIGHT;
+                mat.emission = get3f(h_skydome_buffer[lx + WINDOW_WIDTH * ly]);
+            } else if (fmaxcompf(mat.emission) < EPS) {
+                continue;
+            }
+        
+            float contribution = A * fmaxcompf(mat.emission);
+            coarseContributions.push_back(contribution);
+            totalCoarseContribution += contribution;
+
+            TriangleLight light;
+            light.triangle_index = t;
+            light.instance_index = i;
+            lights.push_back(light);
         }
     }
+
+    printf("Total coarse contribution: %f\n", totalCoarseContribution);
+
+    // Calculate the number of slots each light will get
+    uint totalSlots = 0;
+    for(uint i=0; i<lights.size(); i++)
+    {
+        uint slots = (uint)(lights.size() * 1000 * coarseContributions[i] / totalCoarseContribution);
+        lights[i].slots = slots;
+        totalSlots += slots;
+    }
+
+    printf("Total slots in light sampling array: %i\n", totalSlots);
+
+    uint* h_slots = (uint*)malloc(totalSlots * sizeof(uint));
+    for(uint slot=0, i=0; i<lights.size(); i++)
+    {
+        for(uint u=0; u<lights[i].slots; u++, slot++)
+        {
+            h_slots[slot] = i;
+        }
+    }
+
+    DSizedBuffer<uint>(h_slots, totalSlots, &DTriangleLightSlots);
+    free(h_slots);
 
     DSizedBuffer<TriangleLight>(lights.data(), lights.size(), &DTriangleLights);
     printf("Extracted %lu emmissive triangles from the scene\n", lights.size());
@@ -137,6 +189,9 @@ void Pathtracer::Init()
 
     cudaSafe( cudaMemcpy(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
     cudaSafe( cudaMemcpy(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+
+    // free the skydome texture cpu side.
+    free(h_skydome_buffer);
 }
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear, uint sample)

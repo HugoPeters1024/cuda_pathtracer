@@ -196,6 +196,7 @@ inline Scene getSibenikScene()
 inline const Scene getMinecraftScene()
 {
     auto scene = Scene();
+    scene.addSkySphere("skydome.hdr");
     Material white = Material::DIFFUSE(make_float3(0.4));
     auto whiteId = scene.addMaterial(white);
 

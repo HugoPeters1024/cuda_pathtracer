@@ -390,11 +390,13 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
+        /*
         float2 uvCoords = normalToUv(ray.direction);
         float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
         float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
         state.accucolor += state.mask * sk;
         stateBuf.setState(ray.pixeli, state);
+        */
         return;
     }
 
@@ -407,12 +409,14 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // We hit the skydome
     if (material_id == 0)
     {
-        float2 uvCoords = normalToUv(ray.direction);
-        float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
-        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-        state.accucolor += state.mask * sk;
-        stateBuf.setState(ray.pixeli, state);
-        return;
+        if (!_NEE || state.fromSpecular)
+        {
+            float2 uvCoords = normalToUv(ray.direction);
+            float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
+            state.accucolor += state.mask * sk;
+            stateBuf.setState(ray.pixeli, state);
+            return;
+        }
     }
 
     Material material = _GMaterials[material_id];
@@ -526,8 +530,10 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         {
             // Choose an area light at random
             seed = wang_hash(seed);
-            uint lightSource = seed % DTriangleLights.size;
+            uint lightSlot = seed % DTriangleLightSlots.size;
+            uint lightSource = DTriangleLightSlots[lightSlot];
             const TriangleLight& light = DTriangleLights[lightSource];
+            const float invPslot = (float)DTriangleLightSlots.size / (float)light.slots;
             const TriangleV& lightV = _GVertices[light.triangle_index];
             const TriangleD& lightD = _GVertexData[light.triangle_index];
             const Instance& lightInstance = _GInstances[light.instance_index];
@@ -544,29 +550,36 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
             float u=rand(seed), v=rand(seed);
             if (u+v > 1.0f) { u = 1.0f-u; v = 1.0f-v; }
-            float3 samplePoint = v0 + u * v0v1 + v * v0v2;
+            const float3 samplePoint = v0 + u * v0v1 + v * v0v2;
 
             float3 shadowDir = intersectionPos - samplePoint;
-            float shadowLength = length(shadowDir);
-            float invShadowLength = 1.0f / shadowLength;
+            const float shadowLength = length(shadowDir);
+            const float invShadowLength = 1.0f / shadowLength;
             shadowDir *= invShadowLength;
 
             float3 lightNormal = cr / crLength;
+            if (lightD.material == 0) lightNormal = -lightNormal;
 
-            float NL = dot(colliderNormal, -shadowDir);
-            float LNL = dot(lightNormal, shadowDir);
+            const float NL = dot(colliderNormal, -shadowDir);
+            const float LNL = dot(lightNormal, shadowDir);
 
             // otherwise we are our own occluder or view the backface of the light
             if (NL > 0 && dot(surfaceNormal, -shadowDir) > 0 && LNL > 0)
             {
-                const float3& emission = _GMaterials[lightD.material].emission;
-                // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
-                float A = 0.5f * crLength;
+                float3 emission = _GMaterials[lightD.material].emission;
+                if (lightD.material == 0)
+                {
+                    float2 uvCoords = normalToUv(-shadowDir);
+                    emission = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
+                }
 
-                float SA = LNL * A * invShadowLength * invShadowLength;
+                // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
+                const float A = 0.5f * crLength;
+
+                const float SA = LNL * A * invShadowLength * invShadowLength;
                 // writing this explicitly leads to NaNs
                 //float lightPDF = 1.0f / (SA * DTriangleLights.size);
-                state.light = state.mask * (NL * SA * DTriangleLights.size * BRDF * emission);
+                state.light = state.mask * (NL * SA * BRDF * emission * invPslot);
 
 
                 // We invert the shadowrays to get coherent origins.

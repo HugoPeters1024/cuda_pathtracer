@@ -96,6 +96,7 @@ struct TriangleLight
 {
     uint triangle_index;
     uint instance_index;
+    uint slots;
 };
 
 static float3* SORTING_SOURCE;
