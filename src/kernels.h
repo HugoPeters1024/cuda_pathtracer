@@ -389,36 +389,36 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     uint seed = getSeed(x,y,time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
-        // We consider the skydome a lightsource in the set of random bounces
         /*
-        float2 uvCoords = normalToUv(ray.direction);
-        float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
-        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-        state.accucolor += state.mask * sk;
-        stateBuf.setState(ray.pixeli, state);
+        if (!_NEE || state.fromSpecular)
+        {
+            float2 uvCoords = normalToUv(ray.direction);
+            float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
+            float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
+            state.accucolor += state.mask * sk;
+            stateBuf.setState(ray.pixeli, state);
+        }
         */
         return;
     }
+
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
     Instance* instance = _GInstances + hitInfo.instance_id;
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     uint material_id = getColliderMaterialID(hitInfo);
-
-    // We hit the skydome
-    if (material_id == 0)
-    {
+    if (material_id == 0) {
         if (!_NEE || state.fromSpecular)
         {
             float2 uvCoords = normalToUv(ray.direction);
-            float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
+            float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
+            float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
             state.accucolor += state.mask * sk;
             stateBuf.setState(ray.pixeli, state);
-            return;
         }
+        return;
     }
-
     Material material = _GMaterials[material_id];
     float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
 
@@ -531,17 +531,24 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             // Choose an area light at random
             seed = wang_hash(seed);
             uint lightSlot = seed % DTriangleLightSlots.size;
-            uint lightSource = DTriangleLightSlots[lightSlot];
+            uint lightSource = seed % DTriangleLights.size;
             const TriangleLight& light = DTriangleLights[lightSource];
             const float invPslot = (float)DTriangleLightSlots.size / (float)light.slots;
             const TriangleV& lightV = _GVertices[light.triangle_index];
             const TriangleD& lightD = _GVertexData[light.triangle_index];
-            const Instance& lightInstance = _GInstances[light.instance_index];
+
+            float3 v0 = lightV.v0;
+            float3 v1 = lightV.v1;
+            float3 v2 = lightV.v2;
 
             // transform the vertices to world space
-            const float3 v0 = get3f(lightInstance.transform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
-            const float3 v1 = get3f(lightInstance.transform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
-            const float3 v2 = get3f(lightInstance.transform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
+            if (lightD.material != 0)
+            {
+                const glm::mat4x4& lightTransform = _GInstances[light.instance_index].transform;
+                v0 = get3f(lightTransform * glm::vec4(v0.x, v0.y, v0.z, 1));
+                v1 = get3f(lightTransform * glm::vec4(v1.x, v1.y, v1.z, 1));
+                v2 = get3f(lightTransform * glm::vec4(v2.x, v2.y, v2.z, 1));
+            }
 
             const float3 v0v1 = v1 - v0;
             const float3 v0v2 = v2 - v0;
@@ -554,7 +561,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
             float3 shadowDir = intersectionPos - samplePoint;
             const float shadowLength = length(shadowDir);
-            const float invShadowLength = 1.0f / shadowLength;
+            float invShadowLength = 1.0f / shadowLength;
             shadowDir *= invShadowLength;
 
             float3 lightNormal = cr / crLength;
@@ -579,11 +586,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 const float SA = LNL * A * invShadowLength * invShadowLength;
                 // writing this explicitly leads to NaNs
                 //float lightPDF = 1.0f / (SA * DTriangleLights.size);
-                state.light = state.mask * (NL * SA * BRDF * emission * invPslot);
+                state.light = state.mask * (NL * SA * BRDF * emission * DTriangleLights.size);
 
 
                 // We invert the shadowrays to get coherent origins.
-                Ray shadowRay(samplePoint + NL * EPS * shadowDir + (1-NL) * EPS * lightNormal, shadowDir, ray.pixeli);
+                Ray shadowRay(samplePoint + LNL * EPS * shadowDir + (1-LNL) * EPS * lightNormal, shadowDir, ray.pixeli);
                 shadowRay.length = shadowLength - 2 * EPS;
                 DShadowRayQueue.push(RayPacked(shadowRay));
             }

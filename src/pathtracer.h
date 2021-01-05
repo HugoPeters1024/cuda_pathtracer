@@ -69,10 +69,12 @@ void Pathtracer::Init()
         hd_models[i].bvh = d_bvh_buffer;
     }
 
-    // Extract all emissive triangles for explicit sampling
+    // Extract all emissive triangles for explicit sampling 
     std::vector<TriangleLight> lights;
     std::vector<float> coarseContributions;
     float totalCoarseContribution = 0;
+
+    // all triangles from light objects
     for(uint i=0; i<scene.objects.size(); i++)
     {
         const Model& model = scene.models[scene.instances[i].model_id];
@@ -80,7 +82,7 @@ void Pathtracer::Init()
         {
             const TriangleD& vertexData = scene.allVertexData[t];
             const TriangleV& vertex = scene.allVertices[t];
-            Material mat = scene.materials[vertexData.material];
+            float3 emission = scene.materials[vertexData.material].emission;
 
             // Calculate the coarse contribution as a product of emmission and area.
             const float3 v0v1 = vertex.v1 - vertex.v0;
@@ -95,12 +97,12 @@ void Pathtracer::Init()
                 float2 uv = normalToUv(normal);
                 uint lx = uint(uv.x * WINDOW_WIDTH) % WINDOW_WIDTH;
                 uint ly = uint(uv.x * WINDOW_HEIGHT) % WINDOW_HEIGHT;
-                mat.emission = get3f(h_skydome_buffer[lx + WINDOW_WIDTH * ly]);
-            } else if (fmaxcompf(mat.emission) < EPS) {
+                emission = get3f(h_skydome_buffer[lx + WINDOW_WIDTH * ly]);
+            } else if (fmaxcompf(emission) < EPS) {
                 continue;
             }
         
-            float contribution = A * fmaxcompf(mat.emission);
+            float contribution = A * fmaxcompf(emission);
             coarseContributions.push_back(contribution);
             totalCoarseContribution += contribution;
 
@@ -111,13 +113,42 @@ void Pathtracer::Init()
         }
     }
 
+    // And another loop for the skydome
+    /*
+    for(uint t=0; t<scene.allVertices.size(); t++)
+    {
+        const TriangleD& triangleD = scene.allVertexData[t];
+        if (triangleD.material != 0) continue;
+        const TriangleV& vertex = scene.allVertices[t];
+        const float3 normal = normalize(vertex.v0 + vertex.v1 + vertex.v2);
+        float2 uv = normalToUv(normal);
+        uint lx = uint(uv.x * WINDOW_WIDTH) % WINDOW_WIDTH;
+        uint ly = uint(uv.x * WINDOW_HEIGHT) % WINDOW_HEIGHT;
+        float3 emission = get3f(h_skydome_buffer[lx + WINDOW_WIDTH * ly]);
+
+        const float3 v0v1 = vertex.v1 - vertex.v0;
+        const float3 v0v2 = vertex.v2 - vertex.v0;
+        const float A = 0.5f * length(cross(v0v1, v0v2));
+
+        // Calculate the coarse contribution as a product of emmission and area.
+        float contribution = A * fmaxcompf(emission);
+        coarseContributions.push_back(contribution);
+        totalCoarseContribution += contribution;
+
+        TriangleLight light;
+        light.triangle_index = t;
+        light.instance_index = 0;
+        lights.push_back(light);
+    }
+    */
+
     printf("Total coarse contribution: %f\n", totalCoarseContribution);
 
     // Calculate the number of slots each light will get
     uint totalSlots = 0;
     for(uint i=0; i<lights.size(); i++)
     {
-        uint slots = (uint)(lights.size() * 1000 * coarseContributions[i] / totalCoarseContribution);
+        uint slots = (uint)(lights.size() * 1000.0f * coarseContributions[i] / totalCoarseContribution) + 1;
         lights[i].slots = slots;
         totalSlots += slots;
     }
@@ -127,9 +158,9 @@ void Pathtracer::Init()
     uint* h_slots = (uint*)malloc(totalSlots * sizeof(uint));
     for(uint slot=0, i=0; i<lights.size(); i++)
     {
-        for(uint u=0; u<lights[i].slots; u++, slot++)
+        for(uint u=0; u<lights[i].slots; u++)
         {
-            h_slots[slot] = i;
+            h_slots[slot++] = i;
         }
     }
 

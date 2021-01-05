@@ -83,9 +83,9 @@ inline Scene getOutsideScene()
             {
                 GameObject& obj = scene.objects[i];
                 if (obj.kind !=1) continue;
-                obj.position.x = 10 * sin(f + t/10.0f) ;
-                obj.position.z = 10 * cos(f + t/10.0f) ;
-                obj.rotation.x = f;
+   //             obj.position.x = 10 * sin(f + t/10.0f) ;
+    //            obj.position.z = 10 * cos(f + t/10.0f) ;
+     //           obj.rotation.x = f;
                 f += 2 * 0.3141592;
             }
 //            scene.invalidate();
@@ -111,6 +111,7 @@ inline Scene getOutsideScene()
 inline Scene getSibenikScene()
 {
     auto scene = Scene();
+    scene.addSkySphere("skydome.hdr");
 
     // Add all the materials
     Material white = Material::DIFFUSE(make_float3(0.4));
