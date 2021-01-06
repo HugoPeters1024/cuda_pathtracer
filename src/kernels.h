@@ -360,8 +360,10 @@ __global__ void kernel_generate_primary_rays(Camera camera, float time)
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
     uint seed = getSeed(x,y,time);
-    RayPacked ray = RayPacked(camera.getRay(x,y,seed));
-    DRayQueue.push(ray);
+    Ray ray = camera.getRay(x,y,seed);
+    //ray.length = 1000.0f;
+    RayPacked rayPacked = RayPacked(ray);
+    DRayQueue.push(rayPacked);
 }
 
 __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
@@ -411,7 +413,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     if (material_id == 0) {
         if (!_NEE || state.fromSpecular)
         {
-            float2 uvCoords = normalToUv(ray.direction);
+            float2 uvCoords = normalToUv(normalize(intersectionPos));
             float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
             float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
             state.accucolor += state.mask * sk;
@@ -530,7 +532,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         {
             // Choose an area light at random
             seed = wang_hash(seed);
-            uint lightSlot = seed % DTriangleLightSlots.size;
+            //uint lightSlot = seed % DTriangleLightSlots.size;
             uint lightSource = seed % DTriangleLights.size;
             const TriangleLight& light = DTriangleLights[lightSource];
             const float invPslot = (float)DTriangleLightSlots.size / (float)light.slots;
@@ -571,12 +573,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             const float LNL = dot(lightNormal, shadowDir);
 
             // otherwise we are our own occluder or view the backface of the light
-            if (NL > 0 && dot(surfaceNormal, -shadowDir) > 0 && LNL > 0)
+            if (NL > 0 && LNL > 0)
             {
                 float3 emission = _GMaterials[lightD.material].emission;
                 if (lightD.material == 0)
                 {
-                    float2 uvCoords = normalToUv(-shadowDir);
+                    float2 uvCoords = normalToUv(normalize(samplePoint));
                     emission = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
                 }
 
@@ -596,9 +598,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             }
         }
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
-        // due to normal mapping a sample might go into the surface which leads to z fighting like
-        // effects
-        cullSecondary = dot(surfaceNormal, secondary.direction) <= 0;
 
         // Writing this explicitly leads to NaNs
         //float NL = dot(colliderNormal, secondary.direction);
@@ -607,14 +606,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.mask *= PI * BRDF;
     }
 
-    if (!cullSecondary) {
-        // Russian roulette
-        float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
-        if (rand(seed) <= p)
-        {
-            state.mask = state.mask / p;
-            DRayQueueNew.push(RayPacked(secondary));
-        }
+    // Russian roulette
+    float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
+    if (rand(seed) <= p)
+    {
+        state.mask = state.mask / p;
+        DRayQueueNew.push(RayPacked(secondary));
     }
     stateBuf.setState(ray.pixeli, state);
 }

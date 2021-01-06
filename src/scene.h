@@ -353,7 +353,7 @@ public:
     void addSkySphere(const char* filename)
     {
         const uint SKY_MAT = 0;
-        const uint model_id = addModel("sphere.obj", 10.0f, make_float3(0), make_float3(0), SKY_MAT, false);
+        const uint model_id = addModel("sphere.obj", 20.0f, make_float3(0), make_float3(0), SKY_MAT, false);
         GameObject skydome(model_id);
         addObject(skydome);
     }

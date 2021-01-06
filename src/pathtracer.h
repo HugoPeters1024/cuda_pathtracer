@@ -126,12 +126,9 @@ void Pathtracer::Init()
         uint ly = uint(uv.x * WINDOW_HEIGHT) % WINDOW_HEIGHT;
         float3 emission = get3f(h_skydome_buffer[lx + WINDOW_WIDTH * ly]);
 
-        const float3 v0v1 = vertex.v1 - vertex.v0;
-        const float3 v0v2 = vertex.v2 - vertex.v0;
-        const float A = 0.5f * length(cross(v0v1, v0v2));
-
+        // We ignore the area because it's correlated inversely with the distance
         // Calculate the coarse contribution as a product of emmission and area.
-        float contribution = A * fmaxcompf(emission);
+        float contribution = fmaxcompf(emission);
         coarseContributions.push_back(contribution);
         totalCoarseContribution += contribution;
 
