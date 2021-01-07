@@ -147,7 +147,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     // Calculate the thread size and warp size
     // These are used by simply kernels only, so we max
     // out the block size.
-    int tx = 32;
+    int tx = 16;
     int ty = 16;
     dim3 dimBlock(WINDOW_WIDTH/tx+1, WINDOW_HEIGHT/ty+1);
     dim3 dimThreads(tx,ty);
@@ -183,7 +183,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,
-        uint kz = bounce == 0 ? 64 : 32;
+        uint kz = bounce == 0 ? 128 : 64;
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.

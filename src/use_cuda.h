@@ -41,6 +41,7 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
 
 HYBRID inline float3 make_float3(const glm::vec3& src)
 {
+    return *(float3*)&src;
     return make_float3(src.x, src.y, src.z);
 }
 
@@ -53,6 +54,7 @@ HYBRID inline bool hasNan(const float3& v)
 
 HYBRID inline float3 get3f(const glm::vec4& src)
 {
+    return *(float3*)&src;
     return make_float3(src.x, src.y, src.z);
 }
 

@@ -116,22 +116,25 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
 #endif
 }
 
-HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
+HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
     float det = dot(v0v1, pvec);
+    if (fabs(det) < 0.0001f) return false;
     float invDet = 1.0f / det;
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
+    if (u < 0 | u > 1) return false;
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
+    if (v < 0 | u + v > 1) return false;
 
     t = dot(v0v2, qvec) * invDet;
-    return fabs(det) > 0.0001f && (u >= 0 && u <= 1) && (v >= 0 && u + v <= 1) && t > 0;
+    return t > 0;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -146,30 +149,33 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
     return slabTest(rayOrigin, invRayDir, box, tmin) && tmin < hitInfo.t;
 }
 
-HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitInfo, const Instance& instance, uint instanceIdx)
+template <bool anyIntersection>
+HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& instance)
 {
     float t, u, v;
 
     const uint STACK_SIZE = 18;
     uint stack[STACK_SIZE];
-    uint size = 0;
+    uint* stackPtr = stack;
 
     // declare variables used in the loop
     float tnear, tfar;
     bool bnear, bfar;
-    uint near_id, far_id;
+    uint near_id;
     uint start, end;
+    BVHNode near, far;
 
     const float3 invRayDir = 1.0f / ray.direction;
 
     const Model& model = _GModels[instance.model_id];
     BVHNode current = model.bvh[0];
-    if (boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) stack[size++] = 0;
+    if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
 
-    while(size > 0)
+    bool needPop = false;
+    bool intersected = false;
+
+    while(true)
     {
-        current = model.bvh[stack[--size]];
-
         if (current.isLeaf())
         {
             start = current.t_start();
@@ -179,34 +185,48 @@ HYBRID void traverseBVHStack(const Ray& ray, bool anyIntersection, HitInfo& hitI
                 if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
                 {
                     hitInfo.primitive_id = i;
-                    hitInfo.primitive_type = TRIANGLE;
                     hitInfo.t = t;
-                    hitInfo.instance_id = instanceIdx;
-                    if (anyIntersection) return;
+                    if (anyIntersection) return true;
+                    intersected = true;
                 }
             }
+            needPop = true;
         }
         else
         {
             near_id = current.child1();
-            far_id = current.child1() + 1;
-            bnear = boxtest(model.bvh[near_id].getBox(), ray.origin, invRayDir, tnear, hitInfo);
-            bfar = boxtest(model.bvh[far_id].getBox(), ray.origin, invRayDir, tfar, hitInfo);
+            near = model.bvh[near_id];
+            far = model.bvh[near_id+1];
+            bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
+            bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
-            // push on the stack, first the far child
-            if (bfar) stack[size++] = far_id;
-            if (bnear)  stack[size++] = near_id;
-
-            if (bnear && bfar && tnear > tfar) {
-                swapc(stack[size-1], stack[size-2]);
+            if (bnear & bfar) {
+                bool rev = tnear > tfar;
+                current = rev ? far : near;
+                *stackPtr++ = near_id + !rev;
+            } else if (bnear) {
+                current = near;
+            } else if (bfar) {
+                current = far;
+            } else {
+                needPop = true;
             }
-
             //assert (size < STACK_SIZE);
+        }
+
+        if (needPop) 
+        {
+            if (stack != stackPtr)
+                current = model.bvh[*--stackPtr];
+            else
+                return intersected;
+            needPop = false;
         }
     }
 }
 
-HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
+template <bool anyIntersection>
+HYBRID HitInfo traverseTopLevel(const Ray& ray)
 {
     HitInfo hitInfo;
     hitInfo.primitive_id = 0xffffffff;
@@ -245,6 +265,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
     TopLevelBVH current;
     stack[size++] = 0;
 
+
     while(size > 0)
     {
         current = _GTopBVH[stack[--size]];
@@ -254,8 +275,12 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
         {
             Instance instance = _GInstances[current.leaf];
             Ray transformedRay = transformRay(ray, instance.invTransform);
-            traverseBVHStack(transformedRay, anyIntersection, hitInfo, instance, current.leaf);
-            if (anyIntersection && hitInfo.intersected()) return hitInfo;
+            if (traverseBVHStack<anyIntersection>(transformedRay, hitInfo, instance))
+            {
+                hitInfo.primitive_type = TRIANGLE;
+                hitInfo.instance_id = current.leaf;
+                if (anyIntersection) return hitInfo;
+            }
         }
         else
         {
@@ -266,6 +291,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray, bool anyIntersection)
 
     return hitInfo;
 }
+
 
 __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 {
@@ -351,7 +377,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel(ray, false);
+    HitInfo hitInfo = traverseTopLevel<false>(ray);
     intersections[i] = HitInfoPacked(hitInfo);
 }
 
@@ -383,18 +409,17 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     Instance* instance = _GInstances + hitInfo.instance_id;
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     Material material = getColliderMaterial(hitInfo);
-    float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
+    float3 colliderNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        glm::vec4 wn = instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0);
-        surfaceNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+        colliderNormal = normalize(make_float3(instance->transform * glm::vec4(colliderNormal.x, colliderNormal.y, colliderNormal.z, 0)));
     }
 
-    bool inside = dot(ray.direction, surfaceNormal) > 0;
-    float3 colliderNormal = inside ? -surfaceNormal : surfaceNormal;
-    surfaceNormal = colliderNormal;
+    bool inside = dot(ray.direction, colliderNormal) > 0;
+    colliderNormal = inside ? -colliderNormal : colliderNormal;
+    float3 surfaceNormal = colliderNormal;
 
     // Triangle is emmisive
     if (fmaxcompf(material.emission) > EPS)
@@ -437,7 +462,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = normalize(get3f((texColor)*2)-make_float3(1));
+            float3 texNormalT = normalize((get3f(texColor)*2)-make_float3(1));
             float3 texNormal = normalize(make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
@@ -528,7 +553,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             float LNL = dot(lightNormal, shadowDir);
 
             // otherwise we are our own occluder or view the backface of the light
-            if (NL > 0 && dot(surfaceNormal, -shadowDir) > 0 && LNL > 0)
+            if (NL > 0 && LNL > 0)
             {
                 const float3& emission = _GMaterials[lightD.material].emission;
                 // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
@@ -541,7 +566,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
 
                 // We invert the shadowrays to get coherent origins.
-                Ray shadowRay(samplePoint + NL * EPS * shadowDir + (1-NL) * EPS * lightNormal, shadowDir, ray.pixeli);
+                Ray shadowRay(samplePoint + LNL * EPS * shadowDir + (1-LNL) * EPS * lightNormal, shadowDir, ray.pixeli);
                 shadowRay.length = shadowLength - 2 * EPS;
                 DShadowRayQueue.push(RayPacked(shadowRay));
             }
@@ -576,7 +601,7 @@ __global__ void kernel_connect(TraceStateSOA stateBuf)
     if (i >= DShadowRayQueue.size) return;
 
     const Ray& shadowRay = DShadowRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel(shadowRay, true);
+    HitInfo hitInfo = traverseTopLevel<true>(shadowRay);
     if (hitInfo.intersected()) return;
 
     float3 light = get3f(stateBuf.lights[shadowRay.pixeli]);

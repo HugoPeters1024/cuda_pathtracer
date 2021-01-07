@@ -154,6 +154,8 @@ int main(int argc, char** argv) {
     printf("Ray is %lu bytes\n", sizeof(Ray));
     printf("HitInfo is %lu bytes\n", sizeof(HitInfo));
     printf("TraceState is %lu bytes\n", sizeof(TraceState));
+    printf("float3 is %lu bytes\n", sizeof(float3));
+    printf("float4 is %lu bytes\n", sizeof(float4));
 
     pathtracerApp.Init();
     raytracerApp.Init();
