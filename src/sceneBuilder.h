@@ -7,7 +7,7 @@
 inline Scene getOutsideScene()
 {
     auto scene = Scene();
-    scene.addSkySphere("skydome.hdr");
+ //   scene.addSkySphere("skydome.hdr");
 
     // Add all the materials
     Material white = Material::DIFFUSE(make_float3(0.4));
@@ -111,7 +111,7 @@ inline Scene getOutsideScene()
 inline Scene getSibenikScene()
 {
     auto scene = Scene();
-    scene.addSkySphere("skydome.hdr");
+//    scene.addSkySphere("skydome.hdr");
 
     // Add all the materials
     Material white = Material::DIFFUSE(make_float3(0.4));
@@ -197,7 +197,7 @@ inline Scene getSibenikScene()
 inline const Scene getMinecraftScene()
 {
     auto scene = Scene();
-    scene.addSkySphere("skydome.hdr");
+  //  scene.addSkySphere("skydome.hdr");
     Material white = Material::DIFFUSE(make_float3(0.4));
     auto whiteId = scene.addMaterial(white);
 
