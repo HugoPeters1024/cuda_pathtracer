@@ -227,7 +227,7 @@ inline __host__ __device__ float length(float2 v)
 // normalize
 inline __host__ __device__ float2 normalize(float2 v)
 {
-    float invLen = rsqrtf(dot(v, v));
+    const float invLen = rsqrtf(dot(v, v));
     return v * invLen;
 }
 
@@ -430,7 +430,7 @@ inline __host__ __device__ float length(float3 v)
 // normalize
 inline __host__ __device__ float3 normalize(float3 v)
 {
-    float invLen = rsqrtf(dot(v, v));
+    const float invLen = rsqrtf(dot(v, v));
     return v * invLen;
 }
 
@@ -583,7 +583,7 @@ inline __host__ __device__ float length(float4 r)
 // normalize
 inline __host__ __device__ float4 normalize(float4 v)
 {
-    float invLen = rsqrtf(dot(v, v));
+    const float invLen = rsqrtf(dot(v, v));
     return v * invLen;
 }
 

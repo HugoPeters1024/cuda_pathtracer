@@ -314,16 +314,15 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
-    float3 newDir = reflect(ray.direction, -normal);
+    const float3 newDir = reflect(ray.direction, -normal);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
 HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, const bool& inside, float& reflected)
 {
     // calculate the eta based on whether we are inside
-    float n1 = 1.0;
-    float n2 = material.refractive_index;
-    if (inside) swapc(n1, n2);
+    const float n1 = inside ? material.refractive_index : 1.0f;
+    const float n2 = inside ? 1.0f : material.refractive_index;
     const float eta = n1 / n2;
 
     const float costi = dot(normal, -ray.direction);
@@ -338,18 +337,18 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
 
     // fresnell equation for reflection contribution
     const float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
-    const float costt = sqrt(1 - eta * eta * sinti * sinti);
+    const float costt = sqrt(1.0f - eta * eta * sinti * sinti);
     const float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
     const float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
-    reflected = 0.5 * (spol * spol + ppol * ppol);
+    reflected = 0.5f * (spol * spol + ppol * ppol);
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
 __device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint& seed)
 {
-    float3 newDir = SampleHemisphere(normal, seed);
-    float f = dot(normal, newDir);
+    const float3 newDir = SampleHemisphere(normal, seed);
+    const float f = dot(normal, newDir);
     return Ray(intersectionPos + EPS * f * newDir + EPS * (1-f) * normal, newDir, ray.pixeli);
 }
 
@@ -386,11 +385,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
-    Ray ray = DRayQueue[i].getRay();
+    const Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
 
-    uint x = ray.pixeli % WINDOW_WIDTH;
-    uint y = ray.pixeli / WINDOW_WIDTH;
+    const uint x = ray.pixeli % WINDOW_WIDTH;
+    const uint y = ray.pixeli / WINDOW_WIDTH;
     uint seed = getSeed(x,y,time);
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
@@ -404,21 +403,21 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
-    Instance* instance = _GInstances + hitInfo.instance_id;
-    float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    uint material_id = getColliderMaterialID(hitInfo);
+    const Instance* instance = _GInstances + hitInfo.instance_id;
+    const float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
+    const uint material_id = getColliderMaterialID(hitInfo);
     Material material = _GMaterials[material_id];
-    float3 colliderNormal = getColliderNormal(hitInfo, intersectionPos);
+    float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        colliderNormal = normalize(make_float3(instance->transform * glm::vec4(colliderNormal.x, colliderNormal.y, colliderNormal.z, 0)));
+        surfaceNormal = normalize(make_float3(instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0.0f)));
     }
 
-    bool inside = dot(ray.direction, colliderNormal) > 0;
-    colliderNormal = inside ? -colliderNormal : colliderNormal;
-    float3 surfaceNormal = colliderNormal;
+    bool inside = dot(ray.direction, surfaceNormal) > 0;
+    surfaceNormal = inside ? -surfaceNormal : surfaceNormal;
+    float3 colliderNormal = surfaceNormal;
 
     // Triangle is emmisive
     if (fmaxcompf(material.emission) > EPS)
@@ -451,10 +450,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
         if (material.hasTexture)
         {
-            float4 texColor = tex2D<float4>(material.texture, uv.x, uv.y);
             // According to the mtl spec texture should be multiplied by the diffuse color
             // https://www.loc.gov/preservation/digital/formats/fdd/fdd000508.shtml
-            material.diffuse_color = material.diffuse_color * make_float3(texColor.x, texColor.y, texColor.z);
+            material.diffuse_color = material.diffuse_color * get3f(tex2D<float4>(material.texture, uv.x, uv.y));
         }
 
         // sample the normal of the material by redoing the intersection
@@ -469,10 +467,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             ));
 
             // Transform the normal from model space to world space
-            glm::vec4 wn = instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f);
-            texNormal = normalize(make_float3(wn.x, wn.y, wn.z));
-            if (dot(texNormal, colliderNormal) < 0.0f) texNormal = -texNormal;
-            colliderNormal = texNormal;
+            texNormal = normalize(make_float3(instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f)));
+            colliderNormal = dot(texNormal, colliderNormal) < 0.0f ? -texNormal : texNormal;
         }
     }
 
@@ -487,7 +483,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         {
             // Take away any absorpted light using Beer's law.
             // when leaving the object
-            float3 c = material.absorption;
+            const float3& c = material.absorption;
             state.mask *= make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
         }
 
@@ -540,15 +536,13 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             float3 samplePoint = v0 + u * v0v1 + v * v0v2;
 
             float3 shadowDir = intersectionPos - samplePoint;
-            float shadowLength = length(shadowDir);
-            float invShadowLength = 1.0f / shadowLength;
+            const float shadowLength = length(shadowDir);
+            const float invShadowLength = 1.0f / shadowLength;
             shadowDir *= invShadowLength;
 
-            float3 lightNormal = cr / crLength;
-            lightNormal = dot(lightNormal, shadowDir) < 0 ? -lightNormal : lightNormal;
-
-            float NL = dot(colliderNormal, -shadowDir);
-            float LNL = dot(lightNormal, shadowDir);
+            const float3 lightNormal = cr / crLength;
+            const float NL = dot(colliderNormal, -shadowDir);
+            const float LNL = dot(lightNormal, shadowDir);
 
             // otherwise we are our own occluder or view the backface of the light
             if (NL > 0 && LNL > 0)
