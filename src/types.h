@@ -282,7 +282,7 @@ struct __align__(16) RayPacked
     }
 };
 
-enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, PLANE, LIGHT };
+enum PRIMITIVE_TYPE { TRIANGLE, SPHERE, PLANE };
 
 
 struct __align__(16) HitInfo

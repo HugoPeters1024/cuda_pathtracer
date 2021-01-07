@@ -73,11 +73,6 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     HitInfo hitInfo = traverseTopLevel<false>(ray);
     if (!hitInfo.intersected()) return make_float3(0.2, 0.3, 0.6);
 
-    if (hitInfo.primitive_type == LIGHT)
-    {
-        return make_float3(1);
-    }
-
     Instance* instance;
 
     if (hitInfo.primitive_type == TRIANGLE)
@@ -96,7 +91,8 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    Material material = getColliderMaterial(hitInfo);
+    const uint material_id = getColliderMaterialID(hitInfo);
+    Material material = _GMaterials[material_id];
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);

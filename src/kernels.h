@@ -38,13 +38,13 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     return transformedRay;
 }
 
-HYBRID inline Material getColliderMaterial(const HitInfo& hitInfo)
+HYBRID inline uint getColliderMaterialID(const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return _GMaterials[_GVertexData[hitInfo.primitive_id].material];
-        case SPHERE:   return _GMaterials[_GSpheres[hitInfo.primitive_id].material];
-        case PLANE:    return _GMaterials[_GPlanes[hitInfo.primitive_id].material];
+        case TRIANGLE: return _GVertexData[hitInfo.primitive_id].material;
+        case SPHERE:   return _GSpheres[hitInfo.primitive_id].material;
+        case PLANE:    return _GPlanes[hitInfo.primitive_id].material;
     }
     assert(false);
 }
@@ -297,7 +297,7 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 {
     float r0 = rand(seed), r1 = rand(seed);
     float r = sqrtf(r0);
-    float theta = 2 * 3.1415926535 * r1;
+    float theta = 2 * PI * r1;
     float x = r * cosf(theta);
     float y = r * sinf(theta);
     float3 sample =  make_float3( x, y, sqrt(1 - r0));
@@ -318,29 +318,29 @@ HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& int
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
-HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, bool inside, float& reflected)
+HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& intersectionPos, const Material& material, const bool& inside, float& reflected)
 {
     // calculate the eta based on whether we are inside
     float n1 = 1.0;
     float n2 = material.refractive_index;
     if (inside) swapc(n1, n2);
-    float eta = n1 / n2;
+    const float eta = n1 / n2;
 
-    float costi = dot(normal, -ray.direction);
-    float k = 1 - (eta* eta) * (1 - costi * costi);
+    const float costi = dot(normal, -ray.direction);
+    const float k = 1 - (eta* eta) * (1 - costi * costi);
     // Total internal reflection
     if (k < 0) {
         reflected = 1;
         return Ray(make_float3(0), make_float3(0), 0);
     }
 
-    float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
+    const float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
 
     // fresnell equation for reflection contribution
-    float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
-    float costt = sqrt(1 - eta * eta * sinti * sinti);
-    float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
-    float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
+    const float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
+    const float costt = sqrt(1 - eta * eta * sinti * sinti);
+    const float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
+    const float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
     reflected = 0.5 * (spol * spol + ppol * ppol);
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
@@ -396,9 +396,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
         float2 uvCoords = normalToUv(ray.direction);
-        float4 sk4 = tex2D<float4>(skydome, uvCoords.x, uvCoords.y);
-        float3 sk = make_float3(sk4.x, sk4.y, sk4.z);
-
+        float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
         state.accucolor += state.mask * sk;
         stateBuf.setState(ray.pixeli, state);
         return;
@@ -408,7 +406,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // responsibility of the code dereferencing the pointer.
     Instance* instance = _GInstances + hitInfo.instance_id;
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    Material material = getColliderMaterial(hitInfo);
+    uint material_id = getColliderMaterialID(hitInfo);
+    Material material = _GMaterials[material_id];
     float3 colliderNormal = getColliderNormal(hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
@@ -479,7 +478,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    bool cullSecondary = false;
     float random = rand(seed);
 
     if (random < material.transmit)
@@ -490,7 +488,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             // Take away any absorpted light using Beer's law.
             // when leaving the object
             float3 c = material.absorption;
-            state.mask = state.mask * make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+            state.mask *= make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
         }
 
         // Ray can turn into a reflection ray due to fresnell
@@ -520,17 +518,17 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         if (_NEE)
         {
             // Choose an area light at random
-            seed = wang_hash(seed);
-            uint lightSource = seed % DTriangleLights.size;
+            seed = rand_xorshift(seed);
+            const uint lightSource = seed % DTriangleLights.size;
             const TriangleLight& light = DTriangleLights[lightSource];
             const TriangleV& lightV = _GVertices[light.triangle_index];
             const TriangleD& lightD = _GVertexData[light.triangle_index];
-            const Instance& lightInstance = _GInstances[light.instance_index];
+            const glm::mat4x4& lightTransform = _GInstances[light.instance_index].transform;
 
             // transform the vertices to world space
-            const float3 v0 = get3f(lightInstance.transform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
-            const float3 v1 = get3f(lightInstance.transform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
-            const float3 v2 = get3f(lightInstance.transform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
+            const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
+            const float3 v1 = get3f(lightTransform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
+            const float3 v2 = get3f(lightTransform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
 
             const float3 v0v1 = v1 - v0;
             const float3 v0v2 = v2 - v0;
@@ -572,24 +570,20 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             }
         }
         secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
-        // due to normal mapping a sample might go into the surface
-        cullSecondary = dot(surfaceNormal, secondary.direction) <= 0;
 
         // Writing this explicitly leads to NaNs
         //float NL = dot(colliderNormal, secondary.direction);
         //float PDF = NL / PI;
 
-        state.mask = state.mask * (PI * BRDF);
+        state.mask *= (PI * BRDF);
     }
 
-    if (!cullSecondary) {
-        // Russian roulette
-        float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
-        if (rand(seed) <= p)
-        {
-            state.mask = state.mask / p;
-            DRayQueueNew.push(RayPacked(secondary));
-        }
+    // Russian roulette
+    float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
+    if (rand(seed) <= p)
+    {
+        state.mask = state.mask / p;
+        DRayQueueNew.push(RayPacked(secondary));
     }
     stateBuf.setState(ray.pixeli, state);
 }
