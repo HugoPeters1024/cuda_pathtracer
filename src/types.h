@@ -353,7 +353,7 @@ struct __align__(16) BVHNode
     }
 };
 
-struct Model
+struct __align__(16) Model
 {
     BVHNode* bvh;
     uint triangleStart;
@@ -361,7 +361,7 @@ struct Model
     uint nrBvhNodes;
 };
 
-struct Instance
+struct __align__(16) Instance
 {
     uint model_id;
     glm::mat4 transform;

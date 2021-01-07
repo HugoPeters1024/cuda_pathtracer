@@ -41,7 +41,7 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
 
 HYBRID inline float3 make_float3(const glm::vec3& src)
 {
-    return *(float3*)&src;
+//    return *(float3*)&src;
     return make_float3(src.x, src.y, src.z);
 }
 
@@ -54,7 +54,7 @@ HYBRID inline bool hasNan(const float3& v)
 
 HYBRID inline float3 get3f(const glm::vec4& src)
 {
-    return *(float3*)&src;
+ //   return *(float3*)&src;
     return make_float3(src.x, src.y, src.z);
 }
 
@@ -97,7 +97,7 @@ HYBRID inline float rand(uint& seed)
 
 HYBRID inline uint getSeed(uint x, uint y, float time)
 {
-    return wang_hash((x + WINDOW_WIDTH * y) * (uint)(time * time * 10000));
+    return wang_hash((x + WINDOW_WIDTH * y) ^ wang_hash((uint)(time*100)));
 }
 
 HYBRID inline float at(const float3& v, uint i)

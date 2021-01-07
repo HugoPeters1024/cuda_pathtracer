@@ -333,7 +333,7 @@ public:
         printf("Building a BVH over %u triangles\n", model.nrTriangles);
         float ping = glfwGetTime();
 
-        model.bvh = createBVH(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
+        model.bvh = createBVHBinned(allVertices.data() + model.triangleStart, allVertexData.data() + model.triangleStart, model.nrTriangles, model.triangleStart, &model.nrBvhNodes);
         printf("Build took %fms\n", (glfwGetTime() - ping)*1000);
         printf("BVH Size: %u\n", model.nrBvhNodes);
 
