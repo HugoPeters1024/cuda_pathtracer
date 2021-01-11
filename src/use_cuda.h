@@ -54,7 +54,7 @@ HYBRID inline bool hasNan(const float3& v)
 
 HYBRID inline float3 get3f(const glm::vec4& src)
 {
- //   return *(float3*)&src;
+    //return *(float3*)&src;
     return make_float3(src.x, src.y, src.z);
 }
 
@@ -163,9 +163,9 @@ inline cudaTextureObject_t loadTexture(const char* filename)
   return ret;
 }
 
-inline cudaTextureObject_t loadTextureHDR(const char* filename)
+inline cudaTextureObject_t loadTextureHDR(const char* filename, float4*& h_buffer, int& width, int& height)
 {
-  int width, height, nrChannels;
+  int nrChannels;
 
 
   stbi_ldr_to_hdr_gamma(1.0f);
@@ -179,7 +179,7 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
   assert(nrChannels == 3);
 
   // Convert the float data to 4 component float
-  float* fdata = (float*)malloc(width*height*4*sizeof(float));
+  h_buffer = (float4*)malloc(width*height*sizeof(float4));
 
   for(int y=0; y<height; y++)
   {
@@ -189,17 +189,17 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
       float b = data3[x*nrChannels+y*nrChannels*width+2];
       assert(!(std::isnan(r) || std::isnan(g)  || std::isnan(b)));
 
-      fdata[x*4+(height-y-1)*4*width+0] = r;
-      fdata[x*4+(height-y-1)*4*width+1] = g;
-      fdata[x*4+(height-y-1)*4*width+2] = b;
-      fdata[x*4+(height-y-1)*4*width+3] = 1;
+      h_buffer[x+(height-y-1)*width].x = r;
+      h_buffer[x+(height-y-1)*width].y = g;
+      h_buffer[x+(height-y-1)*width].z = b;
+      h_buffer[x+(height-y-1)*width].w = 1;
     }
   }
 
   cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
   cudaArray* cuArray;
   cudaSafe( cudaMallocArray(&cuArray, &channelDesc, width, height) );
-  cudaSafe( cudaMemcpyToArray(cuArray, 0, 0, fdata, width*height*sizeof(float4), cudaMemcpyHostToDevice));
+  cudaSafe( cudaMemcpyToArray(cuArray, 0, 0, h_buffer, width*height*sizeof(float4), cudaMemcpyHostToDevice));
 
   cudaResourceDesc resDesc;
   memset(&resDesc, 0, sizeof(resDesc));
@@ -223,7 +223,6 @@ inline cudaTextureObject_t loadTextureHDR(const char* filename)
   cudaSafe(cudaCreateTextureObject(&ret, &resDesc, &texDesc, nullptr));
 
   stbi_image_free(data3);
-  free(fdata);
   return ret;
 }
 

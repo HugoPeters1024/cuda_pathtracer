@@ -19,6 +19,7 @@ private:
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     cudaTextureObject_t dSkydomeTex;
+    CDF d_skydomeCDF;
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
     DSizedBuffer<TriangleLight> d_lights;
@@ -34,7 +35,67 @@ public:
 
 void Pathtracer::Init()
 {
-    dSkydomeTex = loadTextureHDR("skydome.hdr");
+    float4* h_skydome;
+    int swidth, sheight;
+    dSkydomeTex = loadTextureHDR("cave.hdr", h_skydome, swidth, sheight);
+
+    // Calculate the CDF
+    CDF h_skydomeCDF;
+    h_skydomeCDF.values = (float*)malloc(swidth * sheight * sizeof(float));
+    h_skydomeCDF.cumValues = (float*)malloc(swidth * sheight * sizeof(float));
+    h_skydomeCDF.nrItems = swidth * sheight;
+    float totalEnergy = 0.0f;
+    for(uint y=0; y<sheight; y++)
+    {
+        for(uint x=0; x<swidth; x++)
+        {
+            const float energy = fmaxcompf(get3f(h_skydome[x + swidth * y]));
+            h_skydomeCDF.values[x + swidth * y] = energy;
+            totalEnergy += energy;
+            h_skydomeCDF.cumValues[x + swidth * y] = totalEnergy;
+        }
+    }
+
+    for(uint y=0; y<sheight; y++)
+    {
+        for(uint x=0; x<swidth; x++)
+        {
+            h_skydomeCDF.values[x + swidth * y] /= totalEnergy;
+            h_skydomeCDF.cumValues[x + swidth * y] /= totalEnergy;
+        }
+    }
+
+    uint seed = 666;
+    float3 acc = make_float3(0);
+    float facc = 0;
+    for(uint i=0; i<100000; i++)
+    {
+        float2 uv = make_float2(rand(seed), rand(seed));
+        float3 n = uvToNormal(uv);
+        acc += n;
+        facc += rand(seed);
+       // printf("----------------------\n");
+        //printf("uv: %f, %f\n", uv.x, uv.y);
+       // printf("n: %f, %f, %f\n", n.x, n.y, n.z);
+    }
+    acc /= 100000;
+    facc /= 100000;
+    printf("navg: %f, %f, %f\n", acc.x, acc.y, acc.z);
+    printf("favg: %ff\n", facc);
+
+    printf("Total energy in skydome CDF: %f\n", totalEnergy);
+
+    free(h_skydome);
+
+    d_skydomeCDF.nrItems = h_skydomeCDF.nrItems;
+    cudaSafe( cudaMalloc(&d_skydomeCDF.values, swidth * sheight * sizeof(float)) );
+    cudaSafe( cudaMalloc(&d_skydomeCDF.cumValues, swidth * sheight * sizeof(float)) );
+    cudaSafe( cudaMemcpy(d_skydomeCDF.values, h_skydomeCDF.values, swidth * sheight * sizeof(float), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(d_skydomeCDF.cumValues, h_skydomeCDF.cumValues, swidth * sheight * sizeof(float), cudaMemcpyHostToDevice) );
+
+    free(h_skydomeCDF.values);
+    free(h_skydomeCDF.cumValues);
+
 
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
@@ -187,7 +248,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex);
+        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, d_skydomeCDF);
 
         // Sample the light source for every shadow ray
         if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);

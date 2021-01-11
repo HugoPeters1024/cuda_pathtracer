@@ -415,4 +415,10 @@ inline BVHNode* createBVH(TriangleV* trianglesV, TriangleD* trianglesD, uint nrT
     return ret;
 }
 
+inline BVHNode* makeQBVH(BVHNode* bvh, uint bvh_size)
+{
+    BVHNode* ret = (BVHNode*)malloc(bvh_size * sizeof(BVHNode));
+    return ret;
+}
+
 #endif

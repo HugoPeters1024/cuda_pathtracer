@@ -518,6 +518,13 @@ struct HSizedBuffer
     T const& operator[](int index) { return values[index]; }
 };
 
+struct CDF
+{
+    float* values;
+    float* cumValues;
+    uint nrItems;
+};
+
 class Camera
 {
 private:

@@ -17,11 +17,62 @@ __device__ inline void swapc(T& left, T& right)
 #define swapc std::swap
 #endif
 
+/*
 HYBRID inline float2 normalToUv(const float3& normal)
 {
     float u = atan2(normal.x, normal.z) / (2.0f*PI) + 0.5f;
     float v = normal.y * 0.5f + 0.5f;
     return make_float2(u,v);
+}
+
+HYBRID inline float3 uvToNormal(const float2& uv)
+{
+    float theta = 2.0f * PI * (uv.x - 0.5);
+    float phi = PI * (uv.y - 0.5);
+    return make_float3(
+            cos(theta) * sin(phi),
+            sin(theta) * sin(phi),
+            cos(phi));
+}
+ */
+
+HYBRID inline float2 normalToUv(const float3& n)
+{
+    float theta = atan2(n.x, n.z) / (2.0f * PI);
+    float phi = -acos(n.y) / PI;
+    return make_float2(theta, phi);
+}
+
+// Uv range: [0, 1]
+HYBRID inline float3 uvToNormal(const float2& uv)
+{
+    float theta = uv.x * 2.0f * PI;
+    float phi = -uv.y * PI;
+
+    float3 n;
+    n.z = cos(theta) * sin(phi);
+    n.x = sin(theta) * sin(phi);
+    n.y = cos(phi);
+
+    //n = normalize(n);
+    return n;
+}
+
+
+HYBRID inline uint binarySearch(const float* values, const uint& nrValues, const float& target)
+{
+    uint L = 0;
+    uint R = nrValues - 1;
+    uint m;
+    while(L < R-1)
+    {
+        m = (L+R)/2;
+        if (values[m] >= target)
+            R = m;
+        else if (values[m] < target)
+            L = m;
+    }
+    return m;
 }
 
 HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
@@ -293,7 +344,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 }
 
 
-__device__ float3 SampleHemisphere(const float3& normal, uint& seed)
+__device__ float3 SampleHemisphereCosine(const float3& normal, uint& seed)
 {
     float r0 = rand(seed), r1 = rand(seed);
     float r = sqrtf(r0);
@@ -302,6 +353,23 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
     float y = r * sinf(theta);
     float3 sample =  make_float3( x, y, sqrt(1 - r0));
 
+    const float3& w = normal;
+    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 v = normalize(cross(w,u));
+
+    return normalize(make_float3(
+            dot(sample, make_float3(u.x, v.x, w.x)),
+            dot(sample, make_float3(u.y, v.y, w.y)),
+            dot(sample, make_float3(u.z, v.z, w.z))));
+}
+
+__device__ float3 SampleHemisphere(const float3& normal, uint& seed)
+{
+    float u1 = rand(seed);
+    float u2 = rand(seed);
+    const float r = sqrt(1.0f - u1 * u1);
+    const float phi = 2.0f * PI * u2;
+    const float3 sample = make_float3(cos(phi)*r, sin(phi)*r, u1);
     const float3& w = normal;
     float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
     float3 v = normalize(cross(w,u));
@@ -345,14 +413,6 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
     return Ray(intersectionPos + EPS * refractDir, refractDir, ray.pixeli);
 }
 
-__device__ Ray getDiffuseRay(const Ray& ray, const float3& normal, const float3& intersectionPos, uint& seed)
-{
-    const float3 newDir = SampleHemisphere(normal, seed);
-    const float f = dot(normal, newDir);
-    return Ray(intersectionPos + EPS * f * newDir + EPS * (1-f) * normal, newDir, ray.pixeli);
-}
-
-
 __global__ void kernel_clear_state(TraceStateSOA state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -381,7 +441,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome, CDF d_skydomeCDF)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -394,10 +454,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
-        float2 uvCoords = normalToUv(ray.direction);
-        float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
-        state.accucolor += state.mask * sk;
-        stateBuf.setState(ray.pixeli, state);
+//        if (!_NEE || state.fromSpecular) {
+            float2 uvCoords = normalToUv(ray.direction);
+            float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
+            state.accucolor += state.mask * sk;
+            stateBuf.setState(ray.pixeli, state);
+ //       }
         return;
     }
 
@@ -494,7 +556,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             state.mask *= material.diffuse_color;
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         }
-        float3 noiseDir = SampleHemisphere(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, seed);
         secondary.direction = secondary.direction * (1.0f - material.glossy) + material.glossy * noiseDir;
     }
     else if (random - material.transmit < material.reflect)
@@ -502,7 +564,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.fromSpecular = true;
         state.mask *= material.diffuse_color;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
-        float3 noiseDir = SampleHemisphere(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, seed);
         secondary.direction = secondary.direction * (1.0f-material.glossy) + material.glossy * noiseDir;
     }
     else 
@@ -513,6 +575,29 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
+            // float r = rand(seed);
+            // binary search the cum values
+            // uint sample = binarySearch(d_skydomeCDF.cumValues, d_skydomeCDF.nrItems, r);
+            // sample = seed % d_skydomeCDF.nrItems;
+            //uint x = sample % WINDOW_WIDTH;
+            //uint y = sample / WINDOW_WIDTH;
+            //float2 uv = make_float2((float)x / (float)WINDOW_WIDTH, (float)y / (float)WINDOW_HEIGHT);
+            //float2 uv = make_float2(rand(seed), acos(1 - 2 * rand(seed)/PI));
+            /*
+            float3 normal = normalize(make_float3(rand(seed)*2-1, rand(seed)*2-1, rand(seed)*2-1));  
+            if (dot(normal, colliderNormal) > 0)
+            {
+                float2 uv = normalToUv(normal);
+                float3 lightSample = get3f(tex2D<float4>(skydome, uv.x, uv.y));
+ //               float PDF = 1.0f / (d_skydomeCDF.values[sample] * d_skydomeCDF.nrItems);
+                float PDF = 1.0f;
+                state.light = state.mask * lightSample * BRDF * PI * PDF * 2.0f * dot(normal, colliderNormal);
+
+                Ray shadowRay(intersectionPos + EPS * normal, normal, ray.pixeli);
+                DShadowRayQueue.push(shadowRay);
+            }
+            */
+
             // Choose an area light at random
             seed = rand_xorshift(seed);
             const uint lightSource = seed % DTriangleLights.size;
@@ -563,13 +648,17 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
                 DShadowRayQueue.push(RayPacked(shadowRay));
             }
         }
-        secondary = getDiffuseRay(ray, colliderNormal, intersectionPos, seed);
+
+
+        const float3 r = SampleHemisphereCosine(colliderNormal, seed);
+        const float f = dot(colliderNormal, r);
+        secondary = Ray(intersectionPos + EPS * f * r + EPS * (1-f) * colliderNormal, r, ray.pixeli);
 
         // Writing this explicitly leads to NaNs
         //float NL = dot(colliderNormal, secondary.direction);
         //float PDF = NL / PI;
 
-        state.mask *= (PI * BRDF);
+        state.mask *= PI * BRDF;
     }
 
     // Russian roulette
