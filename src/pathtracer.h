@@ -237,9 +237,9 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
     uint max_bounces;
     if (_NEE)
-        max_bounces = shouldClear ? 1 : 10;
+        max_bounces = shouldClear ? 1 : 64;
     else
-        max_bounces = shouldClear ? 2 : 10;
+        max_bounces = shouldClear ? 2 : 64;
 
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 

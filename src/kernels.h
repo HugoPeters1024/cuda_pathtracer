@@ -178,11 +178,11 @@ HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangl
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
-    if (u < 0 | u > 1) return false;
+    if (u < 0 || u > 1) return false;
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
-    if (v < 0 | u + v > 1) return false;
+    if (v < 0 || u + v > 1) return false;
 
     t = dot(v0v2, qvec) * invDet;
     return t > 0;
@@ -382,7 +382,7 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
 {
-    const float3 newDir = reflect(ray.direction, -normal);
+    const float3 newDir = reflect(ray.direction, normal);
     return Ray(intersectionPos + EPS * newDir, newDir, ray.pixeli);
 }
 
@@ -454,12 +454,10 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
-//        if (!_NEE || state.fromSpecular) {
-            float2 uvCoords = normalToUv(ray.direction);
-            float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
-            state.accucolor += state.mask * sk;
-            stateBuf.setState(ray.pixeli, state);
- //       }
+        float2 uvCoords = normalToUv(ray.direction);
+        float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
+        state.accucolor += state.mask * sk;
+        stateBuf.setState(ray.pixeli, state);
         return;
     }
 
@@ -537,6 +535,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
     float random = rand(seed);
+    bool cullSecondary = false;
 
     if (random < material.transmit)
     {
@@ -599,8 +598,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             */
 
             // Choose an area light at random
-            seed = rand_xorshift(seed);
-            const uint lightSource = seed % DTriangleLights.size;
+            const uint lightSource = uint(fmin(rand(seed),0.99999999999f) * DTriangleLights.size);
             const TriangleLight& light = DTriangleLights[lightSource];
             const TriangleV& lightV = _GVertices[light.triangle_index];
             const TriangleD& lightD = _GVertexData[light.triangle_index];
@@ -630,7 +628,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             const float LNL = dot(lightNormal, shadowDir);
 
             // otherwise we are our own occluder or view the backface of the light
-            if (NL > 0 && LNL > 0)
+            if (NL > 0 && dot(-shadowDir, surfaceNormal) > 0 && LNL > 0)
             {
                 const float3& emission = _GMaterials[lightD.material].emission;
                 // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
@@ -651,6 +649,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
 
         const float3 r = SampleHemisphereCosine(colliderNormal, seed);
+        cullSecondary = dot(r, surfaceNormal) < 0;
         const float f = dot(colliderNormal, r);
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1-f) * colliderNormal, r, ray.pixeli);
 
@@ -661,12 +660,15 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.mask *= PI * BRDF;
     }
 
-    // Russian roulette
-    float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
-    if (rand(seed) <= p)
+    if (!cullSecondary)
     {
-        state.mask = state.mask / p;
-        DRayQueueNew.push(RayPacked(secondary));
+        // Russian roulette
+        float p = fmin(fmaxcompf(material.diffuse_color), 0.9f);
+        if (rand(seed) < p)
+        {
+            state.mask = state.mask / p;
+            DRayQueueNew.push(RayPacked(secondary));
+        }
     }
     stateBuf.setState(ray.pixeli, state);
 }
