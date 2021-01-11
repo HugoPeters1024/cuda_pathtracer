@@ -447,6 +447,13 @@ struct TraceStateSOA
     }
 };
 
+struct CudaTexture
+{
+    cudaTextureObject_t texture_id;
+    int width;
+    int height;
+};
+
 
 template <class T>
 struct AtomicQueue

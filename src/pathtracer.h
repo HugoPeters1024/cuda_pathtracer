@@ -18,7 +18,7 @@ private:
     DSizedBuffer<Plane> dPlaneBuffer;
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
-    cudaTextureObject_t dSkydomeTex;
+    CudaTexture dSkydomeTex;
     CDF d_skydomeCDF;
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
@@ -36,62 +36,43 @@ public:
 void Pathtracer::Init()
 {
     float4* h_skydome;
-    int swidth, sheight;
-    dSkydomeTex = loadTextureHDR("cave.hdr", h_skydome, swidth, sheight);
+    dSkydomeTex.texture_id = loadTextureHDR("cave.hdr", h_skydome, dSkydomeTex.width, dSkydomeTex.height);
 
     // Calculate the CDF
     CDF h_skydomeCDF;
-    h_skydomeCDF.values = (float*)malloc(swidth * sheight * sizeof(float));
-    h_skydomeCDF.cumValues = (float*)malloc(swidth * sheight * sizeof(float));
-    h_skydomeCDF.nrItems = swidth * sheight;
+    h_skydomeCDF.values = (float*)malloc(dSkydomeTex.width * dSkydomeTex.height * sizeof(float));
+    h_skydomeCDF.cumValues = (float*)malloc(dSkydomeTex.width * dSkydomeTex.height * sizeof(float));
+    h_skydomeCDF.nrItems = dSkydomeTex.width * dSkydomeTex.height;
     float totalEnergy = 0.0f;
-    for(uint y=0; y<sheight; y++)
+    for(uint y=0; y<dSkydomeTex.height; y++)
     {
-        for(uint x=0; x<swidth; x++)
+        for(uint x=0; x<dSkydomeTex.width; x++)
         {
-            const float energy = fmaxcompf(get3f(h_skydome[x + swidth * y]));
-            h_skydomeCDF.values[x + swidth * y] = energy;
+            const float energy = fmaxcompf(get3f(h_skydome[x + dSkydomeTex.width * y]));
+            h_skydomeCDF.values[x + dSkydomeTex.width * y] = energy;
             totalEnergy += energy;
-            h_skydomeCDF.cumValues[x + swidth * y] = totalEnergy;
+            h_skydomeCDF.cumValues[x + dSkydomeTex.width * y] = totalEnergy;
         }
     }
 
-    for(uint y=0; y<sheight; y++)
+    for(uint y=0; y<dSkydomeTex.height; y++)
     {
-        for(uint x=0; x<swidth; x++)
+        for(uint x=0; x<dSkydomeTex.width; x++)
         {
-            h_skydomeCDF.values[x + swidth * y] /= totalEnergy;
-            h_skydomeCDF.cumValues[x + swidth * y] /= totalEnergy;
+            h_skydomeCDF.values[x + dSkydomeTex.width * y] /= totalEnergy;
+            h_skydomeCDF.cumValues[x + dSkydomeTex.width * y] /= totalEnergy;
         }
     }
-
-    uint seed = 666;
-    float3 acc = make_float3(0);
-    float facc = 0;
-    for(uint i=0; i<100000; i++)
-    {
-        float2 uv = make_float2(rand(seed), rand(seed));
-        float3 n = uvToNormal(uv);
-        acc += n;
-        facc += rand(seed);
-       // printf("----------------------\n");
-        //printf("uv: %f, %f\n", uv.x, uv.y);
-       // printf("n: %f, %f, %f\n", n.x, n.y, n.z);
-    }
-    acc /= 100000;
-    facc /= 100000;
-    printf("navg: %f, %f, %f\n", acc.x, acc.y, acc.z);
-    printf("favg: %ff\n", facc);
 
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 
     free(h_skydome);
 
     d_skydomeCDF.nrItems = h_skydomeCDF.nrItems;
-    cudaSafe( cudaMalloc(&d_skydomeCDF.values, swidth * sheight * sizeof(float)) );
-    cudaSafe( cudaMalloc(&d_skydomeCDF.cumValues, swidth * sheight * sizeof(float)) );
-    cudaSafe( cudaMemcpy(d_skydomeCDF.values, h_skydomeCDF.values, swidth * sheight * sizeof(float), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpy(d_skydomeCDF.cumValues, h_skydomeCDF.cumValues, swidth * sheight * sizeof(float), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&d_skydomeCDF.values, dSkydomeTex.width * dSkydomeTex.height * sizeof(float)) );
+    cudaSafe( cudaMalloc(&d_skydomeCDF.cumValues, dSkydomeTex.width * dSkydomeTex.height * sizeof(float)) );
+    cudaSafe( cudaMemcpy(d_skydomeCDF.values, h_skydomeCDF.values, dSkydomeTex.width * dSkydomeTex.height * sizeof(float), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(d_skydomeCDF.cumValues, h_skydomeCDF.cumValues, dSkydomeTex.width * dSkydomeTex.height * sizeof(float), cudaMemcpyHostToDevice) );
 
     free(h_skydomeCDF.values);
     free(h_skydomeCDF.cumValues);

@@ -370,14 +370,7 @@ __device__ float3 SampleHemisphere(const float3& normal, uint& seed)
     const float r = sqrt(1.0f - u1 * u1);
     const float phi = 2.0f * PI * u2;
     const float3 sample = make_float3(cos(phi)*r, sin(phi)*r, u1);
-    const float3& w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = normalize(cross(w,u));
-
-    return normalize(make_float3(
-            dot(sample, make_float3(u.x, v.x, w.x)),
-            dot(sample, make_float3(u.y, v.y, w.y)),
-            dot(sample, make_float3(u.z, v.z, w.z))));
+    return dot(normal, sample) < 0 ? -sample : sample;
 }
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
@@ -441,7 +434,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, cudaTextureObject_t skydome, CDF d_skydomeCDF)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, float time, int bounce, CudaTexture skydome, CDF d_skydomeCDF)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -454,10 +447,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
-        float2 uvCoords = normalToUv(ray.direction);
-        float3 sk = get3f(tex2D<float4>(skydome, uvCoords.x, uvCoords.y));
-        state.accucolor += state.mask * sk;
-        stateBuf.setState(ray.pixeli, state);
+        //if (!_NEE || state.fromSpecular) {
+            float2 uvCoords = normalToUv(ray.direction);
+            float3 sk = get3f(tex2D<float4>(skydome.texture_id, uvCoords.x, uvCoords.y));
+            state.accucolor += state.mask * sk;
+            stateBuf.setState(ray.pixeli, state);
+       // }
         return;
     }
 
@@ -574,25 +569,24 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
-            // float r = rand(seed);
-            // binary search the cum values
-            // uint sample = binarySearch(d_skydomeCDF.cumValues, d_skydomeCDF.nrItems, r);
-            // sample = seed % d_skydomeCDF.nrItems;
-            //uint x = sample % WINDOW_WIDTH;
-            //uint y = sample / WINDOW_WIDTH;
-            //float2 uv = make_float2((float)x / (float)WINDOW_WIDTH, (float)y / (float)WINDOW_HEIGHT);
-            //float2 uv = make_float2(rand(seed), acos(1 - 2 * rand(seed)/PI));
             /*
-            float3 normal = normalize(make_float3(rand(seed)*2-1, rand(seed)*2-1, rand(seed)*2-1));  
+            float r = rand(seed);
+            // binary search the cum values
+            uint sample = binarySearch(d_skydomeCDF.cumValues, d_skydomeCDF.nrItems, r);
+            uint x = sample % skydome.width;
+            uint y = sample / skydome.width;
+            float2 uv = make_float2((float)x / (float)skydome.width, (float)y / (float)skydome.height);
+            float3 normal = uvToNormal(uv);
             if (dot(normal, colliderNormal) > 0)
             {
                 float2 uv = normalToUv(normal);
-                float3 lightSample = get3f(tex2D<float4>(skydome, uv.x, uv.y));
- //               float PDF = 1.0f / (d_skydomeCDF.values[sample] * d_skydomeCDF.nrItems);
-                float PDF = 1.0f;
-                state.light = state.mask * lightSample * BRDF * PI * PDF * 2.0f * dot(normal, colliderNormal);
+                float3 lightSample = get3f(tex2D<float4>(skydome.texture_id, uv.x, uv.y));
+                float PDF = 1.0f / (d_skydomeCDF.values[sample] * d_skydomeCDF.nrItems);
+                state.light = state.mask * lightSample * BRDF * PI * PDF * 4.0f;
 
-                Ray shadowRay(intersectionPos + EPS * normal, normal, ray.pixeli);
+                float3 farOut = intersectionPos + 10000 * normal;
+                Ray shadowRay(farOut, -normal, ray.pixeli);
+                shadowRay.length = 10000 - EPS;
                 DShadowRayQueue.push(shadowRay);
             }
             */
