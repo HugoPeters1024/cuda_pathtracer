@@ -95,9 +95,9 @@ HYBRID inline float rand(uint& seed)
     */
 }
 
-HYBRID inline uint getSeed(uint x, uint y, float time)
+HYBRID inline uint getSeed(uint x, uint y, uint randIdx)
 {
-    return wang_hash(wang_hash(x + WINDOW_WIDTH * y)*uint(time*10000000)+reinterpret_cast<uint&>(time));
+    return wang_hash(wang_hash(x + WINDOW_WIDTH * y)+randIdx);
 }
 
 HYBRID inline float at(const float3& v, uint i)

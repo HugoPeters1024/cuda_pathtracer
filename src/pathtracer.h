@@ -23,6 +23,7 @@ private:
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
     DSizedBuffer<TriangleLight> d_lights;
+    uint randIdx;
 
 
 public:
@@ -35,6 +36,7 @@ public:
 
 void Pathtracer::Init()
 {
+    randIdx = 0;
     float4* h_skydome;
     dSkydomeTex.texture_id = loadTextureHDR("cave.hdr", h_skydome, dSkydomeTex.width, dSkydomeTex.height);
 
@@ -171,7 +173,6 @@ void Pathtracer::Init()
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
-
     // Map the screen texture resource.
     cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
 
@@ -216,7 +217,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     //cudaSafe ( cudaDeviceSynchronize() );
     
     kernel_clear_rays<<<1,1>>>();
-    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, currentTime);
+    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, randIdx++);
 
 
     uint max_bounces;
@@ -232,7 +233,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, d_skydomeCDF);
+        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randIdx++, bounce, dSkydomeTex, d_skydomeCDF);
 
         // Sample the light source for every shadow ray
         if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
