@@ -201,6 +201,9 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         // sync NEE toggle
         cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
 
+        cudaSafe( cudaMemcpyAsync(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpyAsync(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
     }
 
@@ -225,14 +228,14 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     for(int bounce = 0; bounce < max_bounces; bounce++) {
 
         // Test for intersections with each of the rays,
-        uint kz = bounce == 0 ? 128 : 64;
+        uint kz = 64;
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
         kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, glfwGetTime(), bounce, dSkydomeTex, d_skydomeCDF);
 
         // Sample the light source for every shadow ray
-        if (_NEE) kernel_connect<<<NR_PIXELS / 128 + 1, 128>>>(traceBufSOA);
+        if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
 
         // swap the ray buffers and clear.
         kernel_swap_and_clear<<<1,1>>>();
@@ -245,9 +248,6 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
 void Pathtracer::Finish()
 {
-    cudaSafe( cudaMemcpyAsync(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpyAsync(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
-
     cudaSafe ( cudaDeviceSynchronize() );
 
     // Unmap the resource from cuda
