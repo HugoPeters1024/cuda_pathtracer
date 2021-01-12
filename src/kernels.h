@@ -211,10 +211,6 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
 
     // declare variables used in the loop
     float tnear, tfar;
-    bool bnear, bfar;
-    uint near_id;
-    uint start, end;
-    BVHNode near, far;
 
     const float3 invRayDir = 1.0f / ray.direction;
 
@@ -229,8 +225,8 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
     {
         if (current.isLeaf())
         {
-            start = current.t_start();
-            end = start + current.t_count();
+            const uint start = current.t_start();
+            const uint end = start + current.t_count();
             for(uint i=start; i<end; i++)
             {
                 if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
@@ -245,11 +241,11 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
         }
         else
         {
-            near_id = current.child1();
-            near = model.bvh[near_id];
-            far = model.bvh[near_id+1];
-            bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
-            bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
+            const uint near_id = current.child1();
+            const BVHNode& near = model.bvh[near_id];
+            const BVHNode& far = model.bvh[near_id+1];
+            const bool bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
+            const bool bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
             if (bnear & bfar) {
                 bool rev = tnear > tfar;
@@ -610,7 +606,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
             float u=rand(seed), v=rand(seed);
             if (u+v > 1.0f) { u = 1.0f-u; v = 1.0f-v; }
-            float3 samplePoint = v0 + u * v0v1 + v * v0v2;
+            const float3 samplePoint = v0 + u * v0v1 + v * v0v2;
 
             float3 shadowDir = intersectionPos - samplePoint;
             const float shadowLength = length(shadowDir);

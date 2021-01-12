@@ -120,7 +120,7 @@ inline Scene getSibenikScene()
     cubeMat.refractive_index = 1.1;
     cubeMat.glossy = 0.02;
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
-    cubeMat.emission = make_float3(8);
+    cubeMat.emission = make_float3(10);
     auto cubeMatId = scene.addMaterial(cubeMat);
 
     Material sibenikMat = Material::DIFFUSE(make_float3(0.2));
@@ -160,6 +160,10 @@ inline Scene getSibenikScene()
     GameObject sibenikObj(sibenikModel);
     sibenikObj.position.y = 12;
     scene.addObject(sibenikObj);
+
+    uint lucyModel = scene.addModel("lucy.obj",  0.005, make_float3(-3.1415926/2,0,3.1415926/2), make_float3(3,0,4.0), lucyMatId);
+    GameObject lucyObj(lucyModel);
+    scene.addObject(lucyObj);
 
     uint cubeModel = scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
     GameObject cubeObj(cubeModel);
