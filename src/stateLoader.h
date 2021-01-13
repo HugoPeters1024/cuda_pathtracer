@@ -29,7 +29,7 @@ static float parseFloat(const std::string& line)
 
 static Camera initialCamera() 
 {
-    return Camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5);
+    return Camera(make_float3(0,2,-3), make_float3(0,0,1), 1.5, 5, 0.01);
 }
 
 static void saveState(const Camera& camera)
@@ -40,7 +40,9 @@ static void saveState(const Camera& camera)
     {
         file << camera.eye.x << "|" << camera.eye.y << "|" << camera.eye.z << std::endl;
         file << camera.viewDir.x << "|" << camera.viewDir.y << "|" << camera.viewDir.z << std::endl;
-        file << camera.d;
+        file << camera.d << std::endl;
+        file << camera.focalLength << std::endl;
+        file << camera.aperture << std::endl;
         file.close();
     }
     else fprintf(stderr, "unable to open state file while saving\n");
@@ -59,7 +61,11 @@ static Camera readState()
         float3 viewDir = parseFloat3(line);
         getline(file, line);
         float d = parseFloat(line);
-        return Camera(eye, viewDir, d);
+        getline(file, line);
+        float focalLength = parseFloat(line);
+        getline(file, line);
+        float aperture = parseFloat(line);
+        return Camera(eye, viewDir, d, focalLength, aperture);
     } 
     else 
     {

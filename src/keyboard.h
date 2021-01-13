@@ -30,6 +30,8 @@ enum ACTION {
     ATTACH_7,
     ATTACH_8,
     ATTACH_9,
+
+    FOCUSS,
 };
 
 class Keyboard
@@ -125,5 +127,7 @@ void Keyboard::generateActionMap()
     action_map[ATTACH_7] = GLFW_KEY_7;
     action_map[ATTACH_8] = GLFW_KEY_8;
     action_map[ATTACH_9] = GLFW_KEY_9;
+
+    action_map[FOCUSS] = GLFW_KEY_X;
 }
 #endif

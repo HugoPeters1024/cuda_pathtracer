@@ -165,8 +165,7 @@ int main(int argc, char** argv) {
 
     bool shouldClear = true;
     float frameTime;
-    while (!glfwWindowShouldClose(window))
-    {
+    while (!glfwWindowShouldClose(window)) {
         tick++;
         if (shouldClear) samples = 0;
         samples++;
@@ -221,6 +220,20 @@ int main(int argc, char** argv) {
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindTexture(GL_TEXTURE_2D, 0);
 
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        {
+            double mousex, mousey;
+            glfwGetCursorPos(window, &mousex, &mousey);
+            const Ray centerRay = camera.getRay(uint(mousex), WINDOW_HEIGHT-uint(mousey));
+            const HitInfo hitInfo = traverseTopLevel<false>(centerRay);
+            if (hitInfo.intersected()) 
+            {
+                camera.focalLength = hitInfo.t;
+                scene.invalidate();
+                printf("Focal length: %f\n", camera.focalLength);
+            }
+        }
+
         // Handle IO and swap the backbuffer
         if (scene.attached == 0) camera.update(window);
         shouldClear = camera.hasMoved() || scene.invalid;
@@ -232,6 +245,7 @@ int main(int argc, char** argv) {
             scene.pointLights[0].color *= 1.03;
             shouldClear = true;
         }
+
 
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }

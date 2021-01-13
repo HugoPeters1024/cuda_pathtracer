@@ -552,13 +552,17 @@ public:
     float3 eye, viewDir;
     float3 lt, u, v;
     float d;
+    float focalLength;
+    float aperture;
 
-    Camera(float3 eye, float3 viewDir, float d) : eye(eye), viewDir(viewDir), d(d) {}
+    Camera(float3 eye, float3 viewDir, float d, float focalLength, float aperture) 
+        : eye(eye), viewDir(viewDir), d(d), focalLength(focalLength), aperture(aperture) {}
 
     void update(GLFWwindow* window) {
         has_moved = false;
         float3 oldEye = eye;
         float3 oldViewDir = viewDir;
+        float oldAperture = aperture;
 
         float speed = 0.08f;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) eye += speed * viewDir;
@@ -573,9 +577,12 @@ public:
         if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) viewDir.y -= look_speed;
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) viewDir -= look_speed * side;
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) viewDir += look_speed * side;
+
+        if (glfwGetKey(window, GLFW_KEY_PAGE_UP) == GLFW_PRESS) aperture += 0.001;
+        if (glfwGetKey(window, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS) aperture -= 0.001;
         viewDir = normalize(viewDir);
         recalculate();
-        has_moved = (oldEye != eye || oldViewDir != viewDir);
+        has_moved = (oldEye != eye || oldViewDir != viewDir || aperture != oldAperture);
     }
 
     inline bool hasMoved() const { return has_moved; }
@@ -583,10 +590,20 @@ public:
     HYBRID inline Ray getRay(unsigned int x, unsigned int y, uint& seed) const {
         float xf = ((float)x + rand(seed)) / WINDOW_WIDTH;
         float yf = ((float)y + rand(seed)) / WINDOW_HEIGHT;
-        float3 point = distort(lt + xf * u + yf * v);
+        float3 origin = distort(lt + xf * u + yf * v);
+        float3 direction = origin - eye;
+        const float correction = length(direction);
+        direction /= correction;
+        const float3 focalPoint = origin + (focalLength-d) * direction;
+        const float offsetR = sqrtf(rand(seed));
+        const float offsetA = rand(seed) * 2.0f * PI;
+        const float2 focalOffset = make_float2(offsetR * sinf(offsetA), offsetR * cosf(offsetA));
+        origin += aperture * (focalOffset.x * u + focalOffset.y * v);
+        direction = normalize(focalPoint - origin);
+        if (dot(direction, viewDir) < 0) direction = -direction;
 
-        float3 direction = normalize(point - eye);
-        return Ray(eye, direction, x,y);
+        // recalculate the pixel index
+        return Ray(origin - correction * direction, direction, x,y);
     }
 
     HYBRID inline Ray getRay(unsigned int x, unsigned int y) const {
@@ -603,8 +620,8 @@ public:
         float3 center = eye + d * viewDir;
         float3 fromCenter = p - center;
         float r = length(p - center);
-        float rd = r + 0.2 * r * r * r;
-        return center + fromCenter * (rd/r);
+        float rd = r + 0.2f * r * r * r;
+        return center + fromCenter * (rd/fmax(0.0001f,r));
     }
 };
 
