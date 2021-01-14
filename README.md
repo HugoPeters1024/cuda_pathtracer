@@ -25,11 +25,25 @@ Then you can build with `cmake --build .` which creates the `pathtracer` executa
 - UI          - Grow and shrink the area light with index 0
 - N           - Toggle Next Event Estimation
 - Space       - Toggle Raytracer /  Pathtracer
+- Page UP     - Widen aperture
+- Page DOWN   - Close the aperture
+- Left Mouse Click - Set the focal distance to the object you click on (aka focus on that object)
 
 To select a scene pass a value to the `--scene` command line option. The following scenes are available:
 
 - outside (default)
 - sibenik 
+- minecraft
+- 2mtris
+
+## new in version 3
+
+- Bokeh by sampling the lens (offsetting the orgin and then refocussing on the focal plane)
+- Using blue noise in the first 5 samples before continuing fully randomized. Especially effective on the rough edges of the normal maps.
+- Further improved performance by reducing stack traffic and branching in the traversal algorithm.
+- Actually correct results. Previous version had a temporal correlation in the seed.
+- A CDF over the skydome has been implemented but disabled for performance reasons.
+- An attempt to sort the rays in eight buckets based the octant of their direction vector but this did not yield a netto performance increase. Quite a significant slowdown in fact.
 
 ## new in version 2
 

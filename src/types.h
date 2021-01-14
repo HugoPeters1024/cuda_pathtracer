@@ -625,5 +625,17 @@ public:
     }
 };
 
+struct RandState
+{
+    uint sampleIdx;
+    uint randIdx;
+    cudaTextureObject_t blueNoise;
+    float2 blueNoiseSize;
+    float2 blueNoiseOffset;
+    float2 kernelPos;
+    uint seed;
+};
+
+
 
 #endif

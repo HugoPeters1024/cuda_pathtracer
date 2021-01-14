@@ -23,7 +23,7 @@ private:
     Instance* d_instances;
     TopLevelBVH* d_topBvh;
     DSizedBuffer<TriangleLight> d_lights;
-    uint randIdx;
+    RandState randState;
 
 
 public:
@@ -36,7 +36,14 @@ public:
 
 void Pathtracer::Init()
 {
-    randIdx = 0;
+    randState.randIdx = 0;
+    randState.sampleIdx = 0;
+    int blueNoiseW, blueNoiseH;
+    randState.blueNoise = loadTextureL("bluenoise.png", blueNoiseW, blueNoiseH);
+    randState.blueNoiseSize = make_float2((float)blueNoiseW, (float)blueNoiseH);
+    randState.blueNoiseOffset = make_float2(0);
+
+
     float4* h_skydome;
     dSkydomeTex.texture_id = loadTextureHDR("cave.hdr", h_skydome, dSkydomeTex.width, dSkydomeTex.height);
 
@@ -217,7 +224,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     //cudaSafe ( cudaDeviceSynchronize() );
     
     kernel_clear_rays<<<1,1>>>();
-    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, randIdx++);
+    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, randState);
+    randState.randIdx++;
 
 
     uint max_bounces;
@@ -233,7 +241,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
         // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randIdx++, bounce, dSkydomeTex, d_skydomeCDF);
+        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF);
+        randState.randIdx++;
 
         // Sample the light source for every shadow ray
         if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
@@ -243,7 +252,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     }
 
     // Write the final state accumulator into the texture
-    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj);
+    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
+    randState.sampleIdx++;
 }
 
 

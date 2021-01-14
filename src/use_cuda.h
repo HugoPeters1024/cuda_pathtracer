@@ -163,6 +163,42 @@ inline cudaTextureObject_t loadTexture(const char* filename)
   return ret;
 }
 
+inline cudaTextureObject_t loadTextureL(const char* filename, int& width, int& height)
+{
+  int nrChannels;
+  stbi_ldr_to_hdr_gamma(1.0f);
+  float* data = stbi_loadf(filename, &width, &height, &nrChannels, 1);
+
+  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+  cudaArray* cuArray;
+  cudaSafe( cudaMallocArray(&cuArray, &channelDesc, width, height) );
+  cudaSafe( cudaMemcpyToArray(cuArray, 0, 0, data, width*height*sizeof(float), cudaMemcpyHostToDevice));
+
+  cudaResourceDesc resDesc;
+  memset(&resDesc, 0, sizeof(resDesc));
+  resDesc.resType = cudaResourceTypeArray;
+  resDesc.res.array.array = cuArray;
+
+  cudaTextureDesc texDesc;
+  memset(&texDesc, 0, sizeof(texDesc));
+  texDesc.normalizedCoords = true;
+  texDesc.addressMode[0] = cudaAddressModeWrap;
+  texDesc.addressMode[1] = cudaAddressModeWrap;
+  texDesc.filterMode = cudaFilterModeLinear;
+  texDesc.readMode = cudaReadModeElementType;
+
+  cudaResourceViewDesc viewDesc;
+  memset(&viewDesc, 0, sizeof(viewDesc));
+  viewDesc.format = cudaResViewFormatFloat1;
+  viewDesc.width = width * sizeof(float);
+
+  cudaTextureObject_t ret = 0;
+  cudaSafe(cudaCreateTextureObject(&ret, &resDesc, &texDesc, nullptr));
+
+  stbi_image_free(data);
+  return ret;
+}
+
 inline cudaTextureObject_t loadTextureHDR(const char* filename, float4*& h_buffer, int& width, int& height)
 {
   int nrChannels;

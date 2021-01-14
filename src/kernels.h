@@ -17,6 +17,17 @@ __device__ inline void swapc(T& left, T& right)
 #define swapc std::swap
 #endif
 
+__device__ inline float rand(RandState& randState)
+{
+    if (randState.sampleIdx < 5)
+    {
+        randState.kernelPos += make_float2(rand(randState.seed), rand(randState.seed));
+        const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
+        return tex2D<float>(randState.blueNoise, uv.x, uv.y);
+    }
+    return rand(randState.seed);
+}
+
 /*
 HYBRID inline float2 normalToUv(const float3& normal)
 {
@@ -340,9 +351,9 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 }
 
 
-__device__ float3 SampleHemisphereCosine(const float3& normal, uint& seed)
+__device__ float3 SampleHemisphereCosine(const float3& normal, RandState& randState)
 {
-    float r0 = rand(seed), r1 = rand(seed);
+    float r0 = rand(randState), r1 = rand(randState);
     float r = sqrtf(r0);
     float theta = 2 * PI * r1;
     float x = r * cosf(theta);
@@ -410,12 +421,12 @@ __global__ void kernel_clear_state(TraceStateSOA state)
     state.masks[i] = make_float4(1.0f,1.0f,1.0f,__int_as_float(1));
 }
 
-__global__ void kernel_generate_primary_rays(Camera camera, uint randIdx)
+__global__ void kernel_generate_primary_rays(Camera camera, RandState randState)
 {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     CUDA_LIMIT(x,y);
-    uint seed = getSeed(x,y,randIdx);
+    uint seed = getSeed(x,y,randState.randIdx);
     RayPacked ray = RayPacked(camera.getRay(x,y,seed));
     DRayQueue.push(ray);
 }
@@ -430,7 +441,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, uint randIdx, int bounce, CudaTexture skydome, CDF d_skydomeCDF)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -439,7 +450,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     const uint x = ray.pixeli % WINDOW_WIDTH;
     const uint y = ray.pixeli / WINDOW_WIDTH;
-    uint seed = getSeed(x,y,randIdx);
+    uint seed = getSeed(x,y,randState.randIdx);
+    randState.seed = seed;
+    randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
@@ -525,7 +538,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
-    float random = rand(seed);
+    float random = rand(randState);
     bool cullSecondary = false;
 
     if (random < material.transmit)
@@ -542,11 +555,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // Ray can turn into a reflection ray due to fresnell
         float reflected;
         secondary = getRefractRay(ray, colliderNormal, intersectionPos, material, inside, reflected);
-        if (rand(seed) < reflected) {
+        if (rand(randState) < reflected) {
             state.mask *= material.diffuse_color;
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         }
-        float3 noiseDir = SampleHemisphereCosine(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, randState);
         secondary.direction = secondary.direction * (1.0f - material.glossy) + material.glossy * noiseDir;
     }
     else if (random - material.transmit < material.reflect)
@@ -554,7 +567,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.fromSpecular = true;
         state.mask *= material.diffuse_color;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
-        float3 noiseDir = SampleHemisphereCosine(secondary.direction, seed);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, randState);
         secondary.direction = secondary.direction * (1.0f-material.glossy) + material.glossy * noiseDir;
     }
     else 
@@ -588,7 +601,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             */
 
             // Choose an area light at random
-            const uint lightSource = uint(fmin(rand(seed),0.99999999999f) * DTriangleLights.size);
+            const uint lightSource = uint(fmin(rand(randState),0.99999999999f) * DTriangleLights.size);
             const TriangleLight& light = DTriangleLights[lightSource];
             const TriangleV& lightV = _GVertices[light.triangle_index];
             const TriangleD& lightD = _GVertexData[light.triangle_index];
@@ -604,7 +617,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             const float3 cr = cross(v0v1, v0v2);
             const float crLength = length(cr);
 
-            float u=rand(seed), v=rand(seed);
+            float u=rand(randState), v=rand(randState);
             if (u+v > 1.0f) { u = 1.0f-u; v = 1.0f-v; }
             const float3 samplePoint = v0 + u * v0v1 + v * v0v2;
 
@@ -638,7 +651,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
 
 
-        const float3 r = SampleHemisphereCosine(colliderNormal, seed);
+        const float3 r = SampleHemisphereCosine(colliderNormal, randState);
         cullSecondary = dot(r, surfaceNormal) < 0;
         const float f = dot(colliderNormal, r);
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1-f) * colliderNormal, r, ray.pixeli);
@@ -654,7 +667,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     {
         // Russian roulette
         float p = fmin(fmaxcompf(material.diffuse_color), 0.9f);
-        if (rand(seed) < p)
+        if (rand(randState) < p)
         {
             state.mask = state.mask / p;
             DRayQueueNew.push(RayPacked(secondary));
@@ -677,14 +690,18 @@ __global__ void kernel_connect(TraceStateSOA stateBuf)
     stateBuf.accucolors[shadowRay.pixeli] += make_float4(light,0.0f);
 }
 
-__global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceObject_t texRef)
+__global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceObject_t texRef, RandState randState)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
     const uint x = i % WINDOW_WIDTH;
     const uint y = i / WINDOW_WIDTH;
 
+//    const float xf = (float)x / randState.blueNoiseSize.x;
+ //   const float yf = (float)y / randState.blueNoiseSize.y;
+
     float3 color = get3f(stateBuf.accucolors[i]);
+  //  color = make_float3(tex2D<float>(randState.blueNoise, xf, yf));
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = fmaxf(make_float3(0.0f), get3f(old_color_all));
