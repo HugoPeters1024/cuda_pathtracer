@@ -242,10 +242,16 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
             {
                 if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
                 {
-                    hitInfo.primitive_id = i;
-                    hitInfo.t = t;
-                    if (anyIntersection) return true;
-                    intersected = true;
+                    if (anyIntersection)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        hitInfo.primitive_id = i;
+                        hitInfo.t = t;
+                        intersected = true;
+                    }
                 }
             }
             needPop = true;
@@ -296,10 +302,16 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
     {
         if (raySphereIntersect(ray, _GSpheres[i], t) && t < hitInfo.t)
         {
-            hitInfo.primitive_id = i;
-            hitInfo.primitive_type = SPHERE;
-            hitInfo.t = t;
-            if (anyIntersection) return hitInfo;
+            if (anyIntersection)
+            {
+                return hitInfo;
+            }
+            else
+            {
+                hitInfo.primitive_id = i;
+                hitInfo.primitive_type = SPHERE;
+                hitInfo.t = t;
+            }
         }
     }
 
@@ -307,10 +319,16 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
     {
         if (rayPlaneIntersect(ray, _GPlanes[i], t) && t < hitInfo.t)
         {
-            hitInfo.primitive_id = i;
-            hitInfo.primitive_type = PLANE;
-            hitInfo.t = t;
-            if (anyIntersection) return hitInfo;
+            if (anyIntersection)
+            {
+                return hitInfo;
+            }
+            else
+            {
+                hitInfo.primitive_id = i;
+                hitInfo.primitive_type = PLANE;
+                hitInfo.t = t;
+            }
         }
     }
 
@@ -335,9 +353,15 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
             Ray transformedRay = transformRay(ray, instance.invTransform);
             if (traverseBVHStack<anyIntersection>(transformedRay, hitInfo, instance))
             {
-                hitInfo.primitive_type = TRIANGLE;
-                hitInfo.instance_id = current.leaf;
-                if (anyIntersection) return hitInfo;
+                if (anyIntersection)
+                {
+                    return hitInfo;
+                }
+                else
+                {
+                    hitInfo.primitive_type = TRIANGLE;
+                    hitInfo.instance_id = current.leaf;
+                }
             }
         }
         else
@@ -450,9 +474,6 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     const uint x = ray.pixeli % WINDOW_WIDTH;
     const uint y = ray.pixeli / WINDOW_WIDTH;
-    uint seed = getSeed(x,y,randState.randIdx);
-    randState.seed = seed;
-    randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
         // We consider the skydome a lightsource in the set of random bounces
@@ -464,6 +485,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
        // }
         return;
     }
+
+    randState.seed = getSeed(x,y,randState.randIdx);
+    randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
@@ -578,6 +602,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
+            // Skydome CDF
             /*
             float r = rand(seed);
             // binary search the cum values
@@ -652,6 +677,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
 
         const float3 r = SampleHemisphereCosine(colliderNormal, randState);
+
+        // make sure rays don't go into the surface
         cullSecondary = dot(r, surfaceNormal) < 0;
         const float f = dot(colliderNormal, r);
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1-f) * colliderNormal, r, ray.pixeli);
