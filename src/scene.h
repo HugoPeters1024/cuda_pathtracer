@@ -132,6 +132,8 @@ public:
     std::vector<std::function<void(Scene&, const Keyboard&, float)>> handlers;
     bool invalid;
     uint attached;
+    uint interactive_depth = 1;
+    uint interactive_samples = 1;
 
     MATERIAL_ID addMaterial(Material material)
     {

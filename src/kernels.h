@@ -19,9 +19,9 @@ __device__ inline void swapc(T& left, T& right)
 
 __device__ inline float rand(RandState& randState)
 {
-    if (randState.sampleIdx < 5)
+    if (randState.sampleIdx < 10)
     {
-        randState.kernelPos += make_float2(rand(randState.seed), rand(randState.seed));
+        randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
         return tex2D<float>(randState.blueNoise, uv.x, uv.y);
     }
@@ -226,6 +226,7 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
     const float3 invRayDir = 1.0f / ray.direction;
 
     const Model& model = _GModels[instance.model_id];
+    const TriangleV* vertices = _GVertices;
     BVHNode current = model.bvh[0];
     if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
 
@@ -240,7 +241,7 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
             const uint end = start + current.t_count();
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, _GVertices[i], t, u, v) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, vertices[i], t, u, v) && t < hitInfo.t)
                 {
                     if (anyIntersection)
                     {
@@ -488,6 +489,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     randState.seed = getSeed(x,y,randState.randIdx);
     randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
+    randState.blueNoiseOffset = make_float2(rand(randState.seed), rand(randState.seed));
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.

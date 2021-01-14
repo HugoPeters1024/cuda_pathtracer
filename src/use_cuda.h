@@ -184,7 +184,7 @@ inline cudaTextureObject_t loadTextureL(const char* filename, int& width, int& h
   texDesc.normalizedCoords = true;
   texDesc.addressMode[0] = cudaAddressModeWrap;
   texDesc.addressMode[1] = cudaAddressModeWrap;
-  texDesc.filterMode = cudaFilterModeLinear;
+  texDesc.filterMode = cudaFilterModePoint;
   texDesc.readMode = cudaReadModeElementType;
 
   cudaResourceViewDesc viewDesc;

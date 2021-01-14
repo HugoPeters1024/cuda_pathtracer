@@ -213,47 +213,52 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         cudaSafe( cudaMemcpyAsync(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
+        randState.sampleIdx = 0;
     }
 
 
-    kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
+    for(uint sample = 0; sample < (shouldClear ? scene.interactive_depth : 1); sample++)
+    {
 
-    // Generate primary rays in the ray queue
-    //rayQueue.clear();
-    //rayQueue.syncToDevice(DRayQueue);
-    //cudaSafe ( cudaDeviceSynchronize() );
-    
-    kernel_clear_rays<<<1,1>>>();
-    kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, randState);
-    randState.randIdx++;
+        kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
 
-
-    uint max_bounces;
-    if (_NEE)
-        max_bounces = shouldClear ? 1 : 64;
-    else
-        max_bounces = shouldClear ? 2 : 64;
-
-    for(int bounce = 0; bounce < max_bounces; bounce++) {
-
-        // Test for intersections with each of the rays,
-        uint kz = 64;
-        kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
-
-        // Foreach intersection, possibly create shadow rays and secondary rays.
-        kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF);
+        // Generate primary rays in the ray queue
+        //rayQueue.clear();
+        //rayQueue.syncToDevice(DRayQueue);
+        //cudaSafe ( cudaDeviceSynchronize() );
+        
+        kernel_clear_rays<<<1,1>>>();
+        kernel_generate_primary_rays<<<dimBlock, dimThreads>>>(camera, randState);
         randState.randIdx++;
 
-        // Sample the light source for every shadow ray
-        if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
 
-        // swap the ray buffers and clear.
-        kernel_swap_and_clear<<<1,1>>>();
+        uint max_bounces;
+        if (_NEE)
+            max_bounces = shouldClear ? scene.interactive_depth : 64;
+        else
+            max_bounces = shouldClear ? scene.interactive_depth+1 : 64;
+
+        for(int bounce = 0; bounce < max_bounces; bounce++) {
+
+            // Test for intersections with each of the rays,
+            uint kz = 64;
+            kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
+
+            // Foreach intersection, possibly create shadow rays and secondary rays.
+            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF);
+            randState.randIdx++;
+
+            // Sample the light source for every shadow ray
+            if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
+
+            // swap the ray buffers and clear.
+            kernel_swap_and_clear<<<1,1>>>();
+        }
+
+        // Write the final state accumulator into the texture
+        kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
+        randState.sampleIdx++;
     }
-
-    // Write the final state accumulator into the texture
-    kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
-    randState.sampleIdx++;
 }
 
 
