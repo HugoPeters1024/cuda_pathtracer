@@ -282,13 +282,13 @@ inline __host__ __device__ float3 operator-(const float3 &a)
 // min component
 static __inline__ __host__ __device__ float fmincompf(float3 a)
 {
-    return min(a.x, min(a.y, a.z));
+    return fminf(a.x, fminf(a.y, a.z));
 }
 
 // max component
 static __inline__ __host__ __device__ float fmaxcompf(float3 a)
 {
-    return max(a.x, max(a.y, a.z));
+    return fmaxf(a.x, fmaxf(a.y, a.z));
 }
 
 // min

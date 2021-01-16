@@ -17,35 +17,18 @@ __device__ inline void swapc(T& left, T& right)
 #define swapc std::swap
 #endif
 
-__device__ inline float rand(RandState& randState)
+HYBRID inline float rand(RandState& randState)
 {
+#ifdef __CUDA_ARCH__
     if (randState.sampleIdx < 10)
     {
         randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
         return tex2D<float>(randState.blueNoise, uv.x, uv.y);
     }
+#endif
     return rand(randState.seed);
 }
-
-/*
-HYBRID inline float2 normalToUv(const float3& normal)
-{
-    float u = atan2(normal.x, normal.z) / (2.0f*PI) + 0.5f;
-    float v = normal.y * 0.5f + 0.5f;
-    return make_float2(u,v);
-}
-
-HYBRID inline float3 uvToNormal(const float2& uv)
-{
-    float theta = 2.0f * PI * (uv.x - 0.5);
-    float phi = PI * (uv.y - 0.5);
-    return make_float3(
-            cos(theta) * sin(phi),
-            sin(theta) * sin(phi),
-            cos(phi));
-}
- */
 
 HYBRID inline float2 normalToUv(const float3& n)
 {
@@ -64,8 +47,6 @@ HYBRID inline float3 uvToNormal(const float2& uv)
     n.z = cos(theta) * sin(phi);
     n.x = sin(theta) * sin(phi);
     n.y = cos(phi);
-
-    //n = normalize(n);
     return n;
 }
 
@@ -380,17 +361,17 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 }
 
 
-__device__ float3 SampleHemisphereCosine(const float3& normal, RandState& randState)
+HYBRID float3 SampleHemisphereCosine(const float3& normal, RandState& randState)
 {
     float r0 = rand(randState), r1 = rand(randState);
     float r = sqrtf(r0);
     float theta = 2 * PI * r1;
     float x = r * cosf(theta);
     float y = r * sinf(theta);
-    float3 sample =  make_float3( x, y, sqrt(1 - r0));
+    float3 sample =  make_float3( x, y, sqrtf(1 - r0));
 
     const float3& w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 u = normalize(cross((fabsf(w.x) > .1f ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
     float3 v = normalize(cross(w,u));
 
     return normalize(make_float3(
@@ -399,14 +380,56 @@ __device__ float3 SampleHemisphereCosine(const float3& normal, RandState& randSt
             dot(sample, make_float3(u.z, v.z, w.z))));
 }
 
-__device__ float3 SampleHemisphere(const float3& normal, uint& seed)
+HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket)
 {
-    float u1 = rand(seed);
-    float u2 = rand(seed);
-    const float r = sqrt(1.0f - u1 * u1);
+    const float sample = rand(randState);
+    float acc = 0.0f;
+    sampleBucket = -1;
+    do
+    {
+        acc += triangleD.radianceCache[++sampleBucket];
+    }
+    while (acc < sample);
+
+    const float phiMin = (sampleBucket < 4) ? 0 : (1.0f / 3.0f) * PI;
+    const float phiMax = (sampleBucket < 4) ? (1.0f / 3.0f) * PI : 0.5f * PI;
+    const uint thetai = sampleBucket % 4;
+    const float thetaMin = thetai * 0.5f * PI;
+    const float thetaMax = (thetai+1.0f) * 0.5f * PI;
+
+    const float phiR = rand(randState);
+    const float thetaR = rand(randState);
+    const float phi = acosf(cosf(phiMin) - phiR*(cosf(phiMin)-cosf(phiMax)));
+    const float theta = thetaMin * thetaR + thetaMax * (1-thetaR);
+    const float3 sampleVec = make_float3(cosf(theta) * sinf(phi), sinf(theta) * sinf(phi), cosf(phi));
+
+    const float3& w = normal;
+    float3 u = normalize(cross((fabsf(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 v = normalize(cross(w,u));
+
+    return normalize(make_float3(
+            dot(sampleVec, make_float3(u.x, v.x, w.x)),
+            dot(sampleVec, make_float3(u.y, v.y, w.y)),
+            dot(sampleVec, make_float3(u.z, v.z, w.z))));
+}
+
+
+HYBRID float3 SampleHemisphere(const float3& normal, RandState& randState)
+{
+    const float u1 = rand(randState);
+    const float u2 = rand(randState);
+    const float r = sqrtf(1.0f - u1 * u1);
     const float phi = 2.0f * PI * u2;
     const float3 sample = make_float3(cos(phi)*r, sin(phi)*r, u1);
-    return dot(normal, sample) < 0 ? -sample : sample;
+
+    const float3& w = normal;
+    float3 u = normalize(cross((fabs(w.x) > .1f ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 v = normalize(cross(w,u));
+
+    return normalize(make_float3(
+            dot(sample, make_float3(u.x, v.x, w.x)),
+            dot(sample, make_float3(u.y, v.y, w.y)),
+            dot(sample, make_float3(u.z, v.z, w.z))));
 }
 
 HYBRID Ray getReflectRay(const Ray& ray, const float3& normal, const float3& intersectionPos)
@@ -682,18 +705,31 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         }
 
 
-        const float3 r = SampleHemisphereCosine(colliderNormal, randState);
+        if (!_NEE)
+        {
+            int bucket;
+            TriangleD* triangleD = _GVertexData + hitInfo.primitive_id;
+            const float3 r = hitInfo.primitive_type == TRIANGLE
+                    ? SampleHemisphereCached(surfaceNormal, randState, *triangleD, bucket)
+                    : SampleHemisphere(colliderNormal, randState);
+            cullSecondary = dot(r, surfaceNormal) < 0;
+            const float f = fmaxf(dot(colliderNormal, r),0.0f);
+            secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
+            state.mask *= 2.0f * PI * BRDF * f;
+        }
+        else {
+            const float3 r = SampleHemisphereCosine(colliderNormal, randState);
 
-        // make sure rays don't go into the surface
-        cullSecondary = dot(r, surfaceNormal) < 0;
-        const float f = dot(colliderNormal, r);
-        secondary = Ray(intersectionPos + EPS * f * r + EPS * (1-f) * colliderNormal, r, ray.pixeli);
+            // make sure rays don't go into the surface
+            cullSecondary = dot(r, surfaceNormal) < 0;
+            const float f = dot(colliderNormal, r);
+            secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
+            // Writing this explicitly leads to NaNs
+            //float NL = dot(colliderNormal, secondary.direction);
+            //float PDF = NL / PI;
 
-        // Writing this explicitly leads to NaNs
-        //float NL = dot(colliderNormal, secondary.direction);
-        //float PDF = NL / PI;
-
-        state.mask *= PI * BRDF;
+            state.mask *= PI * BRDF;
+        }
     }
 
     if (!cullSecondary)

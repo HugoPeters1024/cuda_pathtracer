@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 project(pathtracer CUDA CXX)
 
 set(CMAKE_CUDA_STANDARD 14)
-set(CMAKE_CXX_FLAGS "-O3")
+set(CMAKE_CXX_FLAGS "-O0")
 
 
 file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cpp")
@@ -18,9 +18,9 @@ set_target_properties(
         CUDA_SEPARABLE_COMPILATION ON)
 
 target_compile_options(pathtracer PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       --use_fast_math -O3 -arch=compute_50 -code=sm_50
-                       -Xptxas=-O3
-                       -Xcompiler=-fopenmp,-g,-O3
+                       --use_fast_math -O0 -arch=compute_50 -code=sm_50
+                       -Xptxas=-O0
+                       -Xcompiler=-fopenmp,-g,-O0
                        >)
 
 # We want to use c++ inline with cuda, so set nvcc as primary compiler

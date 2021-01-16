@@ -327,7 +327,9 @@ public:
 
                 MATERIAL_ID mat = useMtl ? material_ids[mit] : material;
                 allVertices.push_back(TriangleV(v0, v1, v2));
-                allVertexData.push_back(TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, mat));
+                TriangleD triangleD = TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, mat);
+                for(uint r=0; r<8; r++) triangleD.radianceCache[r] = 1.0f / 8.0f;
+                allVertexData.push_back(triangleD);
                 model.nrTriangles++;
             }
         }

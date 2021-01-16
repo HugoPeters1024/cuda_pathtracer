@@ -73,6 +73,22 @@ void Pathtracer::Init()
         }
     }
 
+    randState.sampleIdx = 10;
+    const TriangleD& triangleD = scene.allVertexData[0];
+    int accB[8];
+    for(uint r=0; r<8; r++) accB[r]=0;
+    float3 acc = make_float3(0);
+    for(uint i=0; i<100000; i++)
+    {
+        int bucket;
+        float3 sample = SampleHemisphereCached(triangleD.normal, randState, triangleD, bucket);
+        assert(dot(sample, triangleD.normal) >= 0);
+        acc += sample;
+        accB[bucket]++;
+    }
+
+    acc /= 100000;
+
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 
     free(h_skydome);
