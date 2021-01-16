@@ -73,6 +73,7 @@ void Pathtracer::Init()
         }
     }
 
+    /*
     randState.sampleIdx = 10;
     const TriangleD& triangleD = scene.allVertexData[0];
     int accB[8];
@@ -88,6 +89,7 @@ void Pathtracer::Init()
     }
 
     acc /= 100000;
+     */
 
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 

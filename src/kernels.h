@@ -20,7 +20,7 @@ __device__ inline void swapc(T& left, T& right)
 HYBRID inline float rand(RandState& randState)
 {
 #ifdef __CUDA_ARCH__
-    if (randState.sampleIdx < 10)
+    if (randState.sampleIdx < 100)
     {
         randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
@@ -32,8 +32,8 @@ HYBRID inline float rand(RandState& randState)
 
 HYBRID inline float2 normalToUv(const float3& n)
 {
-    float theta = atan2(n.x, n.z) / (2.0f * PI);
-    float phi = -acos(n.y) / PI;
+    float theta = atan2f(n.x, n.z) / (2.0f * PI);
+    float phi = -acosf(n.y) / PI;
     return make_float2(theta, phi);
 }
 
@@ -44,9 +44,9 @@ HYBRID inline float3 uvToNormal(const float2& uv)
     float phi = -uv.y * PI;
 
     float3 n;
-    n.z = cos(theta) * sin(phi);
-    n.x = sin(theta) * sin(phi);
-    n.y = cos(phi);
+    n.z = cosf(theta) * sinf(phi);
+    n.x = sinf(theta) * sinf(phi);
+    n.y = cosf(phi);
     return n;
 }
 
@@ -115,12 +115,12 @@ HYBRID bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
 {
     float3 OC = ray.origin - sphere.pos;
     float a = dot(ray.direction, ray.direction);
-    if (fabs(a) < 0.001) return false;
+    if (fabsf(a) < 0.001) return false;
     float b = 2 * dot(ray.direction, OC);
     float c = dot(OC, OC) - sphere.radius * sphere.radius;
     float det = b*b - 4 * a *c;
     if (det < 0) return false;
-    det = sqrt(det);
+    det = sqrtf(det);
     float tmin = (-b - det) / (2*a);
     float tmax = (-b + det) / (2*a);
     t = tmin;
@@ -131,7 +131,7 @@ HYBRID bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
 HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
 {
     float q = dot(normalize(ray.direction), plane.normal);
-    if (fabs(q)<EPS) return false;
+    if (fabsf(q)<EPS) return false;
     t = -(dot(ray.origin, plane.normal) + plane.d)/q;
     return t>0;
 }
@@ -143,7 +143,7 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
     float3 t1 = (box.vmax - rayOrigin) * invRayDir;
     float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
     tmin = fmaxcompf(tmin3);
-    return fmincompf(tmax3) >= fmax(0.0f, tmin);
+    return fmincompf(tmax3) >= fmaxf(0.0f, tmin);
 #else
     __m128 bmin = _mm_setr_ps(box.vmin.x, box.vmin.y, box.vmin.z, 0.0f);
     __m128 bmax = _mm_setr_ps(box.vmax.x, box.vmax.y, box.vmax.z, 0.0f);
@@ -153,9 +153,9 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
     __m128 t1 = _mm_mul_ps(_mm_sub_ps(bmax, sdRayOrigin), sdInvRayDir);
     __m128 sdtmin = _mm_min_ps(t0, t1);
     __m128 sdtmax = _mm_max_ps(t0, t1);
-    tmin = fmax(fmax(sdtmin[0], sdtmin[1]), sdtmin[2]);
-    float tmax = fmin(fmin(sdtmax[0], sdtmax[1]), sdtmax[2]);
-    return tmax >= fmax(0.0f, tmin);
+    tmin = fmaxf(fmaxf(sdtmin[0], sdtmin[1]), sdtmin[2]);
+    float tmax = fminf(fminf(sdtmax[0], sdtmax[1]), sdtmax[2]);
+    return tmax >= fmaxf(0.0f, tmin);
 #endif
 }
 
@@ -165,7 +165,7 @@ HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangl
     float3 v0v2 = triangle.v2 - triangle.v0;
     float3 pvec = cross(ray.direction, v0v2);
     float det = dot(v0v1, pvec);
-    if (fabs(det) < 0.0001f) return false;
+    if (fabsf(det) < 0.0001f) return false;
     float invDet = 1.0f / det;
 
     float3 tvec = ray.origin - triangle.v0;
@@ -420,10 +420,10 @@ HYBRID float3 SampleHemisphere(const float3& normal, RandState& randState)
     const float u2 = rand(randState);
     const float r = sqrtf(1.0f - u1 * u1);
     const float phi = 2.0f * PI * u2;
-    const float3 sample = make_float3(cos(phi)*r, sin(phi)*r, u1);
+    const float3 sample = make_float3(cosf(phi)*r, sinf(phi)*r, u1);
 
     const float3& w = normal;
-    float3 u = normalize(cross((fabs(w.x) > .1f ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
+    float3 u = normalize(cross((fabsf(w.x) > .1f ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
     float3 v = normalize(cross(w,u));
 
     return normalize(make_float3(
@@ -453,11 +453,11 @@ HYBRID Ray getRefractRay(const Ray& ray, const float3& normal, const float3& int
         return Ray(make_float3(0), make_float3(0), 0);
     }
 
-    const float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrt(k)));
+    const float3 refractDir = normalize(eta * ray.direction + normal * (eta * costi - sqrtf(k)));
 
     // fresnell equation for reflection contribution
-    const float sinti = sqrt(max(0.0f, 1.0f - costi - costi));
-    const float costt = sqrt(1.0f - eta * eta * sinti * sinti);
+    const float sinti = sqrtf(fmaxf(0.0f, 1.0f - costi - costi));
+    const float costt = sqrtf(1.0f - eta * eta * sinti * sinti);
     const float spol = (n1 * costi - n2 * costt) / (n1 * costi + n2 * costt);
     const float ppol = (n1 * costt - n2 * costi) / (n1 * costt + n2 * costi);
 
@@ -548,8 +548,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     if (hitInfo.primitive_type == PLANE) {
-        uint px = (uint)(fabs(intersectionPos.x/4 + 1000));
-        uint py = (uint)(fabs(intersectionPos.z/4 + 1000));
+        uint px = (uint)(fabsf(intersectionPos.x/4 + 1000));
+        uint py = (uint)(fabsf(intersectionPos.z/4 + 1000));
         material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
@@ -735,7 +735,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     if (!cullSecondary)
     {
         // Russian roulette
-        float p = fmin(fmaxcompf(material.diffuse_color), 0.9f);
+        float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
         if (rand(randState) < p)
         {
             state.mask = state.mask / p;
