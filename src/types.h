@@ -293,7 +293,7 @@ struct __align__(16) HitInfo
     uint instance_id;
     float t;
 
-HYBRID inline bool intersected() const { return primitive_id != 0xffffffff; }
+    HYBRID inline bool intersected() const { return primitive_id != 0xffffffff; }
 };
 
 struct __align__(16) HitInfoPacked

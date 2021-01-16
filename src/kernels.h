@@ -305,6 +305,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
         {
             if (anyIntersection)
             {
+                hitInfo.primitive_id = i;
                 return hitInfo;
             }
             else
@@ -322,6 +323,7 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
         {
             if (anyIntersection)
             {
+                hitInfo.primitive_id = i;
                 return hitInfo;
             }
             else
@@ -356,6 +358,8 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
             {
                 if (anyIntersection)
                 {
+                    // this will cause the intersection boolean to be true;
+                    hitInfo.primitive_id = 0;
                     return hitInfo;
                 }
                 else
