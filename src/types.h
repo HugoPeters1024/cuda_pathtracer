@@ -323,6 +323,16 @@ struct __align__(16) HitInfoPacked
     }
 };
 
+// three kinds of entries. sequence ends at a terminate.
+enum SAMPLE_TYPE { SAMPLE_BUCKET, SAMPLE_IGNORE, SAMPLE_TERMINATE };
+
+struct __align__(16) SampleCache
+{
+    SAMPLE_TYPE sample_type;
+    uint triangle_id;
+    int cache_bucket_id;
+    float3 cum_mask;
+};
 
 struct __align__(16) BVHNode
 {

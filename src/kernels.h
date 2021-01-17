@@ -361,9 +361,8 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 }
 
 
-HYBRID float3 SampleHemisphereCosine(const float3& normal, RandState& randState)
+HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, const float& r1)
 {
-    float r0 = rand(randState), r1 = rand(randState);
     float r = sqrtf(r0);
     float theta = 2 * PI * r1;
     float x = r * cosf(theta);
@@ -391,26 +390,17 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     }
     while (acc < sample);
 
-    const float phiMin = (sampleBucket < 4) ? 0 : (1.0f / 3.0f) * PI;
-    const float phiMax = (sampleBucket < 4) ? (1.0f / 3.0f) * PI : 0.5f * PI;
-    const uint thetai = sampleBucket % 4;
-    const float thetaMin = thetai * 0.5f * PI;
-    const float thetaMax = (thetai+1.0f) * 0.5f * PI;
+    const float r0Min = (sampleBucket < 4) ? 0 : 0.5;
+    const float r0Max = (sampleBucket < 4) ? 0.5 : 1.0f;
+    const uint r1i = sampleBucket % 4;
+    const float r1Min = r1i * 0.25f;
+    const float r1Max = (r1i+1.0f) * 0.25f;
 
-    const float phiR = rand(randState);
-    const float thetaR = rand(randState);
-    const float phi = acosf(cosf(phiMin) - phiR*(cosf(phiMin)-cosf(phiMax)));
-    const float theta = thetaMin * thetaR + thetaMax * (1-thetaR);
-    const float3 sampleVec = make_float3(cosf(theta) * sinf(phi), sinf(theta) * sinf(phi), cosf(phi));
-
-    const float3& w = normal;
-    float3 u = normalize(cross((fabsf(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-    float3 v = normalize(cross(w,u));
-
-    return normalize(make_float3(
-            dot(sampleVec, make_float3(u.x, v.x, w.x)),
-            dot(sampleVec, make_float3(u.y, v.y, w.y)),
-            dot(sampleVec, make_float3(u.z, v.z, w.z))));
+    const float r0R = rand(randState);
+    const float r1R = rand(randState);
+    const float r0 = r0Min * r0R + r0Max * (1-r0R);
+    const float r1 = r1Min * r1R + r1Max * (1-r1R);
+    return SampleHemisphereCosine(normal, r0, r1);
 }
 
 
@@ -493,7 +483,7 @@ __global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF)
+__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF, SampleCache* sampleCache)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -593,6 +583,9 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     Ray secondary;
     float random = rand(randState);
     bool cullSecondary = false;
+    const float3 BRDF = material.diffuse_color / PI;
+    SampleCache cache;
+    cache.sample_type = SAMPLE_IGNORE;
 
     if (random < material.transmit)
     {
@@ -612,7 +605,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             state.mask *= material.diffuse_color;
             secondary = getReflectRay(ray, colliderNormal, intersectionPos);
         }
-        float3 noiseDir = SampleHemisphereCosine(secondary.direction, randState);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, rand(randState), rand(randState));
         secondary.direction = secondary.direction * (1.0f - material.glossy) + material.glossy * noiseDir;
     }
     else if (random - material.transmit < material.reflect)
@@ -620,13 +613,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         state.fromSpecular = true;
         state.mask *= material.diffuse_color;
         secondary = getReflectRay(ray, colliderNormal, intersectionPos);
-        float3 noiseDir = SampleHemisphereCosine(secondary.direction, randState);
+        float3 noiseDir = SampleHemisphereCosine(secondary.direction, rand(randState), rand(randState));
         secondary.direction = secondary.direction * (1.0f-material.glossy) + material.glossy * noiseDir;
     }
     else 
     {
         state.fromSpecular = false;
-        const float3 BRDF = material.diffuse_color / PI;
 
         // Create a shadow ray for diffuse objects
         if (_NEE)
@@ -704,45 +696,35 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             }
         }
 
-
-        if (!_NEE)
+        TriangleD* triangleD = _GVertexData + hitInfo.primitive_id;
+        const float3 r = hitInfo.primitive_type == TRIANGLE
+                ? SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id)
+                : SampleHemisphereCosine(colliderNormal, rand(randState), rand(randState));
+        cullSecondary = dot(r, surfaceNormal) < 0 || dot(r, colliderNormal) < 0;
+        const float f = fmaxf(dot(colliderNormal, r),0.0f);
+        secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
+        if (hitInfo.primitive_type == TRIANGLE)
         {
-            int bucket;
-            TriangleD* triangleD = _GVertexData + hitInfo.primitive_id;
-            const float3 r = hitInfo.primitive_type == TRIANGLE
-                    ? SampleHemisphereCached(surfaceNormal, randState, *triangleD, bucket)
-                    : SampleHemisphere(colliderNormal, randState);
-            cullSecondary = dot(r, surfaceNormal) < 0;
-            const float f = fmaxf(dot(colliderNormal, r),0.0f);
-            secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
-            state.mask *= 2.0f * PI * BRDF * f;
+            cache.sample_type = SAMPLE_BUCKET;
+            cache.cum_mask = state.mask;
+            cache.triangle_id = hitInfo.primitive_id;
         }
-        else {
-            const float3 r = SampleHemisphereCosine(colliderNormal, randState);
-
-            // make sure rays don't go into the surface
-            cullSecondary = dot(r, surfaceNormal) < 0;
-            const float f = dot(colliderNormal, r);
-            secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
-            // Writing this explicitly leads to NaNs
-            //float NL = dot(colliderNormal, secondary.direction);
-            //float PDF = NL / PI;
-
-            state.mask *= PI * BRDF;
-        }
+        state.mask *= PI * BRDF;
     }
 
-    if (!cullSecondary)
+    // Russian roulette
+    float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
+    if (!cullSecondary && rand(randState) < p)
     {
-        // Russian roulette
-        float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
-        if (rand(randState) < p)
-        {
-            state.mask = state.mask / p;
-            DRayQueueNew.push(RayPacked(secondary));
-        }
+        state.mask = state.mask / p;
+        DRayQueueNew.push(RayPacked(secondary));
     }
-    stateBuf.setState(ray.pixeli, state);
+    else
+    {
+        cache.sample_type = SAMPLE_TERMINATE;
+    } stateBuf.setState(ray.pixeli, state); 
+    uint cache_id = ray.pixeli * MAX_RAY_DEPTH + bounce;
+    sampleCache[cache_id] = cache;
 }
 
 // Traces the shadow rays

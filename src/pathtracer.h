@@ -24,6 +24,7 @@ private:
     TopLevelBVH* d_topBvh;
     DSizedBuffer<TriangleLight> d_lights;
     RandState randState;
+    SampleCache* d_sampleCache;
 
 
 public:
@@ -73,7 +74,6 @@ void Pathtracer::Init()
         }
     }
 
-    /*
     randState.sampleIdx = 10;
     const TriangleD& triangleD = scene.allVertexData[0];
     int accB[8];
@@ -89,7 +89,6 @@ void Pathtracer::Init()
     }
 
     acc /= 100000;
-     */
 
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 
@@ -188,6 +187,10 @@ void Pathtracer::Init()
 
     cudaSafe( cudaMalloc(&intersectionBuf, NR_PIXELS * sizeof(HitInfoPacked)) );
 
+    // Allocate the buffer needed to update the cache buckets
+    // 64 is the maximum raydepth;
+    cudaSafe( cudaMalloc(&d_sampleCache, NR_PIXELS * sizeof(SampleCache) * MAX_RAY_DEPTH) );
+
 
     // Enable NEE by default
     HNEE = true;
@@ -252,9 +255,9 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
         uint max_bounces;
         if (_NEE)
-            max_bounces = shouldClear ? scene.interactive_depth : 64;
+            max_bounces = shouldClear ? scene.interactive_depth : MAX_RAY_DEPTH;
         else
-            max_bounces = shouldClear ? scene.interactive_depth+1 : 64;
+            max_bounces = shouldClear ? scene.interactive_depth+1 : MAX_RAY_DEPTH;
 
         for(int bounce = 0; bounce < max_bounces; bounce++) {
 
@@ -263,7 +266,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
 
             // Foreach intersection, possibly create shadow rays and secondary rays.
-            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF);
+            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF, d_sampleCache);
             randState.randIdx++;
 
             // Sample the light source for every shadow ray
