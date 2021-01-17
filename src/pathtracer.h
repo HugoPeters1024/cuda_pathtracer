@@ -76,13 +76,14 @@ void Pathtracer::Init()
 
     randState.sampleIdx = 10;
     const TriangleD& triangleD = scene.allVertexData[0];
-    int accB[8];
+    int accB[16];
     for(uint r=0; r<8; r++) accB[r]=0;
     float3 acc = make_float3(0);
     for(uint i=0; i<100000; i++)
     {
         int bucket;
-        float3 sample = SampleHemisphereCached(triangleD.normal, randState, triangleD, bucket);
+        float prob;
+        float3 sample = SampleHemisphereCached(triangleD.normal, randState, triangleD, bucket, prob);
         assert(dot(sample, triangleD.normal) >= 0);
         acc += sample;
         accB[bucket]++;
@@ -277,7 +278,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         }
 
         // Write the final state accumulator into the texture
-        kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, d_sampleCache);
+//        if (!shouldClear)
+            kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, d_sampleCache);
         kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
         randState.sampleIdx++;
     }

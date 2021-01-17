@@ -379,17 +379,17 @@ HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, cons
             dot(sample, make_float3(u.z, v.z, w.z))));
 }
 
-HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket)
+HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket, float& prob)
 {
-    float normTerm = 0.0f;
-    for(uint i=0; i<8; i++) normTerm += triangleD.radianceCache[i] * triangleD.radianceCache[i];
-    normTerm = rsqrt(normTerm);
-    const float sample = rand(randState);
+    const bool front = dot(normal, triangleD.normal) > 0;
+    const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
+    const float* radianceCache = triangleD.radianceCache + (front ? 0 : 8);
+    const float sample = rand(randState) * radianceTotal;
     float acc = 0.0f;
     sampleBucket = -1;
     do
     {
-        acc += triangleD.radianceCache[++sampleBucket] * normTerm;
+        acc += radianceCache[++sampleBucket];
     }
     while (acc < sample);
 
@@ -403,6 +403,10 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     const float r1R = rand(randState);
     const float r0 = r0Min * r0R + r0Max * (1-r0R);
     const float r1 = r1Min * r1R + r1Max * (1-r1R);
+    prob = (radianceCache[sampleBucket] / radianceTotal) * 8;
+    if (!front) {
+        sampleBucket += 8;
+    }
     return SampleHemisphereCosine(normal, r0, r1);
 }
 
@@ -699,19 +703,27 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             }
         }
 
-        TriangleD* triangleD = _GVertexData + hitInfo.primitive_id;
-        const float3 r = hitInfo.primitive_type == TRIANGLE
-                ? SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id)
-                : SampleHemisphereCosine(colliderNormal, rand(randState), rand(randState));
-        cullSecondary = dot(r, surfaceNormal) < 0 || dot(r, colliderNormal) < 0;
-        const float f = fmaxf(dot(colliderNormal, r),0.0f);
-        secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
-        if (hitInfo.primitive_type == TRIANGLE)
-        {
-            cache.sample_type = SAMPLE_BUCKET;
-            cache.cum_mask = state.mask;
-            cache.triangle_id = hitInfo.primitive_id;
+        float3 r;
+        if (hitInfo.primitive_type == TRIANGLE) {
+            TriangleD *triangleD = _GVertexData + hitInfo.primitive_id;
+            float prob;
+            r = SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id, prob);
+            if (ray.pixeli == NR_PIXELS/2) printf("prob: %f\n", prob);
+            if (hitInfo.primitive_type == TRIANGLE) {
+                cache.sample_type = SAMPLE_BUCKET;
+                cache.cum_mask = state.mask;
+                cache.triangle_id = hitInfo.primitive_id;
+            }
+            state.mask /= prob;
         }
+        else
+        {
+            r = SampleHemisphereCosine(colliderNormal, rand(randState), rand(randState));
+        }
+
+        cullSecondary = dot(r, surfaceNormal) < 0;
+        const float f = fmaxf(dot(colliderNormal, r), 0.0f);
+        secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
         state.mask *= PI * BRDF;
     }
 
@@ -791,14 +803,20 @@ __global__ void kernel_update_buckets(TraceStateSOA traceState, SampleCache* sam
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
     const float3 totalEnergy = get3f(traceState.accucolors[i]);
-    for(uint bounce=0; bounce<10; bounce++)
+    for(uint bounce=0; bounce<1; bounce++)
     {
-        SampleCache cache = sampleCache[i * MAX_RAY_DEPTH + bounce];
+        const SampleCache cache = sampleCache[i * MAX_RAY_DEPTH + bounce];
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        float energy = fmaxcompf(totalEnergy / cache.cum_mask);
-        TriangleD& triangleD = _GVertexData[cache.triangle_id];
+        const float energy = fmaxcompf(totalEnergy);
+        TriangleD triangleD = _GVertexData[cache.triangle_id];
         triangleD.radianceCache[cache.cache_bucket_id] += energy;
+        // front case
+        if (cache.cache_bucket_id < 8)
+           triangleD.radianceTotalFront += energy;
+        else
+           triangleD.radianceTotalBack += energy;
+        _GVertexData[cache.triangle_id] = triangleD;
     }
 }
 
