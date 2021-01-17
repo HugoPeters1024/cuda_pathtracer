@@ -241,7 +241,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     for(uint sample = 0; sample < (shouldClear ? scene.interactive_depth : 1); sample++)
     {
 
-        kernel_clear_state<<<NR_PIXELS/1024, 1024>>>(traceBufSOA);
+        kernel_clear_state<<<NR_PIXELS/1024+1, 1024>>>(traceBufSOA);
 
         // Generate primary rays in the ray queue
         //rayQueue.clear();
@@ -277,7 +277,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         }
 
         // Write the final state accumulator into the texture
-        kernel_add_to_screen<<<NR_PIXELS / 1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
+        kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, d_sampleCache);
+        kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
         randState.sampleIdx++;
     }
 }

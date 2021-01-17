@@ -9,7 +9,7 @@ __device__ __constant__ bool DNEE;
 
 __device__ __constant__ TriangleV* DVertices;
 
-__device__ __constant__ TriangleD* DVertexData;
+__device__ TriangleD* DVertexData;
 
 __device__ __constant__ Model* DModels;
 

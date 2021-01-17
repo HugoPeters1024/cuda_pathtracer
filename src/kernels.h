@@ -381,12 +381,15 @@ HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, cons
 
 HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket)
 {
+    float normTerm = 0.0f;
+    for(uint i=0; i<8; i++) normTerm += triangleD.radianceCache[i] * triangleD.radianceCache[i];
+    normTerm = rsqrt(normTerm);
     const float sample = rand(randState);
     float acc = 0.0f;
     sampleBucket = -1;
     do
     {
-        acc += triangleD.radianceCache[++sampleBucket];
+        acc += triangleD.radianceCache[++sampleBucket] * normTerm;
     }
     while (acc < sample);
 
@@ -722,7 +725,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     else
     {
         cache.sample_type = SAMPLE_TERMINATE;
-    } stateBuf.setState(ray.pixeli, state); 
+    } 
+    stateBuf.setState(ray.pixeli, state); 
     uint cache_id = ray.pixeli * MAX_RAY_DEPTH + bounce;
     sampleCache[cache_id] = cache;
 }
@@ -780,5 +784,23 @@ __global__ void kernel_swap_and_clear()
     DRayQueueNew.clear();
     DShadowRayQueue.clear();
 }
+
+__global__ void kernel_update_buckets(TraceStateSOA traceState, SampleCache* sampleCache)
+{
+    // id of the pixel
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= NR_PIXELS) return;
+    const float3 totalEnergy = get3f(traceState.accucolors[i]);
+    for(uint bounce=0; bounce<10; bounce++)
+    {
+        SampleCache cache = sampleCache[i * MAX_RAY_DEPTH + bounce];
+        if (cache.sample_type == SAMPLE_TERMINATE) return;
+        if (cache.sample_type == SAMPLE_IGNORE) continue;
+        float energy = fmaxcompf(totalEnergy / cache.cum_mask);
+        TriangleD& triangleD = _GVertexData[cache.triangle_id];
+        triangleD.radianceCache[cache.cache_bucket_id] += energy;
+    }
+}
+
 
 #endif

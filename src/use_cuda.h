@@ -41,8 +41,8 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
 
 HYBRID inline float3 make_float3(const glm::vec3& src)
 {
-//    return *(float3*)&src;
-    return make_float3(src.x, src.y, src.z);
+    return *(float3*)&src;
+//    return make_float3(src.x, src.y, src.z);
 }
 
 #define ensureNoNan(v) { assert(v.x == v.x); assert(v.y == v.y); assert(v.z == v.z); }
@@ -54,8 +54,8 @@ HYBRID inline bool hasNan(const float3& v)
 
 HYBRID inline float3 get3f(const glm::vec4& src)
 {
-    //return *(float3*)&src;
-    return make_float3(src.x, src.y, src.z);
+    return *(float3*)&src;
+    //return make_float3(src.x, src.y, src.z);
 }
 
 HYBRID inline uint wang_hash(uint seed)

@@ -88,6 +88,7 @@ struct __align__(16) TriangleD
     float2 uv0, uv1, uv2;
     MATERIAL_ID material;
     float radianceCache[8];
+    float cacheLength;
 
     TriangleD(float3 normal, float3 tangent, float3 bitangent, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
         : normal(normal), tangent(tangent), bitangent(bitangent), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
