@@ -35,6 +35,7 @@ To select a scene pass a value to the `--scene` command line option. The followi
 - sibenik 
 - minecraft
 - 2mtris
+- example_scene.chai / `<path/to/script.chai>`
 
 ## new in version 3
 
@@ -170,9 +171,6 @@ But a constant colored skydome was selected for the raytracer to emulate similar
 
 Finally that sibenik scene again with all post processing effects enabled. As well as a tilted glass cube with absorption for style.
 Cheers Beer!
-
-
-
 
 ### Wishlist for the future
 

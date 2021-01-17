@@ -1,6 +1,12 @@
 #ifndef H_SCENE_BUILDER
 #define H_SCENE_BUILDER
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#include <chaiscript/chaiscript.hpp>
+#pragma GCC diagnostic pop
+
+
 #include "types.h"
 #include "scene.h"
 
@@ -232,6 +238,49 @@ inline const Scene get2MillionScene()
     return scene;
 }
 
+static float3 chai_make_float3(float a, float b, float c) {
+    return make_float3(a, b, c);
+}
+
+static void chai_float_assign(float3 & a, float3 b) {
+    a = b;
+}
+
+inline const Scene getScriptedScene(const char * filename) {
+    chaiscript::ChaiScript chai;
+    auto scene = Scene();
+    chai.add(chaiscript::user_type<Material>(), "Material");
+    chai.add(chaiscript::user_type<GameObject>(), "GameObject");
+    chai.add(chaiscript::user_type<Plane>(), "Plane");
+    chai.add(chaiscript::user_type<float3>(), "float3");
+    chai.add(chaiscript::fun(chai_make_float3), "make_float3");
+    chai.add(chaiscript::fun(&Material::DIFFUSE), "DiffuseMaterial");
+    chai.add(chaiscript::constructor<GameObject(uint)>(), "GameObject");
+    chai.add(chaiscript::constructor<Plane(float3, int, int)>(), "Plane");
+    chai.add(chaiscript::fun(&Scene::addMaterial, &scene), "scene_add_material");
+    chai.add(chaiscript::fun(&Scene::addModel, &scene), "scene_add_model");
+    chai.add(chaiscript::fun(&Scene::addPlane, &scene), "scene_add_plane");
+    chai.add(chaiscript::fun(&Scene::addObject, &scene), "scene_add_object");
+    chai.add(chaiscript::fun(&Material::transmit), "transmit");
+    chai.add(chaiscript::fun(&Material::reflect), "reflect");
+    chai.add(chaiscript::fun(&Material::glossy), "glossy");
+    chai.add(chaiscript::fun(&Material::refractive_index), "refractive_index");
+    chai.add(chaiscript::fun(&Material::diffuse_color), "diffuse_color");
+    chai.add(chaiscript::fun(&Material::specular_color), "specular_color");
+    chai.add(chaiscript::fun(&Material::emission), "emission");
+    chai.add(chaiscript::fun(&Material::absorption), "absorption");
+    chai.add(chaiscript::fun(&GameObject::position), "position");
+    chai.add(chaiscript::fun(&GameObject::rotation), "rotation");
+    chai.add(chaiscript::fun(&GameObject::scale), "scale");
+    chai.add(chaiscript::fun(&float3::x), "x");
+    chai.add(chaiscript::fun(&float3::y), "y");
+    chai.add(chaiscript::fun(&float3::z), "z");
+    chai.add(chaiscript::fun(&chai_float_assign), "=");
+    chai.eval_file(filename);
+    scene.finalize();
+    return scene;
+}
+
 inline Scene getScene(const char* sceneName)
 {
     if (strcmp(sceneName, "outside") == 0)
@@ -243,8 +292,8 @@ inline Scene getScene(const char* sceneName)
     if (strcmp(sceneName, "2mtris") == 0)
         return get2MillionScene();
 
-    printf("Scene '%s' does not exist!\n", sceneName);
-    exit(-5);
+    // assume sceneName is a path to the chaiscript scene definition
+    return getScriptedScene(sceneName);
 }
 
 #endif

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(pathtracer CUDA CXX)
 
 set(CMAKE_CUDA_STANDARD 14)
@@ -33,6 +33,7 @@ find_package(OpenGL REQUIRED)
 target_include_directories(pathtracer PUBLIC ${OPENGL_INCLUDE_DIR})
 target_link_libraries(pathtracer ${OPENGL_LIBRARIES})
 
+include_directories("./chaiscript")
 
 #find_package(glfw3 3.3.2 REQUIRED)
 #target_link_libraries(pathtracer glfw)
