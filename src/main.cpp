@@ -225,9 +225,14 @@ int main(int argc, char** argv) {
             double mousex, mousey;
             glfwGetCursorPos(window, &mousex, &mousey);
             const Ray centerRay = camera.getRay(uint(mousex), WINDOW_HEIGHT-uint(mousey));
-            const HitInfo hitInfo = traverseTopLevel<false>(centerRay);
+            const HitInfo hitInfo = traverseTopLevel<false>(raytracerApp.sceneBuffers, centerRay);
             if (hitInfo.intersected()) 
             {
+                TriangleD result;
+                cudaSafe( cudaMemcpy(&result, pathtracerApp.sceneBuffers.vertexData+hitInfo.primitive_id, 1 * sizeof(TriangleD), cudaMemcpyDeviceToHost) );
+                int bucket;
+                float prob;
+                float3 sample = SampleHemisphereCached(result.normal, pathtracerApp.randState, result, bucket, prob);
                 camera.focalLength = hitInfo.t;
                 scene.invalidate();
                 printf("Focal length: %f\n", camera.focalLength);

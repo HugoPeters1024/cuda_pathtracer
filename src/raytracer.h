@@ -22,6 +22,7 @@ private:
     float3 radiance(const Ray& ray, int iteration = 0);
 
 public:
+    SceneBuffers sceneBuffers;
     Raytracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
     virtual void Init() override;
     virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
@@ -30,15 +31,16 @@ public:
 
 void Raytracer::Init()
 {
-    // Assign the scene buffers to the global binding sites
-    HVertices = scene.allVertices.data();
-    HVertexData = scene.allVertexData.data();
-    HModels = scene.models.data();
-    HInstances = scene.instances;
-    HTopBVH = scene.topLevelBVH.data();
-    HSpheres = HSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size());
-    HPlanes = HSizedBuffer<Plane>(scene.planes.data(), scene.planes.size());
-    HMaterials = scene.materials.data();
+    sceneBuffers.vertices = scene.allVertices.data();
+    sceneBuffers.vertexData = scene.allVertexData.data();
+    sceneBuffers.instances = scene.instances;
+    sceneBuffers.models = scene.models.data();
+    sceneBuffers.materials = scene.materials.data();
+    sceneBuffers.topBvh = scene.topLevelBVH.data();
+    sceneBuffers.spheres = scene.spheres.data();
+    sceneBuffers.num_spheres = scene.spheres.size();
+    sceneBuffers.planes = scene.planes.data();
+    sceneBuffers.num_planes = scene.planes.size();
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
     omp_set_num_threads(8);
@@ -70,18 +72,18 @@ void Raytracer::Render(const Camera& camera, float currentTime, float frameTime,
 float3 Raytracer::radiance(const Ray& ray, int iteration)
 {
     if (iteration >= max_depth) return make_float3(0);
-    HitInfo hitInfo = traverseTopLevel<false>(ray);
+    HitInfo hitInfo = traverseTopLevel<false>(sceneBuffers, ray);
     if (!hitInfo.intersected()) return make_float3(0.2, 0.3, 0.6);
 
     Instance* instance;
 
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        instance = _GInstances + hitInfo.instance_id;
+        instance = sceneBuffers.instances + hitInfo.instance_id;
     }
 
     float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    float3 originalNormal = getColliderNormal(hitInfo, intersectionPos);
+    float3 originalNormal = getColliderNormal(sceneBuffers, hitInfo, intersectionPos);
     if (hitInfo.primitive_type == TRIANGLE)
     {
         glm::vec4 wn = glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0) * instance->transform;
@@ -91,8 +93,8 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     bool inside = dot(ray.direction, originalNormal) > 0;
     const float3 colliderNormal = inside ? -originalNormal : originalNormal;
 
-    const uint material_id = getColliderMaterialID(hitInfo);
-    Material material = _GMaterials[material_id];
+    const uint material_id = getColliderMaterialID(sceneBuffers, hitInfo);
+    Material material = sceneBuffers.materials[material_id];
     float3 diffuse_color = make_float3(0);
     float3 refract_color = make_float3(0);
     float3 reflect_color = make_float3(0);
@@ -120,7 +122,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             fromLight /= dis2light;
             Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
             shadowRay.length = dis2light - 2 * EPS;
-            HitInfo shadowHit = traverseTopLevel<true>(shadowRay);
+            HitInfo shadowHit = traverseTopLevel<true>(sceneBuffers, shadowRay);
             if (!shadowHit.intersected()) {
                 diffuse_color += light.color * dot(-fromLight, colliderNormal) / dis2light2;
             }

@@ -81,30 +81,30 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     return transformedRay;
 }
 
-HYBRID inline uint getColliderMaterialID(const HitInfo& hitInfo)
+HYBRID inline uint getColliderMaterialID(const SceneBuffers& buffers, const HitInfo& hitInfo)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return _GVertexData[hitInfo.primitive_id].material;
-        case SPHERE:   return _GSpheres[hitInfo.primitive_id].material;
-        case PLANE:    return _GPlanes[hitInfo.primitive_id].material;
+        case TRIANGLE: return buffers.vertexData[hitInfo.primitive_id].material;
+        case SPHERE:   return buffers.spheres[hitInfo.primitive_id].material;
+        case PLANE:    return buffers.planes[hitInfo.primitive_id].material;
     }
     assert(false);
 }
 
-HYBRID inline float3 getColliderNormal(const HitInfo& hitInfo, const float3& intersectionPoint)
+HYBRID inline float3 getColliderNormal(const SceneBuffers& buffers, const HitInfo& hitInfo, const float3& intersectionPoint)
 {
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: {
-            return _GVertexData[hitInfo.primitive_id].normal;
+            return buffers.vertexData[hitInfo.primitive_id].normal;
         }
         case SPHERE: {
-            const Sphere& sphere = _GSpheres[hitInfo.primitive_id];
+            const Sphere& sphere = buffers.spheres[hitInfo.primitive_id];
             return normalize(intersectionPoint - sphere.pos);
         }
         case PLANE: {
-            return _GPlanes[hitInfo.primitive_id].normal;
+            return buffers.planes[hitInfo.primitive_id].normal;
         }
     }
     assert(false);
@@ -125,7 +125,7 @@ HYBRID bool raySphereIntersect(const Ray& ray, const Sphere& sphere, float& t)
     float tmax = (-b + det) / (2*a);
     t = tmin;
     if (tmin < 0) t = tmax;
-    return tmax > 0;
+    return tmax > 0.0f;
 }
 
 HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
@@ -133,7 +133,7 @@ HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
     float q = dot(normalize(ray.direction), plane.normal);
     if (fabsf(q)<EPS) return false;
     t = -(dot(ray.origin, plane.normal) + plane.d)/q;
-    return t>0;
+    return t>0.0f;
 }
 
 HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
@@ -141,7 +141,8 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
 #ifdef __CUDA_ARCH__
     float3 t0 = (box.vmin - rayOrigin) * invRayDir;
     float3 t1 = (box.vmax - rayOrigin) * invRayDir;
-    float3 tmin3 = fminf(t0,t1), tmax3 = fmaxf(t1,t0);
+    float3 tmin3 = fminf(t0,t1);
+    float3 tmax3 = fmaxf(t1,t0);
     tmin = fmaxcompf(tmin3);
     return fmincompf(tmax3) >= fmaxf(0.0f, tmin);
 #else
@@ -170,14 +171,14 @@ HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangl
 
     float3 tvec = ray.origin - triangle.v0;
     u = dot(tvec, pvec) * invDet;
-    if (u < 0 || u > 1) return false;
+    if (u < 0.0f || u > 1.0f) return false;
 
     float3 qvec = cross(tvec, v0v1);
     v = dot(ray.direction, qvec) * invDet;
-    if (v < 0 || u + v > 1) return false;
+    if (v < 0.0f || u + v > 1.0f) return false;
 
     t = dot(v0v2, qvec) * invDet;
-    return t > 0;
+    return t > 0.0f;
 }
 
 // Test if a given bvh node intersects with the ray. This function does not update the
@@ -193,7 +194,7 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
 }
 
 template <bool anyIntersection>
-HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& instance)
+HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInfo& hitInfo, const Instance& instance)
 {
     float t, u, v;
 
@@ -206,8 +207,8 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
 
     const float3 invRayDir = 1.0f / ray.direction;
 
-    const Model& model = _GModels[instance.model_id];
-    const TriangleV* vertices = _GVertices;
+    const Model& model = buffers.models[instance.model_id];
+    const TriangleV* vertices = buffers.vertices;
     BVHNode current = model.bvh[0];
     if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
 
@@ -272,7 +273,7 @@ HYBRID bool traverseBVHStack(const Ray& ray, HitInfo& hitInfo, const Instance& i
 }
 
 template <bool anyIntersection>
-HYBRID HitInfo traverseTopLevel(const Ray& ray)
+HYBRID HitInfo traverseTopLevel(const SceneBuffers& buffers, const Ray& ray)
 {
     HitInfo hitInfo;
     hitInfo.primitive_id = 0xffffffff;
@@ -280,9 +281,9 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 
     float t, tmin;
 
-    for(int i=0; i<_GSpheres.size; i++)
+    for(int i=0; i<buffers.num_spheres; i++)
     {
-        if (raySphereIntersect(ray, _GSpheres[i], t) && t < hitInfo.t)
+        if (raySphereIntersect(ray, buffers.spheres[i], t) && t < hitInfo.t)
         {
             if (anyIntersection)
             {
@@ -298,9 +299,9 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
         }
     }
 
-    for(int i=0; i<_GPlanes.size; i++)
+    for(int i=0; i<buffers.num_planes; i++)
     {
-        if (rayPlaneIntersect(ray, _GPlanes[i], t) && t < hitInfo.t)
+        if (rayPlaneIntersect(ray, buffers.planes[i], t) && t < hitInfo.t)
         {
             if (anyIntersection)
             {
@@ -328,14 +329,14 @@ HYBRID HitInfo traverseTopLevel(const Ray& ray)
 
     while(size > 0)
     {
-        current = _GTopBVH[stack[--size]];
+        current = buffers.topBvh[stack[--size]];
         if (!boxtest(current.box, ray.origin, invRayDir, tmin, hitInfo)) continue;
 
         if (current.isLeaf)
         {
-            Instance instance = _GInstances[current.leaf];
+            Instance instance = buffers.instances[current.leaf];
             Ray transformedRay = transformRay(ray, instance.invTransform);
-            if (traverseBVHStack<anyIntersection>(transformedRay, hitInfo, instance))
+            if (traverseBVHStack<anyIntersection>(buffers, transformedRay, hitInfo, instance))
             {
                 if (anyIntersection)
                 {
@@ -382,16 +383,20 @@ HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, cons
 HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket, float& prob)
 {
     const bool front = dot(normal, triangleD.normal) > 0;
-    const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
+    //const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
     const float* radianceCache = triangleD.radianceCache + (front ? 0 : 8);
+    float radianceTotal = 0.0f;
+    for(uint i=0; i<8; i++) radianceTotal += radianceCache[i];
     const float sample = rand(randState) * radianceTotal;
-    float acc = 0.0f;
+    float acc = EPS;
     sampleBucket = -1;
     do
     {
         acc += radianceCache[++sampleBucket];
     }
     while (acc < sample);
+
+    //assert(sampleBucket < 8);
 
     const float r0Min = (sampleBucket < 4) ? 0 : 0.5;
     const float r0Max = (sampleBucket < 4) ? 0.5 : 1.0f;
@@ -480,22 +485,25 @@ __global__ void kernel_generate_primary_rays(Camera camera, RandState randState)
     DRayQueue.push(ray);
 }
 
-__global__ void kernel_extend(HitInfoPacked* intersections, uint bounce)
+__global__ void kernel_extend(const SceneBuffers buffers, HitInfoPacked* intersections, uint bounce)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x; 
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel<false>(ray);
+    HitInfo hitInfo = traverseTopLevel<false>(buffers, ray);
     intersections[i] = HitInfoPacked(hitInfo);
 }
 
 
-__global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF, SampleCache* sampleCache)
+__global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF, SampleCache* sampleCache)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
     const Ray ray = DRayQueue[i].getRay();
     TraceState state = stateBuf.getState(ray.pixeli);
+    SampleCache cache;
+    cache.sample_type = SAMPLE_TERMINATE;
+    const uint cache_id = ray.pixeli * MAX_CACHE_DEPTH + bounce;
 
     const uint x = ray.pixeli % WINDOW_WIDTH;
     const uint y = ray.pixeli / WINDOW_WIDTH;
@@ -507,6 +515,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             float3 sk = get3f(tex2D<float4>(skydome.texture_id, uvCoords.x, uvCoords.y));
             state.accucolor += state.mask * sk;
             stateBuf.setState(ray.pixeli, state);
+            if (bounce < MAX_CACHE_DEPTH) sampleCache[cache_id] = cache;
        // }
         return;
     }
@@ -517,11 +526,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
-    const Instance* instance = _GInstances + hitInfo.instance_id;
+    const Instance* instance = buffers.instances + hitInfo.instance_id;
     const float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    const uint material_id = getColliderMaterialID(hitInfo);
-    Material material = _GMaterials[material_id];
-    float3 surfaceNormal = getColliderNormal(hitInfo, intersectionPos);
+    const uint material_id = getColliderMaterialID(buffers, hitInfo);
+    Material material = buffers.materials[material_id];
+    float3 surfaceNormal = getColliderNormal(buffers, hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
@@ -550,11 +559,12 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
         material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
+
     // sample the texture of the material by redoing the intersection
     if (material.hasTexture || material.hasNormalMap)
     {
-        const TriangleD& triangleData = _GVertexData[hitInfo.primitive_id];
-        const TriangleV& triangleV = _GVertices[hitInfo.primitive_id];
+        const TriangleD& triangleData = buffers.vertexData[hitInfo.primitive_id];
+        const TriangleV& triangleV = buffers.vertices[hitInfo.primitive_id];
 
         float t, u, v;
         Ray transformedRay = transformRay(ray, instance->invTransform);
@@ -591,7 +601,8 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     float random = rand(randState);
     bool cullSecondary = false;
     const float3 BRDF = material.diffuse_color / PI;
-    SampleCache cache;
+
+    // Ignore the cache by default
     cache.sample_type = SAMPLE_IGNORE;
 
     if (random < material.transmit)
@@ -602,7 +613,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             // Take away any absorpted light using Beer's law.
             // when leaving the object
             const float3& c = material.absorption;
-            state.mask *= make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+            state.mask *= make_float3(expf(-c.x * hitInfo.t), expf(-c.y *hitInfo.t), expf(-c.z * hitInfo.t));
         }
 
         // Ray can turn into a reflection ray due to fresnell
@@ -654,11 +665,11 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             */
 
             // Choose an area light at random
-            const uint lightSource = uint(fmin(rand(randState),0.99999999999f) * DTriangleLights.size);
+            const uint lightSource = uint(rand(randState) * DTriangleLights.size)%DTriangleLights.size;
             const TriangleLight& light = DTriangleLights[lightSource];
-            const TriangleV& lightV = _GVertices[light.triangle_index];
-            const TriangleD& lightD = _GVertexData[light.triangle_index];
-            const glm::mat4x4& lightTransform = _GInstances[light.instance_index].transform;
+            const TriangleV& lightV = buffers.vertices[light.triangle_index];
+            const TriangleD& lightD = buffers.vertexData[light.triangle_index];
+            const glm::mat4x4& lightTransform = buffers.instances[light.instance_index].transform;
 
             // transform the vertices to world space
             const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
@@ -686,7 +697,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
             // otherwise we are our own occluder or view the backface of the light
             if (NL > 0 && dot(-shadowDir, surfaceNormal) > 0 && LNL > 0)
             {
-                const float3& emission = _GMaterials[lightD.material].emission;
+                const float3& emission = buffers.materials[lightD.material].emission;
                 // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
                 float A = 0.5f * crLength;
 
@@ -705,16 +716,14 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
 
         float3 r;
         if (hitInfo.primitive_type == TRIANGLE) {
-            TriangleD *triangleD = _GVertexData + hitInfo.primitive_id;
+            const TriangleD triangleD = buffers.vertexData[hitInfo.primitive_id];
             float prob;
-            r = SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id, prob);
-            if (ray.pixeli == NR_PIXELS/2) printf("prob: %f\n", prob);
-            if (hitInfo.primitive_type == TRIANGLE) {
-                cache.sample_type = SAMPLE_BUCKET;
-                cache.cum_mask = state.mask;
-                cache.triangle_id = hitInfo.primitive_id;
-            }
+            r = SampleHemisphereCached(colliderNormal, randState, triangleD, cache.cache_bucket_id, prob);
             state.mask /= prob;
+
+            cache.sample_type = SAMPLE_BUCKET;
+            cache.triangle_id = hitInfo.primitive_id;
+            cache.cum_mask = state.mask;
         }
         else
         {
@@ -728,7 +737,7 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     }
 
     // Russian roulette
-    float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
+    const float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
     if (!cullSecondary && rand(randState) < p)
     {
         state.mask = state.mask / p;
@@ -738,19 +747,18 @@ __global__ void kernel_shade(const HitInfoPacked* intersections, TraceStateSOA s
     {
         cache.sample_type = SAMPLE_TERMINATE;
     } 
-    stateBuf.setState(ray.pixeli, state); 
-    uint cache_id = ray.pixeli * MAX_RAY_DEPTH + bounce;
-    sampleCache[cache_id] = cache;
+    stateBuf.setState(ray.pixeli, state);
+    if (bounce < MAX_CACHE_DEPTH) sampleCache[cache_id] = cache;
 }
 
 // Traces the shadow rays
-__global__ void kernel_connect(TraceStateSOA stateBuf)
+__global__ void kernel_connect(const SceneBuffers buffers, TraceStateSOA stateBuf)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DShadowRayQueue.size) return;
 
     const Ray& shadowRay = DShadowRayQueue[i].getRay();
-    HitInfo hitInfo = traverseTopLevel<true>(shadowRay);
+    HitInfo hitInfo = traverseTopLevel<true>(buffers, shadowRay);
     if (hitInfo.intersected()) return;
 
     float3 light = get3f(stateBuf.lights[shadowRay.pixeli]);
@@ -797,28 +805,21 @@ __global__ void kernel_swap_and_clear()
     DShadowRayQueue.clear();
 }
 
-__global__ void kernel_update_buckets(TraceStateSOA traceState, SampleCache* sampleCache)
+__global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, SampleCache* sampleCache)
 {
     // id of the pixel
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
     const float3 totalEnergy = get3f(traceState.accucolors[i]);
-    for(uint bounce=0; bounce<1; bounce++)
+    for(uint bounce=0; bounce<MAX_CACHE_DEPTH; bounce++)
     {
-        const SampleCache cache = sampleCache[i * MAX_RAY_DEPTH + bounce];
+        const SampleCache cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        const float energy = fmaxcompf(totalEnergy);
-        TriangleD triangleD = _GVertexData[cache.triangle_id];
-        triangleD.radianceCache[cache.cache_bucket_id] += energy;
-        // front case
-        if (cache.cache_bucket_id < 8)
-           triangleD.radianceTotalFront += energy;
-        else
-           triangleD.radianceTotalBack += energy;
-        _GVertexData[cache.triangle_id] = triangleD;
+        const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
+        TriangleD& triangleD = buffers.vertexData[cache.triangle_id];
+        triangleD.updateCache(cache.cache_bucket_id, energy);
     }
 }
-
 
 #endif

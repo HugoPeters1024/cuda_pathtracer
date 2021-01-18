@@ -1,8 +1,8 @@
 #ifndef H_CONSTANTS
 #define H_CONSTANTS
 
-#define WINDOW_WIDTH 640
-#define WINDOW_HEIGHT 480
+#define WINDOW_WIDTH 2560
+#define WINDOW_HEIGHT 1440
 #define NR_PIXELS (WINDOW_WIDTH * WINDOW_HEIGHT)
 
 #define EPS 0.001f
@@ -11,5 +11,6 @@
 #define DEBUG_ENERGY
 
 #define MAX_RAY_DEPTH 32
+#define MAX_CACHE_DEPTH 3
 
 #endif

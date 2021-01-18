@@ -14,20 +14,17 @@ private:
     AtomicQueue<RayPacked> rayQueue;
     AtomicQueue<RayPacked> shadowRayQueue;
     AtomicQueue<RayPacked> rayQueueNew;
-    DSizedBuffer<Sphere> dSphereBuffer;
-    DSizedBuffer<Plane> dPlaneBuffer;
     HitInfoPacked* intersectionBuf;
     TraceStateSOA traceBufSOA;
     CudaTexture dSkydomeTex;
     CDF d_skydomeCDF;
-    Instance* d_instances;
-    TopLevelBVH* d_topBvh;
     DSizedBuffer<TriangleLight> d_lights;
-    RandState randState;
     SampleCache* d_sampleCache;
 
 
 public:
+    SceneBuffers sceneBuffers;
+    RandState randState;
     Pathtracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
 
     virtual void Init() override;
@@ -75,13 +72,16 @@ void Pathtracer::Init()
     }
 
     randState.sampleIdx = 10;
-    const TriangleD& triangleD = scene.allVertexData[0];
+    TriangleD triangleD = scene.allVertexData[0];
     int accB[16];
     for(uint r=0; r<8; r++) accB[r]=0;
     float3 acc = make_float3(0);
     for(uint i=0; i<100000; i++)
     {
-        int bucket;
+        float x = rand(randState);
+        int bucket = int(x * 8);
+        float value = 5*sinf(x*PI);
+        triangleD.updateCache(bucket, value);
         float prob;
         float3 sample = SampleHemisphereCached(triangleD.normal, randState, triangleD, bucket, prob);
         assert(dot(sample, triangleD.normal) >= 0);
@@ -90,6 +90,8 @@ void Pathtracer::Init()
     }
 
     acc /= 100000;
+
+
 
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 
@@ -108,8 +110,13 @@ void Pathtracer::Init()
     // Register the texture with cuda as preperation for interop.
     cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
 
-    dSphereBuffer = DSizedBuffer<Sphere>(scene.spheres.data(), scene.spheres.size(), &DSpheres);
-    dPlaneBuffer = DSizedBuffer<Plane>(scene.planes.data(), scene.planes.size(), &DPlanes);
+    sceneBuffers.num_spheres = scene.spheres.size();
+    cudaSafe( cudaMalloc(&sceneBuffers.spheres, sceneBuffers.num_spheres * sizeof(Sphere)) );
+    cudaSafe( cudaMemcpy(sceneBuffers.spheres, scene.spheres.data(), sceneBuffers.num_spheres * sizeof(Sphere), cudaMemcpyHostToDevice) );
+
+    sceneBuffers.num_planes = scene.planes.size();
+    cudaSafe( cudaMalloc(&sceneBuffers.planes, sceneBuffers.num_planes * sizeof(Plane)) );
+    cudaSafe( cudaMemcpy(sceneBuffers.planes, scene.planes.data(), sceneBuffers.num_planes * sizeof(Plane), cudaMemcpyHostToDevice) );
 
     // Host buffer of device buffers... ;)
     Model hd_models[scene.models.size()];
@@ -145,33 +152,21 @@ void Pathtracer::Init()
     printf("Extracted %lu emmissive triangles from the scene\n", lights.size());
 
     // Upload the collection of buffers to a new buffer
-    TriangleV* d_vertices;
-    cudaSafe( cudaMalloc(&d_vertices, scene.allVertices.size() * sizeof(TriangleV)) );
-    cudaSafe( cudaMemcpy(d_vertices, scene.allVertices.data(), scene.allVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&sceneBuffers.vertices, scene.allVertices.size() * sizeof(TriangleV)) );
+    cudaSafe( cudaMemcpy(sceneBuffers.vertices, scene.allVertices.data(), scene.allVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
 
-    TriangleV* d_vertexData;
-    cudaSafe( cudaMalloc(&d_vertexData, scene.allVertexData.size() * sizeof(TriangleD)) );
-    cudaSafe( cudaMemcpy(d_vertexData, scene.allVertexData.data(), scene.allVertexData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&sceneBuffers.vertexData, scene.allVertexData.size() * sizeof(TriangleD)) );
+    cudaSafe( cudaMemcpy(sceneBuffers.vertexData, scene.allVertexData.data(), scene.allVertexData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
 
-    Model* d_models;
-    cudaSafe( cudaMalloc(&d_models, scene.models.size() * sizeof(Model)) );
-    cudaSafe( cudaMemcpy(d_models, hd_models, scene.models.size() * sizeof(Model), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMalloc(&sceneBuffers.models, scene.models.size() * sizeof(Model)) );
+    cudaSafe( cudaMemcpy(sceneBuffers.models, hd_models, scene.models.size() * sizeof(Model), cudaMemcpyHostToDevice) );
 
-    cudaSafe( cudaMalloc(&d_instances, scene.objects.size() * sizeof(Instance)) );
+    cudaSafe( cudaMalloc(&sceneBuffers.instances, scene.objects.size() * sizeof(Instance)) );
 
-    cudaSafe( cudaMalloc(&d_topBvh, scene.topLevelBVH.size() * sizeof(TopLevelBVH)) );
+    cudaSafe( cudaMalloc(&sceneBuffers.topBvh, scene.topLevelBVH.size() * sizeof(TopLevelBVH)) );
 
-    Material* matBuf;
-    cudaSafe( cudaMalloc(&matBuf, scene.materials.size() * sizeof(Material)));
-    cudaSafe( cudaMemcpy(matBuf, scene.materials.data(), scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
-
-    // Assign to the global binding sites
-    cudaSafe( cudaMemcpyToSymbol(DVertices, &d_vertices, sizeof(d_models)) );
-    cudaSafe( cudaMemcpyToSymbol(DVertexData, &d_vertexData, sizeof(d_models)) );
-    cudaSafe( cudaMemcpyToSymbol(DModels, &d_models, sizeof(d_models)) );
-    cudaSafe( cudaMemcpyToSymbol(DInstances, &d_instances, sizeof(d_instances)) );
-    cudaSafe( cudaMemcpyToSymbol(DMaterials, &matBuf, sizeof(matBuf)) );
-    cudaSafe( cudaMemcpyToSymbol(DTopBVH, &d_topBvh, sizeof(d_topBvh)) );
+    cudaSafe( cudaMalloc(&sceneBuffers.materials, scene.materials.size() * sizeof(Material)));
+    cudaSafe( cudaMemcpy(sceneBuffers.materials, scene.materials.data(), scene.materials.size() * sizeof(Material), cudaMemcpyHostToDevice) );
 
     // queue of rays for wavefront tracing
     rayQueue = AtomicQueue<RayPacked>(NR_PIXELS);
@@ -190,14 +185,14 @@ void Pathtracer::Init()
 
     // Allocate the buffer needed to update the cache buckets
     // 64 is the maximum raydepth;
-    cudaSafe( cudaMalloc(&d_sampleCache, NR_PIXELS * sizeof(SampleCache) * MAX_RAY_DEPTH) );
+    cudaSafe( cudaMalloc(&d_sampleCache, NR_PIXELS * sizeof(SampleCache) * MAX_CACHE_DEPTH) );
 
 
     // Enable NEE by default
     HNEE = true;
 
-    cudaSafe( cudaMemcpy(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
-    cudaSafe( cudaMemcpy(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(sceneBuffers.instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
+    cudaSafe( cudaMemcpy(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 }
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
@@ -231,8 +226,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         // sync NEE toggle
         cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
 
-        cudaSafe( cudaMemcpyAsync(d_instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
-        cudaSafe( cudaMemcpyAsync(d_topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpyAsync(sceneBuffers.instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
+        cudaSafe( cudaMemcpyAsync(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
         randState.sampleIdx = 0;
@@ -264,22 +259,22 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
             // Test for intersections with each of the rays,
             uint kz = 64;
-            kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(intersectionBuf, bounce);
+            kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(sceneBuffers, intersectionBuf, bounce);
 
             // Foreach intersection, possibly create shadow rays and secondary rays.
-            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF, d_sampleCache);
+            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(sceneBuffers, intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF, d_sampleCache);
             randState.randIdx++;
 
             // Sample the light source for every shadow ray
-            if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(traceBufSOA);
+            if (_NEE) kernel_connect<<<NR_PIXELS / kz + 1, kz>>>(sceneBuffers, traceBufSOA);
 
             // swap the ray buffers and clear.
             kernel_swap_and_clear<<<1,1>>>();
         }
 
         // Write the final state accumulator into the texture
-//        if (!shouldClear)
-            kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, d_sampleCache);
+        if (!shouldClear)
+            kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(sceneBuffers, traceBufSOA, d_sampleCache);
         kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
         randState.sampleIdx++;
     }

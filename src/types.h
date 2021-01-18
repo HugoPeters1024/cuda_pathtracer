@@ -88,11 +88,26 @@ struct __align__(16) TriangleD
     float2 uv0, uv1, uv2;
     MATERIAL_ID material;
     float radianceCache[16];
-    float radianceTotalFront = 100;
-    float radianceTotalBack = 100;
+    float radianceTotalFront;
+    float radianceTotalBack;
 
     TriangleD(float3 normal, float3 tangent, float3 bitangent, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
         : normal(normal), tangent(tangent), bitangent(bitangent), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
+
+    TriangleD() {}
+
+    HYBRID void updateCache(int bucket_id, float energy)
+    {
+        const float alpha = 0.90;
+        const float oldValue = radianceCache[bucket_id];
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * energy, 0.1f, 1.0f);
+        const float deltaValue = newValue - oldValue;
+        radianceCache[bucket_id] = newValue;
+        if (bucket_id < 8)
+           radianceTotalFront += deltaValue;
+        else
+           radianceTotalBack += deltaValue;
+    }
 };
 
 struct TriangleLight
@@ -326,7 +341,7 @@ struct __align__(16) HitInfoPacked
 };
 
 // three kinds of entries. sequence ends at a terminate.
-enum SAMPLE_TYPE { SAMPLE_BUCKET, SAMPLE_IGNORE, SAMPLE_TERMINATE };
+enum SAMPLE_TYPE { SAMPLE_IGNORE, SAMPLE_TERMINATE, SAMPLE_BUCKET };
 
 struct __align__(16) SampleCache
 {
@@ -634,7 +649,7 @@ public:
         float3 fromCenter = p - center;
         float r = length(p - center);
         float rd = r + 0.2f * r * r * r;
-        return center + fromCenter * (rd/fmax(0.0001f,r));
+        return center + fromCenter * (rd/fmaxf(0.0001f,r));
     }
 };
 
@@ -647,6 +662,20 @@ struct RandState
     float2 blueNoiseOffset;
     float2 kernelPos;
     uint seed;
+};
+
+struct SceneBuffers
+{
+    TriangleV* vertices;
+    TriangleD* vertexData;
+    Instance* instances;
+    Model* models;
+    Material* materials;
+    TopLevelBVH* topBvh;
+    Sphere* spheres;
+    uint num_spheres;
+    Plane* planes;
+    uint num_planes;
 };
 
 
