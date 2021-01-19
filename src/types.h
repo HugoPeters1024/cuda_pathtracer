@@ -104,7 +104,7 @@ struct __align__(16) TriangleD
         const float deltaValue = newValue - oldValue;
         radianceCache[bucket_id] = newValue;
         if (bucket_id < 8)
-           radianceTotalFront += deltaValue;
+            radianceTotalFront += deltaValue;
         else
            radianceTotalBack += deltaValue;
     }
@@ -348,6 +348,7 @@ struct __align__(16) SampleCache
     SAMPLE_TYPE sample_type;
     uint triangle_id;
     int cache_bucket_id;
+    volatile int _lock = 0;
     float3 cum_mask;
 };
 

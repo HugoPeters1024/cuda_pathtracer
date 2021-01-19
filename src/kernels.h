@@ -387,6 +387,7 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     const float* radianceCache = triangleD.radianceCache + (front ? 0 : 8);
     float radianceTotal = 0.0f;
     for(uint i=0; i<8; i++) radianceTotal += radianceCache[i];
+   // const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
     const float sample = rand(randState) * radianceTotal;
     float acc = EPS;
     sampleBucket = -1;
@@ -805,6 +806,15 @@ __global__ void kernel_swap_and_clear()
     DShadowRayQueue.clear();
 }
 
+__device__ bool try_acquire_semaphore(volatile int *lock){
+  return (atomicCAS((int *)lock, 0, 1) != 0);
+}
+
+__device__ void release_semaphore(volatile int *lock){
+  *lock = 0;
+  __threadfence();
+}
+
 __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, SampleCache* sampleCache)
 {
     // id of the pixel
@@ -813,12 +823,22 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
     const float3 totalEnergy = get3f(traceState.accucolors[i]);
     for(uint bounce=0; bounce<MAX_CACHE_DEPTH; bounce++)
     {
-        const SampleCache cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
+        SampleCache& cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
         const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
         TriangleD& triangleD = buffers.vertexData[cache.triangle_id];
-        triangleD.updateCache(cache.cache_bucket_id, energy);
+        while(true) {
+            __syncthreads();
+            if (!try_acquire_semaphore(&cache._lock)) continue;
+            __syncthreads();
+            triangleD.updateCache(cache.cache_bucket_id, energy);
+            __threadfence();
+            __syncthreads();
+            release_semaphore(&cache._lock);
+            __syncthreads();
+            break;
+        }
     }
 }
 
