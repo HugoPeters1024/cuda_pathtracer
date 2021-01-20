@@ -233,6 +233,9 @@ int main(int argc, char** argv) {
                 int bucket;
                 float prob;
                 float3 sample = SampleHemisphereCached(result.normal, pathtracerApp.randState, result, bucket, prob);
+                float radianceTotal = 0.0f;
+                for(float i : result.radianceCache) radianceTotal += i;
+                printf("Diff : %f\n", fabsf(radianceTotal - result.radianceTotal));
                 camera.focalLength = hitInfo.t;
                 scene.invalidate();
                 printf("Focal length: %f\n", camera.focalLength);

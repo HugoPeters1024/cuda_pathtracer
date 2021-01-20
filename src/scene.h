@@ -329,8 +329,9 @@ public:
                 allVertices.push_back(TriangleV(v0, v1, v2));
                 TriangleD triangleD = TriangleD(normal, tangent, bitangent, uv0, uv1, uv2, mat);
                 for(uint r=0; r<16; r++) triangleD.radianceCache[r] = 0.1f;
-                triangleD.radianceTotalFront = 0.1f * 8;
-                triangleD.radianceTotalBack = 0.1f * 8;
+                triangleD.radianceTotal = 0.1f * 16;
+                for(uint r=0; r<16; r++) triangleD.additionCache[r] = 0.0f;
+                for(uint r=0; r<16; r++) triangleD.additionCacheCount[r] = 0.0f;
                 allVertexData.push_back(triangleD);
                 model.nrTriangles++;
             }

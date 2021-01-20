@@ -88,8 +88,11 @@ struct __align__(16) TriangleD
     float2 uv0, uv1, uv2;
     MATERIAL_ID material;
     float radianceCache[16];
-    float radianceTotalFront;
-    float radianceTotalBack;
+    float additionCache[16];
+    float additionCacheCount[16];
+    float radianceTotal;
+    volatile int _lock = 0;
+
 
     TriangleD(float3 normal, float3 tangent, float3 bitangent, float2 uv0, float2 uv1, float2 uv2, MATERIAL_ID material)
         : normal(normal), tangent(tangent), bitangent(bitangent), uv0(uv0), uv1(uv1), uv2(uv2), material(material) {}
@@ -98,15 +101,12 @@ struct __align__(16) TriangleD
 
     HYBRID void updateCache(int bucket_id, float energy)
     {
-        const float alpha = 0.90;
+        const float alpha = 0.95;
         const float oldValue = radianceCache[bucket_id];
         const float newValue = clamp(alpha * oldValue + (1-alpha) * energy, 0.1f, 1.0f);
         const float deltaValue = newValue - oldValue;
         radianceCache[bucket_id] = newValue;
-        if (bucket_id < 8)
-            radianceTotalFront += deltaValue;
-        else
-           radianceTotalBack += deltaValue;
+        radianceTotal += deltaValue;
     }
 };
 
@@ -348,7 +348,6 @@ struct __align__(16) SampleCache
     SAMPLE_TYPE sample_type;
     uint triangle_id;
     int cache_bucket_id;
-    volatile int _lock = 0;
     float3 cum_mask;
 };
 
@@ -669,6 +668,7 @@ struct SceneBuffers
 {
     TriangleV* vertices;
     TriangleD* vertexData;
+    uint num_triangles;
     Instance* instances;
     Model* models;
     Material* materials;

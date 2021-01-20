@@ -152,6 +152,7 @@ void Pathtracer::Init()
     printf("Extracted %lu emmissive triangles from the scene\n", lights.size());
 
     // Upload the collection of buffers to a new buffer
+    sceneBuffers.num_triangles = scene.allVertices.size();
     cudaSafe( cudaMalloc(&sceneBuffers.vertices, scene.allVertices.size() * sizeof(TriangleV)) );
     cudaSafe( cudaMemcpy(sceneBuffers.vertices, scene.allVertices.data(), scene.allVertices.size() * sizeof(TriangleV), cudaMemcpyHostToDevice) );
 
@@ -274,7 +275,10 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
         // Write the final state accumulator into the texture
         if (!shouldClear)
-            kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(sceneBuffers, traceBufSOA, d_sampleCache);
+        {
+            kernel_update_buckets<<<NR_PIXELS/512 + 1, 512>>>(sceneBuffers, traceBufSOA, d_sampleCache);
+            kernel_propagate_buckets<<<sceneBuffers.num_triangles/512+1,512>>>(sceneBuffers);
+        }
         kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
         randState.sampleIdx++;
     }

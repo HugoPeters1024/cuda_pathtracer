@@ -382,37 +382,28 @@ HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, cons
 
 HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket, float& prob)
 {
-    const bool front = dot(normal, triangleD.normal) > 0;
-    //const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
-    const float* radianceCache = triangleD.radianceCache + (front ? 0 : 8);
-    float radianceTotal = 0.0f;
-    for(uint i=0; i<8; i++) radianceTotal += radianceCache[i];
-   // const float radianceTotal = front ? triangleD.radianceTotalFront : triangleD.radianceTotalBack;
-    const float sample = rand(randState) * radianceTotal;
+    const float sample = rand(randState) * triangleD.radianceTotal;
     float acc = EPS;
     sampleBucket = -1;
     do
     {
-        acc += radianceCache[++sampleBucket];
+        acc += triangleD.radianceCache[++sampleBucket];
     }
     while (acc < sample);
 
     //assert(sampleBucket < 8);
 
-    const float r0Min = (sampleBucket < 4) ? 0 : 0.5;
-    const float r0Max = (sampleBucket < 4) ? 0.5 : 1.0f;
-    const uint r1i = sampleBucket % 4;
-    const float r1Min = r1i * 0.25f;
-    const float r1Max = (r1i+1.0f) * 0.25f;
+    const float r0Min = (sampleBucket < 8) ? 0 : 0.5;
+    const float r0Max = (sampleBucket < 8) ? 0.5 : 1.0f;
+    const uint r1i = sampleBucket % 8;
+    const float r1Min = r1i * (1.0f / 8.0f);
+    const float r1Max = (r1i+1.0f) * (1.0f / 8.0f);
 
     const float r0R = rand(randState);
     const float r1R = rand(randState);
     const float r0 = r0Min * r0R + r0Max * (1-r0R);
     const float r1 = r1Min * r1R + r1Max * (1-r1R);
-    prob = (radianceCache[sampleBucket] / radianceTotal) * 8;
-    if (!front) {
-        sampleBucket += 8;
-    }
+    prob = (triangleD.radianceCache[sampleBucket] / triangleD.radianceTotal) * 16;
     return SampleHemisphereCosine(normal, r0, r1);
 }
 
@@ -716,10 +707,12 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         }
 
         float3 r;
-        if (hitInfo.primitive_type == TRIANGLE) {
-            const TriangleD triangleD = buffers.vertexData[hitInfo.primitive_id];
+        const TriangleD* triangleD = buffers.vertexData + hitInfo.primitive_id;
+
+        // Only sample cache for front facing triangles, otherwise naive samples.
+        if (hitInfo.primitive_type == TRIANGLE && dot(colliderNormal, triangleD->normal) > 0) {
             float prob;
-            r = SampleHemisphereCached(colliderNormal, randState, triangleD, cache.cache_bucket_id, prob);
+            r = SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id, prob);
             state.mask /= prob;
 
             cache.sample_type = SAMPLE_BUCKET;
@@ -806,8 +799,8 @@ __global__ void kernel_swap_and_clear()
     DShadowRayQueue.clear();
 }
 
-__device__ bool try_acquire_semaphore(volatile int *lock){
-  return (atomicCAS((int *)lock, 0, 1) != 0);
+__device__ void try_acquire_semaphore(volatile int *lock){
+  while (atomicCAS((int *)lock, 0, 1) != 0);
 }
 
 __device__ void release_semaphore(volatile int *lock){
@@ -815,7 +808,7 @@ __device__ void release_semaphore(volatile int *lock){
   __threadfence();
 }
 
-__global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, SampleCache* sampleCache)
+__global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, const SampleCache* sampleCache)
 {
     // id of the pixel
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -823,23 +816,47 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
     const float3 totalEnergy = get3f(traceState.accucolors[i]);
     for(uint bounce=0; bounce<MAX_CACHE_DEPTH; bounce++)
     {
-        SampleCache& cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
+        const SampleCache& cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
         const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
-        TriangleD& triangleD = buffers.vertexData[cache.triangle_id];
-        while(true) {
+        atomicAdd(&buffers.vertexData[cache.triangle_id].additionCache[cache.cache_bucket_id], energy);
+        atomicAdd(&buffers.vertexData[cache.triangle_id].additionCacheCount[cache.cache_bucket_id], 1.0f);
+        /*
             __syncthreads();
-            if (!try_acquire_semaphore(&cache._lock)) continue;
+            acquire_semaphore(&buffers.vertexData[cache.triangle_id]._lock);
             __syncthreads();
-            triangleD.updateCache(cache.cache_bucket_id, energy);
+            buffers.vertexData[cache.triangle_id].updateCache(cache.cache_bucket_id, energy);
             __threadfence();
             __syncthreads();
-            release_semaphore(&cache._lock);
+            release_semaphore(&buffers.vertexData[cache.triangle_id]._lock);
             __syncthreads();
-            break;
+            return;
         }
+        */
     }
+}
+
+__global__ void kernel_propagate_buckets(SceneBuffers buffers)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= buffers.num_triangles) return;
+    TriangleD triangleD = buffers.vertexData[i];
+    const float alpha = 0.95f;
+    for(uint t=0; t<16; t++)
+    {
+        const float additionCount = triangleD.additionCacheCount[t];
+        if (additionCount < EPS) continue;
+        const float oldValue = triangleD.radianceCache[t];
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * (triangleD.additionCache[t] / additionCount), 0.0f, 1.0f);
+        const float deltaValue = newValue - oldValue;
+        triangleD.radianceCache[t] += deltaValue;
+        triangleD.radianceTotal += deltaValue;
+        triangleD.additionCache[t] = 0;
+        triangleD.additionCacheCount[t] = 0;
+
+    }
+    buffers.vertexData[i] = triangleD;
 }
 
 #endif
