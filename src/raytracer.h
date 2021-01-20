@@ -43,7 +43,9 @@ void Raytracer::Init()
     sceneBuffers.num_planes = scene.planes.size();
 
     screenBuffer = (float*)malloc(4 * NR_PIXELS * sizeof(float));
+#ifdef _OPENMP
     omp_set_num_threads(8);
+#endif
 }
 
 void Raytracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
