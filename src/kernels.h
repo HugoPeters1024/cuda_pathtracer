@@ -822,18 +822,6 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
         const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
         atomicAdd(&buffers.vertexData[cache.triangle_id].additionCache[cache.cache_bucket_id], energy);
         atomicAdd(&buffers.vertexData[cache.triangle_id].additionCacheCount[cache.cache_bucket_id], 1.0f);
-        /*
-            __syncthreads();
-            acquire_semaphore(&buffers.vertexData[cache.triangle_id]._lock);
-            __syncthreads();
-            buffers.vertexData[cache.triangle_id].updateCache(cache.cache_bucket_id, energy);
-            __threadfence();
-            __syncthreads();
-            release_semaphore(&buffers.vertexData[cache.triangle_id]._lock);
-            __syncthreads();
-            return;
-        }
-        */
     }
 }
 
