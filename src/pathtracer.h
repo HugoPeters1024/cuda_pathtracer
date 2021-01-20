@@ -71,28 +71,6 @@ void Pathtracer::Init()
         }
     }
 
-    randState.sampleIdx = 10;
-    TriangleD triangleD = scene.allVertexData[0];
-    int accB[16];
-    for(uint r=0; r<8; r++) accB[r]=0;
-    float3 acc = make_float3(0);
-    for(uint i=0; i<100000; i++)
-    {
-        float x = rand(randState);
-        int bucket = int(x * 8);
-        float value = 5*sinf(x*PI);
-        triangleD.updateCache(bucket, value);
-        float prob;
-        float3 sample = SampleHemisphereCached(triangleD.normal, randState, triangleD, bucket, prob);
-        assert(dot(sample, triangleD.normal) >= 0);
-        acc += sample;
-        accB[bucket]++;
-    }
-
-    acc /= 100000;
-
-
-
     printf("Total energy in skydome CDF: %f\n", totalEnergy);
 
     free(h_skydome);
@@ -159,6 +137,8 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&sceneBuffers.vertexData, scene.allVertexData.size() * sizeof(TriangleD)) );
     cudaSafe( cudaMemcpy(sceneBuffers.vertexData, scene.allVertexData.data(), scene.allVertexData.size() * sizeof(TriangleD), cudaMemcpyHostToDevice) );
 
+    cudaSafe( cudaMalloc(&sceneBuffers.radianceCaches, scene.allVertices.size() * sizeof(RadianceCache)) );
+
     cudaSafe( cudaMalloc(&sceneBuffers.models, scene.models.size() * sizeof(Model)) );
     cudaSafe( cudaMemcpy(sceneBuffers.models, hd_models, scene.models.size() * sizeof(Model), cudaMemcpyHostToDevice) );
 
@@ -189,11 +169,15 @@ void Pathtracer::Init()
     cudaSafe( cudaMalloc(&d_sampleCache, NR_PIXELS * sizeof(SampleCache) * MAX_CACHE_DEPTH) );
 
 
-    // Enable NEE by default
+    // Enable NEE and Caching by default
     HNEE = true;
+    HCACHE = true;
 
     cudaSafe( cudaMemcpy(sceneBuffers.instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
     cudaSafe( cudaMemcpy(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
+
+    printf("Initializing radiance caches...\n");
+    kernel_init_radiance_cache<<<sceneBuffers.num_triangles/1024, 1024>>>(sceneBuffers);
 }
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
@@ -224,8 +208,9 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
     // clear the ray queue and update on gpu
     if (shouldClear)
     {
-        // sync NEE toggle
+        // sync toggles
         cudaSafe( cudaMemcpyToSymbolAsync(DNEE, &HNEE, sizeof(HNEE)) );
+        cudaSafe( cudaMemcpyToSymbolAsync(DCACHE, &HCACHE, sizeof(HNEE)) );
 
         cudaSafe( cudaMemcpyAsync(sceneBuffers.instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
         cudaSafe( cudaMemcpyAsync(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
@@ -273,12 +258,13 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             kernel_swap_and_clear<<<1,1>>>();
         }
 
-        // Write the final state accumulator into the texture
-        if (!shouldClear)
+        if (!shouldClear && HCACHE)
         {
             kernel_update_buckets<<<NR_PIXELS/512 + 1, 512>>>(sceneBuffers, traceBufSOA, d_sampleCache);
             kernel_propagate_buckets<<<sceneBuffers.num_triangles/512+1,512>>>(sceneBuffers);
         }
+
+        // Write the final state accumulator into the texture
         kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
         randState.sampleIdx++;
     }

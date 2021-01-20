@@ -380,14 +380,14 @@ HYBRID float3 SampleHemisphereCosine(const float3& normal, const float& r0, cons
             dot(sample, make_float3(u.z, v.z, w.z))));
 }
 
-HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const TriangleD& triangleD, int& sampleBucket, float& prob)
+HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState, const RadianceCache& rc, int& sampleBucket, float& invprob)
 {
-    const float sample = rand(randState) * triangleD.radianceTotal;
+    const float sample = rand(randState) * rc.radianceTotal;
     float acc = EPS;
     sampleBucket = -1;
     do
     {
-        acc += triangleD.radianceCache[++sampleBucket];
+        acc += rc.radianceCache[++sampleBucket];
     }
     while (acc < sample);
 
@@ -403,7 +403,7 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     const float r1R = rand(randState);
     const float r0 = r0Min * r0R + r0Max * (1-r0R);
     const float r1 = r1Min * r1R + r1Max * (1-r1R);
-    prob = (triangleD.radianceCache[sampleBucket] / triangleD.radianceTotal) * 16;
+    invprob = rc.radianceTotal / (rc.radianceCache[sampleBucket] * 16);
     return SampleHemisphereCosine(normal, r0, r1);
 }
 
@@ -495,7 +495,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     TraceState state = stateBuf.getState(ray.pixeli);
     SampleCache cache;
     cache.sample_type = SAMPLE_TERMINATE;
-    const uint cache_id = ray.pixeli * MAX_CACHE_DEPTH + bounce;
+    const uint cache_id = ray.pixeli + (bounce * NR_PIXELS);
 
     const uint x = ray.pixeli % WINDOW_WIDTH;
     const uint y = ray.pixeli / WINDOW_WIDTH;
@@ -522,16 +522,16 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     const float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
     const uint material_id = getColliderMaterialID(buffers, hitInfo);
     Material material = buffers.materials[material_id];
-    float3 surfaceNormal = getColliderNormal(buffers, hitInfo, intersectionPos);
+    float3 originalNormal = getColliderNormal(buffers, hitInfo, intersectionPos);
 
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        surfaceNormal = normalize(make_float3(instance->transform * glm::vec4(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z, 0.0f)));
+        originalNormal = normalize(make_float3(instance->transform * glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0.0f)));
     }
 
-    bool inside = dot(ray.direction, surfaceNormal) > 0;
-    surfaceNormal = inside ? -surfaceNormal : surfaceNormal;
+    bool inside = dot(ray.direction, originalNormal) > 0;
+    float3 surfaceNormal = inside ? -originalNormal : originalNormal;
     float3 colliderNormal = surfaceNormal;
 
     // Triangle is emmisive
@@ -633,29 +633,6 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
-            // Skydome CDF
-            /*
-            float r = rand(seed);
-            // binary search the cum values
-            uint sample = binarySearch(d_skydomeCDF.cumValues, d_skydomeCDF.nrItems, r);
-            uint x = sample % skydome.width;
-            uint y = sample / skydome.width;
-            float2 uv = make_float2((float)x / (float)skydome.width, (float)y / (float)skydome.height);
-            float3 normal = uvToNormal(uv);
-            if (dot(normal, colliderNormal) > 0)
-            {
-                float2 uv = normalToUv(normal);
-                float3 lightSample = get3f(tex2D<float4>(skydome.texture_id, uv.x, uv.y));
-                float PDF = 1.0f / (d_skydomeCDF.values[sample] * d_skydomeCDF.nrItems);
-                state.light = state.mask * lightSample * BRDF * PI * PDF * 4.0f;
-
-                float3 farOut = intersectionPos + 10000 * normal;
-                Ray shadowRay(farOut, -normal, ray.pixeli);
-                shadowRay.length = 10000 - EPS;
-                DShadowRayQueue.push(shadowRay);
-            }
-            */
-
             // Choose an area light at random
             const uint lightSource = uint(rand(randState) * DTriangleLights.size)%DTriangleLights.size;
             const TriangleLight& light = DTriangleLights[lightSource];
@@ -707,13 +684,12 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         }
 
         float3 r;
-        const TriangleD* triangleD = buffers.vertexData + hitInfo.primitive_id;
-
         // Only sample cache for front facing triangles, otherwise naive samples.
-        if (hitInfo.primitive_type == TRIANGLE && dot(colliderNormal, triangleD->normal) > 0) {
-            float prob;
-            r = SampleHemisphereCached(colliderNormal, randState, *triangleD, cache.cache_bucket_id, prob);
-            state.mask /= prob;
+        if (DCACHE && hitInfo.primitive_type == TRIANGLE && dot(colliderNormal, originalNormal) > 0) {
+            const RadianceCache radianceCache = buffers.radianceCaches[hitInfo.primitive_id];
+            float invprob;
+            r = SampleHemisphereCached(colliderNormal, randState, radianceCache, cache.cache_bucket_id, invprob);
+            state.mask *= invprob;
 
             cache.sample_type = SAMPLE_BUCKET;
             cache.triangle_id = hitInfo.primitive_id;
@@ -799,13 +775,19 @@ __global__ void kernel_swap_and_clear()
     DShadowRayQueue.clear();
 }
 
-__device__ void try_acquire_semaphore(volatile int *lock){
-  while (atomicCAS((int *)lock, 0, 1) != 0);
-}
-
-__device__ void release_semaphore(volatile int *lock){
-  *lock = 0;
-  __threadfence();
+__global__ void kernel_init_radiance_cache(SceneBuffers buffers)
+{
+    const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= buffers.num_triangles) return;
+    RadianceCache ret;
+    for(uint t=0; t<16; t++)
+    {
+        ret.radianceCache[t] = 0.1f;
+        ret.additionCacheCount[t] = 0.0f;
+        ret.additionCache[t] = 0.0f;
+    }
+    ret.radianceTotal = 16 * 0.1f;
+    buffers.radianceCaches[i] = ret;
 }
 
 __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, const SampleCache* sampleCache)
@@ -814,37 +796,43 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
     const float3 totalEnergy = get3f(traceState.accucolors[i]);
+
     for(uint bounce=0; bounce<MAX_CACHE_DEPTH; bounce++)
     {
-        const SampleCache& cache = sampleCache[i * MAX_CACHE_DEPTH + bounce];
+        const SampleCache cache = sampleCache[i + (NR_PIXELS * bounce)];
+        RadianceCache& radianceCache = buffers.radianceCaches[cache.triangle_id];
+
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
         const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
-        atomicAdd(&buffers.vertexData[cache.triangle_id].additionCache[cache.cache_bucket_id], energy);
-        atomicAdd(&buffers.vertexData[cache.triangle_id].additionCacheCount[cache.cache_bucket_id], 1.0f);
+        atomicAdd(&radianceCache.additionCache[cache.cache_bucket_id], energy);
+        atomicAdd(&radianceCache.additionCacheCount[cache.cache_bucket_id], 1.0f);
     }
+
 }
 
 __global__ void kernel_propagate_buckets(SceneBuffers buffers)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= buffers.num_triangles) return;
-    TriangleD triangleD = buffers.vertexData[i];
+    RadianceCache rc = buffers.radianceCaches[i];
     const float alpha = 0.95f;
+#pragma unroll
     for(uint t=0; t<16; t++)
     {
-        const float additionCount = triangleD.additionCacheCount[t];
+        float additionCount = rc.additionCacheCount[t];
         if (additionCount < EPS) continue;
-        const float oldValue = triangleD.radianceCache[t];
-        const float newValue = clamp(alpha * oldValue + (1-alpha) * (triangleD.additionCache[t] / additionCount), 0.0f, 1.0f);
+        const float oldValue = rc.radianceCache[t];
+        const float incomingEnergy = rc.additionCache[t] / additionCount;
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 2.0f);
         const float deltaValue = newValue - oldValue;
-        triangleD.radianceCache[t] += deltaValue;
-        triangleD.radianceTotal += deltaValue;
-        triangleD.additionCache[t] = 0;
-        triangleD.additionCacheCount[t] = 0;
+        rc.radianceCache[t] += deltaValue;
+        rc.radianceTotal += deltaValue;
+        rc.additionCache[t] = 0;
+        rc.additionCacheCount[t] = 0;
 
     }
-    buffers.vertexData[i] = triangleD;
+    buffers.radianceCaches[i] = rc;
 }
 
 #endif

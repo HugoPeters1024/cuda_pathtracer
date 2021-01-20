@@ -68,6 +68,7 @@ void main() {
 )";
 
 bool PATHRACER = true;
+bool CONVERGE = true;
 
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 
@@ -178,6 +179,8 @@ int main(int argc, char** argv) {
 
         // update while possibly asynchronous rendering is going on
         scene.update(keyboard, glfwGetTime());
+        if (glfwGetKey(window, GLFW_KEY_CAPS_LOCK) == GLFW_PRESS) CONVERGE = !CONVERGE;
+        if (!CONVERGE) scene.invalidate();
 
         if (PATHRACER)
             pathtracerApp.Finish();
@@ -228,11 +231,8 @@ int main(int argc, char** argv) {
             const HitInfo hitInfo = traverseTopLevel<false>(raytracerApp.sceneBuffers, centerRay);
             if (hitInfo.intersected()) 
             {
-                TriangleD result;
-                cudaSafe( cudaMemcpy(&result, pathtracerApp.sceneBuffers.vertexData+hitInfo.primitive_id, 1 * sizeof(TriangleD), cudaMemcpyDeviceToHost) );
-                int bucket;
-                float prob;
-                float3 sample = SampleHemisphereCached(result.normal, pathtracerApp.randState, result, bucket, prob);
+                RadianceCache result;
+                cudaSafe( cudaMemcpy(&result, pathtracerApp.sceneBuffers.radianceCaches+hitInfo.primitive_id, 1 * sizeof(RadianceCache), cudaMemcpyDeviceToHost) );
                 float radianceTotal = 0.0f;
                 for(float i : result.radianceCache) radianceTotal += i;
                 printf("Diff : %f\n", fabsf(radianceTotal - result.radianceTotal));
@@ -257,6 +257,7 @@ int main(int argc, char** argv) {
 
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
+        if (keyboard.isPressed(SWITCH_CACHE)) { HCACHE = !HCACHE; shouldClear = true; }
         glfwPollEvents();
         glfwSwapBuffers(window);
         keyboard.swapBuffers();
