@@ -1,7 +1,6 @@
 var pi = 3.14159
-var mat = DiffuseMaterial(make_float3(0.0, 0.5, 1.0))
+var mat = DiffuseMaterial(make_float3(1, 1, 1))
 
-mat.transmit = 1
 mat.refractive_index = 1.5
 mat.absorption = make_float3(0.1, 0.05, 0.0)
 mat.glossy = 0
@@ -15,4 +14,22 @@ var model = scene_add_model("cube.obj",
 var obj = GameObject(model);
 obj.position = make_float3(0, 10, 0);
 obj.rotation.y = pi/2
-scene_add_object(obj);
+cene_add_object(obj);
+
+var mat2 = DiffuseMaterial(make_float3(1, 1, 1))
+
+mat2.reflect = 0
+mat2.emission = make_float3(1.0, 1.0, 1.0)
+
+var mat2_id = scene_add_material(mat2)
+var model2 = scene_add_model("cube.obj",
+            5,
+            make_float3(0, 0, 0),
+            make_float3(0, 0, 0),
+            mat2_id, false)
+
+var obj2 = GameObject(model2);
+obj2.position = make_float3(0, 10, 0);
+obj2.scale = make_float3(0.2, 0.2, 0.2);
+obj2.rotation.y = pi/2
+scene_add_object(obj2);

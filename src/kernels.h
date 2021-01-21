@@ -591,7 +591,6 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
     float random = rand(randState);
-    bool cullSecondary = false;
     const float3 BRDF = material.diffuse_color / PI;
 
     // Ignore the cache by default
@@ -700,7 +699,11 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
             r = SampleHemisphereCosine(colliderNormal, rand(randState), rand(randState));
         }
 
-        cullSecondary = dot(r, surfaceNormal) < 0;
+        // Our sample goes into the surface, we sample again around the surface normal to correct
+        if (dot(r, surfaceNormal) < 0)
+        {
+            r = SampleHemisphereCosine(surfaceNormal, rand(randState), rand(randState));
+        }
         const float f = fmaxf(dot(colliderNormal, r), 0.0f);
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
         state.mask *= PI * BRDF;
@@ -708,7 +711,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
     // Russian roulette
     const float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
-    if (!cullSecondary && rand(randState) < p)
+    if (rand(randState) < p)
     {
         state.mask = state.mask / p;
         DRayQueueNew.push(RayPacked(secondary));
@@ -821,10 +824,9 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
     for(uint t=0; t<16; t++)
     {
         float additionCount = rc.additionCacheCount[t];
-        if (additionCount < EPS) continue;
         const float oldValue = rc.radianceCache[t];
         const float incomingEnergy = rc.additionCache[t] / additionCount;
-        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 2.0f);
+        const float newValue = clamp(additionCount < EPS ? oldValue * 0.995f : alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
         const float deltaValue = newValue - oldValue;
         rc.radianceCache[t] += deltaValue;
         rc.radianceTotal += deltaValue;

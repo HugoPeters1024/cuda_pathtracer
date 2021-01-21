@@ -3,7 +3,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
-#include <chaiscript/chaiscript.hpp>
+//#include <chaiscript/chaiscript.hpp>
 #pragma GCC diagnostic pop
 
 
@@ -246,6 +246,7 @@ static void chai_float_assign(float3 & a, float3 b) {
     a = b;
 }
 
+/*
 inline const Scene getScriptedScene(const char * filename) {
     chaiscript::ChaiScript chai;
     auto scene = Scene();
@@ -280,6 +281,7 @@ inline const Scene getScriptedScene(const char * filename) {
     scene.finalize();
     return scene;
 }
+*/
 
 inline Scene getScene(const char* sceneName)
 {
@@ -293,7 +295,7 @@ inline Scene getScene(const char* sceneName)
         return get2MillionScene();
 
     // assume sceneName is a path to the chaiscript scene definition
-    return getScriptedScene(sceneName);
+//    return getScriptedScene(sceneName);
 }
 
 #endif
