@@ -20,9 +20,10 @@ __device__ inline void swapc(T& left, T& right)
 HYBRID inline float rand(RandState& randState)
 {
 #ifdef __CUDA_ARCH__
-    if (randState.sampleIdx < 100)
+    if (randState.sampleIdx < 3)
     {
-        randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
+        //randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
+        randState.blueNoiseOffset += make_float2(0.2f, 0.34f);
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
         return tex2D<float>(randState.blueNoise, uv.x, uv.y);
     }
@@ -50,6 +51,11 @@ HYBRID inline float3 uvToNormal(const float2& uv)
     return n;
 }
 
+HYBRID inline float luminance(const float3& v)
+{
+    return 0.299*v.x + 0.587*v.y + 0.114*v.z;
+}
+
 
 HYBRID inline uint binarySearch(const float* values, const uint& nrValues, const float& target)
 {
@@ -72,13 +78,14 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
     glm::vec4 oldOrigin = glm::vec4(ray.origin.x, ray.origin.y, ray.origin.z, 1);
 
-    glm::vec4 newDir = transform * oldDir;
-    glm::vec4 newOrigin = transform * oldOrigin;
+    float3 newDir = normalize(get3f(transform * oldDir));
+    float3 newOrigin = get3f(transform * oldOrigin);
 
-    Ray transformedRay = ray;
-    transformedRay.direction = normalize(make_float3(newDir.x, newDir.y, newDir.z));
-    transformedRay.origin = make_float3(newOrigin.x, newOrigin.y, newOrigin.z);
-    return transformedRay;
+   // Ray transformedRay = ray;
+   // transformedRay.direction = newDir;
+    //transformedRay.origin = newOrigin;
+    //return transformedRay;
+    return Ray(newOrigin, newDir, ray.pixeli);
 }
 
 HYBRID inline uint getColliderMaterialID(const SceneBuffers& buffers, const HitInfo& hitInfo)
@@ -514,7 +521,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
     randState.seed = getSeed(x,y,randState.randIdx);
     randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
-    randState.blueNoiseOffset = make_float2(rand(randState.seed), rand(randState.seed));
+    randState.blueNoiseOffset = make_float2(randState.sampleIdx * 0.3, randState.sampleIdx * 0.3);
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
@@ -575,12 +582,12 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = normalize((get3f(texColor)*2)-make_float3(1));
-            float3 texNormal = normalize(make_float3(
+            float3 texNormalT = (get3f(texColor)*2)-make_float3(1);
+            float3 texNormal = make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
                     dot(texNormalT, make_float3(triangleData.tangent.z, triangleData.bitangent.z, triangleData.normal.z))
-            ));
+            );
 
             // Transform the normal from model space to world space
             texNormal = normalize(make_float3(instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f)));
@@ -704,13 +711,14 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         {
             r = SampleHemisphereCosine(surfaceNormal, rand(randState), rand(randState));
         }
-        const float f = fmaxf(dot(colliderNormal, r), 0.0f);
+        float f = fmaxf(dot(colliderNormal, r), 0.0f);
+        f = f * f * f;
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
         state.mask *= PI * BRDF;
     }
 
     // Russian roulette
-    const float p = fminf(fmaxcompf(material.diffuse_color), 0.9f);
+    const float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
     if (rand(randState) < p)
     {
         state.mask = state.mask / p;
@@ -807,7 +815,7 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
 
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
+        const float energy = fminf(10.0f, luminance(totalEnergy / cache.cum_mask));
         atomicAdd(&radianceCache.additionCache[cache.cache_bucket_id], energy);
         atomicAdd(&radianceCache.additionCacheCount[cache.cache_bucket_id], 1.0f);
     }
@@ -826,7 +834,7 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
         float additionCount = rc.additionCacheCount[t];
         const float oldValue = rc.radianceCache[t];
         const float incomingEnergy = rc.additionCache[t] / additionCount;
-        const float newValue = clamp(additionCount < EPS ? oldValue * 0.995f : alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
+        const float newValue = clamp(additionCount < EPS ? oldValue * 0.990f : alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
         const float deltaValue = newValue - oldValue;
         rc.radianceCache[t] += deltaValue;
         rc.radianceTotal += deltaValue;
