@@ -129,7 +129,14 @@ inline Scene getSibenikScene()
     cubeMat.glossy = 0.02;
     cubeMat.absorption = make_float3(0.1, 0.5, 0.8);
     cubeMat.emission = make_float3(10);
-    auto cubeMatId = scene.addMaterial(cubeMat);
+    auto cubeMatIdW = scene.addMaterial(cubeMat);
+
+    cubeMat.emission = make_float3(3, 0, 0);
+    auto cubeMatIdR = scene.addMaterial(cubeMat);
+    cubeMat.emission = make_float3(0, 3, 0);
+    auto cubeMatIdG = scene.addMaterial(cubeMat);
+    cubeMat.emission = make_float3(0, 0, 3);
+    auto cubeMatIdB = scene.addMaterial(cubeMat);
 
     Material sibenikMat = Material::DIFFUSE(make_float3(0.2));
     auto sibenikMatId = scene.addMaterial(sibenikMat);
@@ -173,11 +180,25 @@ inline Scene getSibenikScene()
     GameObject lucyObj(lucyModel);
     scene.addObject(lucyObj);
 
-    uint cubeModel = scene.addModel("cube.obj", 1, make_float3(0), make_float3(0), cubeMatId);
+    uint cubeModel = scene.addModel("cube.obj", 1.0f, make_float3(0), make_float3(0), cubeMatIdW);
     GameObject cubeObj(cubeModel);
-    cubeObj.position = make_float3(0);
+    cubeObj.position = make_float3(0, 3, 0);
     cubeObj.kind = 5;
+    cubeObj.materiald_id = cubeMatIdW;
     scene.addObject(cubeObj);
+
+    /*
+    MATERIAL_ID cubeIDs[3] = { cubeMatIdB, cubeMatIdG, cubeMatIdR };
+    for(uint i=0; i<10; i++)
+    {
+        float f = (float)i / 10.0f;
+        GameObject cubeObj(cubeModel);
+        cubeObj.position = make_float3(-10 + 25 * f, 6 + 2 * sinf(PI*2.0f*f), 0);
+        cubeObj.kind = 5;
+        cubeObj.materiald_id = cubeIDs[i%3];
+        scene.addObject(cubeObj);
+    }
+    */
 
    // scene.addPlane(Plane(make_float3(0,1,0),3, whiteId));
 

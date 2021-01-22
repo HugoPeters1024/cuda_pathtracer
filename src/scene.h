@@ -18,7 +18,8 @@ inline Instance ConvertToInstance(const GameObject& obj)
     {
         obj.model_id,
         transform,
-        glm::inverse(transform)
+        glm::inverse(transform),
+        obj.materiald_id,
     };
 }
 

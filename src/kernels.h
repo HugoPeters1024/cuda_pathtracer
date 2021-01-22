@@ -88,11 +88,14 @@ HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
     return Ray(newOrigin, newDir, ray.pixeli);
 }
 
-HYBRID inline uint getColliderMaterialID(const SceneBuffers& buffers, const HitInfo& hitInfo)
+HYBRID inline uint getColliderMaterialID(const SceneBuffers& buffers, const HitInfo& hitInfo, const Instance* instance)
 {
     switch (hitInfo.primitive_type)
     {
-        case TRIANGLE: return buffers.vertexData[hitInfo.primitive_id].material;
+        case TRIANGLE: 
+            if (instance->material_id == 0xffffffff)
+                return buffers.vertexData[hitInfo.primitive_id].material;
+            return instance->material_id;
         case SPHERE:   return buffers.spheres[hitInfo.primitive_id].material;
         case PLANE:    return buffers.planes[hitInfo.primitive_id].material;
     }
@@ -527,7 +530,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     // responsibility of the code dereferencing the pointer.
     const Instance* instance = buffers.instances + hitInfo.instance_id;
     const float3 intersectionPos = ray.origin + hitInfo.t * ray.direction;
-    const uint material_id = getColliderMaterialID(buffers, hitInfo);
+    const uint material_id = getColliderMaterialID(buffers, hitInfo, instance);
     Material material = buffers.materials[material_id];
     float3 originalNormal = getColliderNormal(buffers, hitInfo, intersectionPos);
 
@@ -582,7 +585,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         if (material.hasNormalMap)
         {
             float4 texColor = tex2D<float4>(material.normal_texture, uv.x, uv.y);
-            float3 texNormalT = (get3f(texColor)*2)-make_float3(1);
+            float3 texNormalT = (get3f(texColor)*2.0f)-make_float3(1.0f);
             float3 texNormal = make_float3(
                     dot(texNormalT, make_float3(triangleData.tangent.x, triangleData.bitangent.x, triangleData.normal.x)),
                     dot(texNormalT, make_float3(triangleData.tangent.y, triangleData.bitangent.y, triangleData.normal.y)),
@@ -644,7 +647,8 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
             const TriangleLight& light = DTriangleLights[lightSource];
             const TriangleV& lightV = buffers.vertices[light.triangle_index];
             const TriangleD& lightD = buffers.vertexData[light.triangle_index];
-            const glm::mat4x4& lightTransform = buffers.instances[light.instance_index].transform;
+            const Instance& lightInstance = buffers.instances[light.instance_index];
+            const glm::mat4x4& lightTransform = lightInstance.transform;
 
             // transform the vertices to world space
             const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
@@ -672,7 +676,8 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
             // otherwise we are our own occluder or view the backface of the light
             if (NL > 0 && dot(-shadowDir, surfaceNormal) > 0 && LNL > 0)
             {
-                const float3& emission = buffers.materials[lightD.material].emission;
+                const uint material_id = lightInstance.material_id == 0xffffffff ? lightD.material : lightInstance.material_id;
+                const float3& emission = buffers.materials[material_id].emission;
                 // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
                 float A = 0.5f * crLength;
 

@@ -387,19 +387,22 @@ struct __align__(16) Instance
     uint model_id;
     glm::mat4 transform;
     glm::mat4 invTransform;
+    uint material_id;
 };
 
 struct GameObject
 {
     uint model_id;
     uint kind;
+    uint materiald_id;
     float3 position;
     float3 rotation;
     float3 scale;
 
     GameObject() {}
-    GameObject(uint model_id)
-        : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)), kind(0) {}
+    GameObject(uint model_id, uint material_id = 0xffffffff)
+        : model_id(model_id), position(make_float3(0)), rotation(make_float3(0)), scale(make_float3(1.0f)),
+          kind(0), materiald_id(material_id) {}
 };
 
 struct __align__(16) TopLevelBVH

@@ -117,10 +117,12 @@ void Pathtracer::Init()
     std::vector<TriangleLight> lights;
     for(uint i=0; i<scene.objects.size(); i++)
     {
-        const Model& model = scene.models[scene.instances[i].model_id];
+        const Instance& instance = scene.instances[i];
+        const Model& model = scene.models[instance.model_id];
         for(uint t=model.triangleStart; t<model.triangleStart+model.nrTriangles; t++)
         {
-            const Material& mat = scene.materials[scene.allVertexData[t].material];
+            const uint mat_id = instance.material_id == 0xffffffff ? scene.allVertexData[t].material : instance.material_id;
+            const Material& mat = scene.materials[mat_id];
             if (fmaxcompf(mat.emission) < EPS) continue;
             lights.push_back(TriangleLight { t, i });
         }
