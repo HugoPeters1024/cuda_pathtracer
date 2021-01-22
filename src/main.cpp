@@ -231,11 +231,6 @@ int main(int argc, char** argv) {
             const HitInfo hitInfo = traverseTopLevel<false>(raytracerApp.sceneBuffers, centerRay);
             if (hitInfo.intersected()) 
             {
-                RadianceCache result;
-                cudaSafe( cudaMemcpy(&result, pathtracerApp.sceneBuffers.radianceCaches+hitInfo.primitive_id, 1 * sizeof(RadianceCache), cudaMemcpyDeviceToHost) );
-                float radianceTotal = 0.0f;
-                for(float i : result.radianceCache) radianceTotal += i;
-                printf("Diff : %f\n", fabsf(radianceTotal - result.radianceTotal));
                 camera.focalLength = hitInfo.t;
                 scene.invalidate();
                 printf("Focal length: %f\n", camera.focalLength);

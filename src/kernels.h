@@ -20,7 +20,7 @@ __device__ inline void swapc(T& left, T& right)
 HYBRID inline float rand(RandState& randState)
 {
 #ifdef __CUDA_ARCH__
-    if (randState.sampleIdx < 3)
+    if (randState.sampleIdx < 1)
     {
         //randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
         randState.blueNoiseOffset += make_float2(0.2f, 0.34f);
@@ -53,7 +53,7 @@ HYBRID inline float3 uvToNormal(const float2& uv)
 
 HYBRID inline float luminance(const float3& v)
 {
-    return 0.299*v.x + 0.587*v.y + 0.114*v.z;
+    return 0.299f*v.x + 0.587f*v.y + 0.114f*v.z;
 }
 
 
@@ -93,8 +93,7 @@ HYBRID inline uint getColliderMaterialID(const SceneBuffers& buffers, const HitI
     switch (hitInfo.primitive_type)
     {
         case TRIANGLE: 
-            if (instance->material_id == 0xffffffff)
-                return buffers.vertexData[hitInfo.primitive_id].material;
+            if (instance->material_id == 0xffffffff) return buffers.vertexData[hitInfo.primitive_id].material;
             return instance->material_id;
         case SPHERE:   return buffers.spheres[hitInfo.primitive_id].material;
         case PLANE:    return buffers.planes[hitInfo.primitive_id].material;
@@ -204,7 +203,7 @@ HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3
 }
 
 template <bool anyIntersection>
-HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInfo& hitInfo, const Instance& instance)
+HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInfo& hitInfo, const BVHNode* bvh)
 {
     float t, u, v;
 
@@ -216,10 +215,7 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
     float tnear, tfar;
 
     const float3 invRayDir = 1.0f / ray.direction;
-
-    const Model& model = buffers.models[instance.model_id];
-    const TriangleV* vertices = buffers.vertices;
-    BVHNode current = model.bvh[0];
+    BVHNode current = bvh[0];
     if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
 
     bool needPop = false;
@@ -233,7 +229,7 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
             const uint end = start + current.t_count();
             for(uint i=start; i<end; i++)
             {
-                if (rayTriangleIntersect(ray, vertices[i], t, u, v) && t < hitInfo.t)
+                if (rayTriangleIntersect(ray, buffers.vertices[i], t, u, v) && t < hitInfo.t)
                 {
                     if (anyIntersection)
                     {
@@ -252,12 +248,12 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
         else
         {
             const uint near_id = current.child1();
-            const BVHNode& near = model.bvh[near_id];
-            const BVHNode& far = model.bvh[near_id+1];
+            const BVHNode& near = bvh[near_id];
+            const BVHNode& far = bvh[near_id+1];
             const bool bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
             const bool bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
-            if (bnear & bfar) {
+            if (bnear && bfar) {
                 bool rev = tnear > tfar;
                 current = rev ? far : near;
                 *stackPtr++ = near_id + !rev;
@@ -274,7 +270,7 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
         if (needPop) 
         {
             if (stack != stackPtr)
-                current = model.bvh[*--stackPtr];
+                current = bvh[*--stackPtr];
             else
                 return intersected;
             needPop = false;
@@ -289,7 +285,7 @@ HYBRID HitInfo traverseTopLevel(const SceneBuffers& buffers, const Ray& ray)
     hitInfo.primitive_id = 0xffffffff;
     hitInfo.t = ray.length;
 
-    float t, tmin;
+    float t, tnear, tfar;
 
     for(int i=0; i<buffers.num_spheres; i++)
     {
@@ -327,26 +323,23 @@ HYBRID HitInfo traverseTopLevel(const SceneBuffers& buffers, const Ray& ray)
         }
     }
 
-    float3 invRayDir = 1.0f / ray.direction;
+    const float3 invRayDir = 1.0f / ray.direction;
 
     const uint STACK_SIZE = 5;
     uint stack[STACK_SIZE];
-    uint size = 0;
+    uint* stackPtr = stack;
+    bool needPop = false;
 
-    TopLevelBVH current;
-    stack[size++] = 0;
+    TopLevelBVH current = buffers.topBvh[0];
+    if (!boxtest(current.box, ray.origin, invRayDir, tnear, hitInfo)) return hitInfo;
 
-
-    while(size > 0)
+    while(true)
     {
-        current = buffers.topBvh[stack[--size]];
-        if (!boxtest(current.box, ray.origin, invRayDir, tmin, hitInfo)) continue;
-
-        if (current.isLeaf)
+        if (current.isLeaf())
         {
-            Instance instance = buffers.instances[current.leaf];
-            Ray transformedRay = transformRay(ray, instance.invTransform);
-            if (traverseBVHStack<anyIntersection>(buffers, transformedRay, hitInfo, instance))
+            const Instance& instance = buffers.instances[current.leaf];
+            const Ray transformedRay = transformRay(ray, instance.invTransform);
+            if (traverseBVHStack<anyIntersection>(buffers, transformedRay, hitInfo, buffers.models[instance.model_id].bvh))
             {
                 if (anyIntersection)
                 {
@@ -360,11 +353,37 @@ HYBRID HitInfo traverseTopLevel(const SceneBuffers& buffers, const Ray& ray)
                     hitInfo.instance_id = current.leaf;
                 }
             }
+            needPop = true;
         }
         else
         {
-            stack[size++] = current.child1;
-            stack[size++] = current.child2;
+            const uint near_id = current.child1();
+            const uint far_id = current.child2();
+            const TopLevelBVH near = buffers.topBvh[near_id];
+            const TopLevelBVH far = buffers.topBvh[far_id];
+            const bool bnear = boxtest(near.box, ray.origin, invRayDir, tnear, hitInfo);
+            const bool bfar = boxtest(far.box, ray.origin, invRayDir, tfar, hitInfo);
+
+            if (bnear && bfar) {
+                bool rev = tnear > tfar;
+                *stackPtr++ = rev ? near_id : far_id;
+                current = rev ? far : near;
+            } else if (bnear) {
+                current = near;
+            } else if (bfar) {
+                current = far;
+            } else {
+                needPop = true;
+            }
+        }
+
+        if (needPop) 
+        {
+            if (stack != stackPtr)
+                current = buffers.topBvh[*--stackPtr];
+            else
+                return hitInfo;
+            needPop = false;
         }
     }
 
@@ -401,19 +420,17 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     }
     while (acc < sample);
 
-    //assert(sampleBucket < 8);
-
-    const float r0Min = (sampleBucket < 8) ? 0 : 0.5;
-    const float r0Max = (sampleBucket < 8) ? 0.5 : 1.0f;
+    const float r0Min = (sampleBucket < 8) ? 0 : 0.5f;
+    const float r0Max = (sampleBucket < 8) ? 0.5f : 1.0f;
     const uint r1i = sampleBucket % 8;
     const float r1Min = r1i * (1.0f / 8.0f);
     const float r1Max = (r1i+1.0f) * (1.0f / 8.0f);
 
     const float r0R = rand(randState);
     const float r1R = rand(randState);
-    const float r0 = r0Min * r0R + r0Max * (1-r0R);
-    const float r1 = r1Min * r1R + r1Max * (1-r1R);
-    invprob = rc.radianceTotal / (rc.radianceCache[sampleBucket] * 16);
+    const float r0 = r0Min * r0R + r0Max * (1.0f-r0R);
+    const float r1 = r1Min * r1R + r1Max * (1.0f-r1R);
+    invprob = rc.radianceTotal / (rc.radianceCache[sampleBucket] * 16.0f);
     return SampleHemisphereCosine(normal, r0, r1);
 }
 
@@ -688,7 +705,8 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
 
                 // We invert the shadowrays to get coherent origins.
-                Ray shadowRay(samplePoint + LNL * EPS * shadowDir + (1-LNL) * EPS * lightNormal, shadowDir, ray.pixeli);
+                float f = LNL * LNL * LNL;
+                Ray shadowRay(samplePoint + f * EPS * shadowDir + (1-f) * EPS * lightNormal, shadowDir, ray.pixeli);
                 shadowRay.length = shadowLength - 2 * EPS;
                 DShadowRayQueue.push(RayPacked(shadowRay));
             }
@@ -795,7 +813,7 @@ __global__ void kernel_init_radiance_cache(SceneBuffers buffers)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= buffers.num_triangles) return;
-    RadianceCache ret;
+    auto ret = RadianceCache();
     for(uint t=0; t<16; t++)
     {
         ret.radianceCache[t] = 0.1f;
@@ -820,7 +838,7 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
 
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        const float energy = fminf(10.0f, luminance(totalEnergy / cache.cum_mask));
+        const float energy = fminf(5.0f, luminance(totalEnergy / cache.cum_mask));
         atomicAdd(&radianceCache.additionCache[cache.cache_bucket_id], energy);
         atomicAdd(&radianceCache.additionCacheCount[cache.cache_bucket_id], 1.0f);
     }
@@ -833,15 +851,15 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
     if (i >= buffers.num_triangles) return;
     RadianceCache rc = buffers.radianceCaches[i];
     const float alpha = 0.95f;
-#pragma unroll
     for(uint t=0; t<16; t++)
     {
         float additionCount = rc.additionCacheCount[t];
+        if (additionCount < EPS) continue;
         const float oldValue = rc.radianceCache[t];
         const float incomingEnergy = rc.additionCache[t] / additionCount;
-        const float newValue = clamp(additionCount < EPS ? oldValue * 0.990f : alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
         const float deltaValue = newValue - oldValue;
-        rc.radianceCache[t] += deltaValue;
+        rc.radianceCache[t] = newValue;
         rc.radianceTotal += deltaValue;
         rc.additionCache[t] = 0;
         rc.additionCacheCount[t] = 0;

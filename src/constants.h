@@ -8,7 +8,7 @@
 #define EPS 0.001f
 #define PI 3.14159265358979323846f
 
-//#define DEBUG_ENERGY
+#define DEBUG_ENERGY
 
 #define MAX_RAY_DEPTH 32
 #define MAX_CACHE_DEPTH 3

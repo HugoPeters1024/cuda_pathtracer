@@ -179,7 +179,8 @@ void Pathtracer::Init()
     cudaSafe( cudaMemcpy(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
     printf("Initializing radiance caches...\n");
-    kernel_init_radiance_cache<<<sceneBuffers.num_triangles/1024, 1024>>>(sceneBuffers);
+    kernel_init_radiance_cache<<<sceneBuffers.num_triangles/1024 + 1, 1024>>>(sceneBuffers);
+    cudaSafe( cudaDeviceSynchronize() );
 }
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)

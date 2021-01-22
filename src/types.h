@@ -408,15 +408,19 @@ struct GameObject
 struct __align__(16) TopLevelBVH
 {
     Box box;
-    uint child1;
-    uint child2;
+    uint children;
     uint leaf;
-    bool isLeaf = false;
 
-    static TopLevelBVH CreateLeaf(uint instanceIdx, const Box& box)
+    HYBRID uint child1() const { return children & 0x0000ffff; }
+    HYBRID uint child2() const { return (children >> 16) & 0x0000ffff; }
+
+    // both children 0 is impossible
+    HYBRID bool isLeaf() const { return children == 0; }
+
+static TopLevelBVH CreateLeaf(uint instanceIdx, const Box& box)
     {
         TopLevelBVH ret;
-        ret.isLeaf = true;
+        ret.children = 0;
         ret.leaf = instanceIdx;
         ret.box = box;
         return ret;
@@ -425,9 +429,7 @@ struct __align__(16) TopLevelBVH
     static TopLevelBVH CreateNode(uint child1, uint child2, Box box)
     {
         TopLevelBVH ret;
-        ret.isLeaf = false;
-        ret.child1 = child1;
-        ret.child2 = child2;
+        ret.children = child1 | (child2 << 16);
         ret.box = box;
         return ret;
     }

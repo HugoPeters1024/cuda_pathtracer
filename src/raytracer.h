@@ -98,8 +98,8 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
 
     if (hitInfo.primitive_type == PLANE)
     {
-        uint px = (uint)(fabs(intersectionPos.x/4));
-        uint py = (uint)(fabs(intersectionPos.z/4));
+        uint px = (uint)(fabsf(intersectionPos.x/4));
+        uint py = (uint)(fabsf(intersectionPos.z/4));
         material.diffuse_color = (px + py)%2 == 0 ? make_float3(1) : make_float3(0.2);
     }
 
@@ -115,7 +115,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             if (dot(fromLight, colliderNormal) >= 0) continue;
 
             float dis2light2 = dot(fromLight, fromLight);
-            float dis2light = sqrt(dis2light2);
+            float dis2light = sqrtf(dis2light2);
             fromLight /= dis2light;
             Ray shadowRay(light.pos + EPS * fromLight, fromLight, 0);
             shadowRay.length = dis2light - 2 * EPS;
@@ -140,7 +140,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
             {
                 // Take away any absorpted light using Beer's law. when leaving the object
                 float3 c = material.absorption;
-                refract_color = refract_color * make_float3(exp(-c.x * hitInfo.t), exp(-c.y *hitInfo.t), exp(-c.z * hitInfo.t));
+                refract_color = refract_color * make_float3(expf(-c.x * hitInfo.t), expf(-c.y *hitInfo.t), expf(-c.z * hitInfo.t));
             }
         }
     }
