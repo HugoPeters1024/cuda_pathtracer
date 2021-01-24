@@ -245,6 +245,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             max_bounces = shouldClear ? scene.interactive_depth+1 : MAX_RAY_DEPTH;
 
         for(int bounce = 0; bounce < max_bounces; bounce++) {
+            randState.blueNoiseOffset += make_float2(rand(randState), rand(randState));
 
             // Test for intersections with each of the rays,
             uint kz = 64;
@@ -261,10 +262,10 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             kernel_swap_and_clear<<<1,1>>>();
         }
 
-        if (!shouldClear && HCACHE)
+        if (!shouldClear && HCACHE && randState.sampleIdx < 100)
         {
-            kernel_update_buckets<<<NR_PIXELS/512 + 1, 512>>>(sceneBuffers, traceBufSOA, d_sampleCache);
-            kernel_propagate_buckets<<<sceneBuffers.num_triangles/512+1,512>>>(sceneBuffers);
+            kernel_update_buckets<<<NR_PIXELS/1024 + 1, 1024>>>(sceneBuffers, traceBufSOA, d_sampleCache);
+            kernel_propagate_buckets<<<sceneBuffers.num_triangles/1024+1,1024>>>(sceneBuffers);
         }
 
         // Write the final state accumulator into the texture

@@ -45,6 +45,7 @@ To select a scene pass a value to the `--scene` command line option. The followi
 ## new in version 3
 
 - Move objects around by attach to them (see controls)
+- Scriptable scenes using the chai library.
 - Bokeh by sampling the lens (offsetting the orgin and then refocussing on the focal plane)
 - Using blue noise in the first 100 samples before continuing fully randomized. Especially effective on materials with high albedo like
 the floor in the sibenik (see image blow)
@@ -59,7 +60,7 @@ the floor in the sibenik (see image blow)
 During the shading stage, up to three bounces of sampled cache buckets are saved along with the mask at that point. There are no more
 than 3 because of memory limitations on my low end card. Ideally there are 32 (MAX_RAY_DEPTH). Each saved cache then uses the total
 radiance that is about to be added to framebuffer and divides by the mask to get the original energy vector at that location. The energy
-is then converted to a single float (using max component) and atomically added to a seperate radiance cache buffer like so:
+is then converted to a single float (using the radiance factors) and atomically added to a seperate radiance cache buffer like so:
 
 ```cpp
 __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceState, const SampleCache* sampleCache)
@@ -113,6 +114,14 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
     buffers.radianceCaches[i] = rc;
 }
 ```
+
+Although it seems like quite some extra work is being performed, the overhead is quite minimal. See here the GPU usage during
+the rendering of the sibenik cathedral:
+
+<img src="./screenshots/profiler.png" width="100%" />
+
+As you can see is only a total of 2.3% of computation time spend on the pathguiding updates. I dare to speculate that the variances is lowered by quite a bit more than that making this well worth it.
+
 
 
 ### A demo for the path guiding.

@@ -97,9 +97,9 @@ struct __align__(16) TriangleD
 
 struct __align__(16) RadianceCache
 {
-    float radianceCache[16];
-    float additionCache[16];
-    float additionCacheCount[16];
+    float radianceCache[8];
+    float additionCache[8];
+    float additionCacheCount[8];
     float radianceTotal;
 };
 

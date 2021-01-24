@@ -20,10 +20,10 @@ __device__ inline void swapc(T& left, T& right)
 HYBRID inline float rand(RandState& randState)
 {
 #ifdef __CUDA_ARCH__
-    if (randState.sampleIdx < 1)
+    if (randState.sampleIdx < 100)
     {
         //randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
-        randState.blueNoiseOffset += make_float2(0.2f, 0.34f);
+        //randState.blueNoiseOffset += make_float2(0.2f, 0.34f);
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
         return tex2D<float>(randState.blueNoise, uv.x, uv.y);
     }
@@ -420,17 +420,17 @@ HYBRID float3 SampleHemisphereCached(const float3& normal, RandState& randState,
     }
     while (acc < sample);
 
-    const float r0Min = (sampleBucket < 8) ? 0 : 0.5f;
-    const float r0Max = (sampleBucket < 8) ? 0.5f : 1.0f;
-    const uint r1i = sampleBucket % 8;
-    const float r1Min = r1i * (1.0f / 8.0f);
-    const float r1Max = (r1i+1.0f) * (1.0f / 8.0f);
+    const float r0Min = (sampleBucket < 4) ? 0 : 0.5f;
+    const float r0Max = (sampleBucket < 4) ? 0.5f : 1.0f;
+    const uint r1i = sampleBucket % 4;
+    const float r1Min = r1i * (1.0f / 4.0f);
+    const float r1Max = (r1i+1.0f) * (1.0f / 4.0f);
 
     const float r0R = rand(randState);
     const float r1R = rand(randState);
     const float r0 = r0Min * r0R + r0Max * (1.0f-r0R);
     const float r1 = r1Min * r1R + r1Max * (1.0f-r1R);
-    invprob = rc.radianceTotal / (rc.radianceCache[sampleBucket] * 16.0f);
+    invprob = rc.radianceTotal / (rc.radianceCache[sampleBucket] * 8.0f);
     return SampleHemisphereCosine(normal, r0, r1);
 }
 
@@ -541,7 +541,6 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
     randState.seed = getSeed(x,y,randState.randIdx);
     randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
-    randState.blueNoiseOffset = make_float2(randState.sampleIdx * 0.3, randState.sampleIdx * 0.3);
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
@@ -659,56 +658,84 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
-            // Choose an area light at random
-            const uint lightSource = uint(rand(randState) * DTriangleLights.size)%DTriangleLights.size;
-            const TriangleLight& light = DTriangleLights[lightSource];
-            const TriangleV& lightV = buffers.vertices[light.triangle_index];
-            const TriangleD& lightD = buffers.vertexData[light.triangle_index];
-            const Instance& lightInstance = buffers.instances[light.instance_index];
-            const glm::mat4x4& lightTransform = lightInstance.transform;
-
-            // transform the vertices to world space
-            const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
-            const float3 v1 = get3f(lightTransform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
-            const float3 v2 = get3f(lightTransform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
-
-            const float3 v0v1 = v1 - v0;
-            const float3 v0v2 = v2 - v0;
-            const float3 cr = cross(v0v1, v0v2);
-            const float crLength = length(cr);
-
-            float u=rand(randState), v=rand(randState);
-            if (u+v > 1.0f) { u = 1.0f-u; v = 1.0f-v; }
-            const float3 samplePoint = v0 + u * v0v1 + v * v0v2;
-
-            float3 shadowDir = intersectionPos - samplePoint;
-            const float shadowLength = length(shadowDir);
-            const float invShadowLength = 1.0f / shadowLength;
-            shadowDir *= invShadowLength;
-
-            const float3 lightNormal = cr / crLength;
-            const float NL = dot(colliderNormal, -shadowDir);
-            const float LNL = dot(lightNormal, shadowDir);
-
-            // otherwise we are our own occluder or view the backface of the light
-            if (NL > 0 && dot(-shadowDir, surfaceNormal) > 0 && LNL > 0)
+            uint successIdx = 0;
+            float valid = 0.0f;
+            for(uint i=0; i<4; i++)
             {
-                const uint material_id = lightInstance.material_id == 0xffffffff ? lightD.material : lightInstance.material_id;
-                const float3& emission = buffers.materials[material_id].emission;
-                // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
-                float A = 0.5f * crLength;
+                // Choose an area light at random
+                uint lightSource = uint(rand(randState) * DTriangleLights.size) % DTriangleLights.size;
+                const TriangleLight& light = DTriangleLights[lightSource];
+                const TriangleV& lightV = buffers.vertices[light.triangle_index];
+                const Instance& lightInstance = buffers.instances[light.instance_index];
+                const glm::mat4x4& lightTransform = lightInstance.transform;
 
-                float SA = LNL * A * invShadowLength * invShadowLength;
-                // writing this explicitly leads to NaNs
-                //float lightPDF = 1.0f / (SA * DTriangleLights.size);
-                state.light = state.mask * (NL * SA * DTriangleLights.size * BRDF * emission);
+                float3 centroid = (lightV.v0 + lightV.v1 + lightV.v2) / 3.0f;
+                centroid = get3f(lightTransform * glm::vec4(centroid.x, centroid.y, centroid.z, 1));
+
+                float3 lightNormal = buffers.vertexData[light.triangle_index].normal;
+                lightNormal = get3f(lightTransform * glm::vec4(lightNormal.x, lightNormal.y, lightNormal.z, 0));
+
+                const float3 fromLight = normalize(intersectionPos - centroid);
+
+                // Light is pointing the right way
+                if (dot(lightNormal, fromLight) > 0)
+                {
+                    valid += 1.0f;
+                    successIdx = lightSource;
+                }
+            }
+
+            if (valid > 0)
+            {
+                const TriangleLight& light = DTriangleLights[successIdx];
+                const TriangleV& lightV = buffers.vertices[light.triangle_index];
+                const TriangleD& lightD = buffers.vertexData[light.triangle_index];
+                const Instance& lightInstance = buffers.instances[light.instance_index];
+                const glm::mat4x4& lightTransform = lightInstance.transform;
+
+                // transform the vertices to world space
+                const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
+                const float3 v1 = get3f(lightTransform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
+                const float3 v2 = get3f(lightTransform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
+
+                const float3 v0v1 = v1 - v0;
+                const float3 v0v2 = v2 - v0;
+                const float3 cr = cross(v0v1, v0v2);
+                const float crLength = length(cr);
+
+                float u=rand(randState), v=rand(randState);
+                if (u+v > 1.0f) { u = 1.0f-u; v = 1.0f-v; }
+                const float3 samplePoint = v0 + u * v0v1 + v * v0v2;
+
+                float3 shadowDir = intersectionPos - samplePoint;
+                const float shadowLength = length(shadowDir);
+                const float invShadowLength = 1.0f / shadowLength;
+                shadowDir *= invShadowLength;
+
+                const float3 lightNormal = cr / crLength;
+                const float NL = dot(colliderNormal, -shadowDir);
+                const float LNL = dot(lightNormal, shadowDir);
+
+                // otherwise we are our own occluder or view the backface of the light
+                if (NL > 0 && dot(-shadowDir, surfaceNormal) > 0 && LNL > 0)
+                {
+                    const uint material_id = lightInstance.material_id == 0xffffffff ? lightD.material : lightInstance.material_id;
+                    const float3& emission = buffers.materials[material_id].emission;
+                    // https://math.stackexchange.com/questions/128991/how-to-calculate-the-area-of-a-3d-triangle
+                    float A = 0.5f * crLength;
+
+                    float SA = LNL * A * invShadowLength * invShadowLength;
+                    // writing this explicitly leads to NaNs
+                    //float lightPDF = 1.0f / (SA * DTriangleLights.size);
+                    state.light = state.mask * (NL * SA * DTriangleLights.size * BRDF * emission * (valid / 4.0f));
 
 
-                // We invert the shadowrays to get coherent origins.
-                float f = LNL * LNL * LNL;
-                Ray shadowRay(samplePoint + f * EPS * shadowDir + (1-f) * EPS * lightNormal, shadowDir, ray.pixeli);
-                shadowRay.length = shadowLength - 2 * EPS;
-                DShadowRayQueue.push(RayPacked(shadowRay));
+                    // We invert the shadowrays to get coherent origins.
+                    float f = LNL * LNL * LNL;
+                    Ray shadowRay(samplePoint + f * EPS * shadowDir + (1-f) * EPS * lightNormal, shadowDir, ray.pixeli);
+                    shadowRay.length = shadowLength - 2 * EPS;
+                    DShadowRayQueue.push(RayPacked(shadowRay));
+                }
             }
         }
 
@@ -732,7 +759,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         // Our sample goes into the surface, we sample again around the surface normal to correct
         if (dot(r, surfaceNormal) < 0)
         {
-            r = SampleHemisphereCosine(surfaceNormal, rand(randState), rand(randState));
+            state.mask = make_float3(0.0f);
         }
         float f = fmaxf(dot(colliderNormal, r), 0.0f);
         f = f * f * f;
@@ -742,7 +769,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
     // Russian roulette
     const float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
-    if (rand(randState) < p)
+    if (fmaxcompf(state.mask) > 0.0001f && rand(randState) < p)
     {
         state.mask = state.mask / p;
         DRayQueueNew.push(RayPacked(secondary));
@@ -814,13 +841,13 @@ __global__ void kernel_init_radiance_cache(SceneBuffers buffers)
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= buffers.num_triangles) return;
     auto ret = RadianceCache();
-    for(uint t=0; t<16; t++)
+    for(uint t=0; t<8; t++)
     {
         ret.radianceCache[t] = 0.1f;
         ret.additionCacheCount[t] = 0.0f;
         ret.additionCache[t] = 0.0f;
     }
-    ret.radianceTotal = 16 * 0.1f;
+    ret.radianceTotal = 8 * 0.1f;
     buffers.radianceCaches[i] = ret;
 }
 
@@ -851,7 +878,7 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
     if (i >= buffers.num_triangles) return;
     RadianceCache rc = buffers.radianceCaches[i];
     const float alpha = 0.95f;
-    for(uint t=0; t<16; t++)
+    for(uint t=0; t<8; t++)
     {
         float additionCount = rc.additionCacheCount[t];
         if (additionCount < EPS) continue;
