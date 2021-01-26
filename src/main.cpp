@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
 
         // update while possibly asynchronous rendering is going on
         scene.update(keyboard, glfwGetTime());
-        if (glfwGetKey(window, GLFW_KEY_CAPS_LOCK) == GLFW_PRESS) CONVERGE = !CONVERGE;
+        if (keyboard.isPressed(SWITCH_CONVERGE)) CONVERGE = !CONVERGE;
         if (!CONVERGE) scene.invalidate();
 
         if (PATHRACER)

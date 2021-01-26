@@ -245,7 +245,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             max_bounces = shouldClear ? scene.interactive_depth+1 : MAX_RAY_DEPTH;
 
         for(int bounce = 0; bounce < max_bounces; bounce++) {
-            randState.blueNoiseOffset += make_float2(rand(randState), rand(randState));
+            randState.blueNoiseOffset = make_float2(rand(randState), rand(randState));
 
             // Test for intersections with each of the rays,
             uint kz = 64;

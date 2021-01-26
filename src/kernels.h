@@ -20,10 +20,10 @@ __device__ inline void swapc(T& left, T& right)
 HYBRID inline float rand(RandState& randState)
 {
 #ifdef __CUDA_ARCH__
-    if (randState.sampleIdx < 100)
+    if (randState.sampleIdx < 1)
     {
         //randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
-        //randState.blueNoiseOffset += make_float2(0.2f, 0.34f);
+        randState.blueNoiseOffset += make_float2(0.1f, 0.1f);
         const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
         return tex2D<float>(randState.blueNoise, uv.x, uv.y);
     }
@@ -756,7 +756,6 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
             r = SampleHemisphereCosine(colliderNormal, rand(randState), rand(randState));
         }
 
-        // Our sample goes into the surface, we sample again around the surface normal to correct
         if (dot(r, surfaceNormal) < 0)
         {
             state.mask = make_float3(0.0f);
@@ -884,7 +883,7 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
         if (additionCount < EPS) continue;
         const float oldValue = rc.radianceCache[t];
         const float incomingEnergy = rc.additionCache[t] / additionCount;
-        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.0f);
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.5f);
         const float deltaValue = newValue - oldValue;
         rc.radianceCache[t] = newValue;
         rc.radianceTotal += deltaValue;

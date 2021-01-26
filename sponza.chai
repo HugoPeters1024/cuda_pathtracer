@@ -1,0 +1,26 @@
+var whiteMat = DiffuseMaterial(make_float3(1, 1, 1))
+
+var whiteId = scene_add_material(whiteMat)
+var model = scene_add_model("sponza.obj",
+            0.02,
+            make_float3(0, 0, 0),
+            make_float3(0, 0, 0),
+            0, true)
+
+var obj = GameObject(model)
+scene_add_object(obj);
+
+var lightMat = DiffuseMaterial(make_float3(1, 1, 1))
+
+lightMat.reflect = 0
+lightMat.emission = make_float3(30.0, 30.0, 30.0)
+
+var lightId = scene_add_material(lightMat)
+var model2 = scene_add_model("cube.obj",
+            2,
+            make_float3(0, 0, 0),
+            make_float3(0, 0, 0),
+            lightId, false)
+
+var obj2 = GameObject(model2)
+scene_add_object(obj2);
