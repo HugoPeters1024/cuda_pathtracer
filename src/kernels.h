@@ -622,6 +622,9 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     // Ignore the cache by default
     cache.sample_type = SAMPLE_IGNORE;
 
+    // Russion roulette is only used by diffuse bounces
+    float russianP = 1.0f;
+
     if (random < material.transmit)
     {
         state.fromSpecular = true;
@@ -764,13 +767,14 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         f = f * f * f;
         secondary = Ray(intersectionPos + EPS * f * r + EPS * (1 - f) * colliderNormal, r, ray.pixeli);
         state.mask *= PI * BRDF;
+
+        russianP = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
     }
 
     // Russian roulette
-    const float p = clamp(fmaxcompf(material.diffuse_color), 0.1f, 0.9f);
-    if (fmaxcompf(state.mask) > 0.0001f && rand(randState) < p)
+    if (fmaxcompf(state.mask) > 0.0001f && rand(randState) < russianP)
     {
-        state.mask = state.mask / p;
+        state.mask = state.mask / russianP;
         DRayQueueNew.push(RayPacked(secondary));
     }
     else

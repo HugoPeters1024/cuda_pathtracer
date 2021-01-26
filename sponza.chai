@@ -23,4 +23,5 @@ var model2 = scene_add_model("cube.obj",
             lightId, false)
 
 var obj2 = GameObject(model2)
+obj2.position = make_float3(0.0f, 5.0f, 0.0f)
 scene_add_object(obj2);
