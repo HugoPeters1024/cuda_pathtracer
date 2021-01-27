@@ -83,8 +83,7 @@ float3 Raytracer::radiance(const Ray& ray, int iteration)
     float3 originalNormal = getColliderNormal(sceneBuffers, hitInfo, intersectionPos);
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        glm::vec4 wn = glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0) * instance->transform;
-        originalNormal = normalize(make_float3(wn.x, wn.y, wn.z));
+        originalNormal = normalize(instance->transform.mul(originalNormal, 0.0f));
     }
 
     bool inside = dot(ray.direction, originalNormal) > 0;

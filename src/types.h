@@ -382,11 +382,34 @@ struct __align__(16) Model
     uint nrBvhNodes;
 };
 
+struct mat4x3
+{
+    float4 r1;
+    float4 r2;
+    float4 r3;
+
+    static mat4x3 fromGLM(const glm::mat4x4 mat)
+    {
+        return mat4x3
+        {
+            make_float4(mat[0][0], mat[1][0], mat[2][0], mat[3][0]),
+            make_float4(mat[0][1], mat[1][1], mat[2][1], mat[3][1]),
+            make_float4(mat[0][2], mat[1][2], mat[2][2], mat[3][2]),
+        };
+    }
+
+    HYBRID float3 mul(const float3& target, const float fourth) const
+    {
+        const float4 v = make_float4(target, fourth);
+        return make_float3(dot(v, r1), dot(v, r2), dot(v, r3));
+    }
+};
+
 struct __align__(16) Instance
 {
     uint model_id;
-    glm::mat4 transform;
-    glm::mat4 invTransform;
+    mat4x3 transform;
+    mat4x3 invTransform;
     uint material_id;
 };
 
@@ -655,10 +678,9 @@ struct RandState
 {
     uint sampleIdx;
     uint randIdx;
+    float blueNoiseSample;
     cudaTextureObject_t blueNoise;
-    float2 blueNoiseSize;
-    float2 blueNoiseOffset;
-    float2 kernelPos;
+    float2 invBlueNoiseSize;
     uint seed;
 };
 

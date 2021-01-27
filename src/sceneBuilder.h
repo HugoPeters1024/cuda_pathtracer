@@ -1,10 +1,12 @@
 #ifndef H_SCENE_BUILDER
 #define H_SCENE_BUILDER
 
+#ifdef CHAI
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
 #include <chaiscript/chaiscript.hpp>
 #pragma GCC diagnostic pop
+#endif
 
 
 #include "types.h"
@@ -266,6 +268,7 @@ static void chai_float_assign(float3 & a, float3 b) {
     a = b;
 }
 
+#ifdef CHAI
 inline const Scene getScriptedScene(const char * filename) {
     chaiscript::ChaiScript chai;
     auto scene = Scene();
@@ -300,6 +303,7 @@ inline const Scene getScriptedScene(const char * filename) {
     scene.finalize();
     return scene;
 }
+#endif
 
 inline Scene getScene(const char* sceneName)
 {
@@ -312,8 +316,10 @@ inline Scene getScene(const char* sceneName)
     if (strcmp(sceneName, "2mtris") == 0)
         return get2MillionScene();
 
+#ifdef CHAI
     // assume sceneName is a path to the chaiscript scene definition
     return getScriptedScene(sceneName);
+#endif
 }
 
 #endif

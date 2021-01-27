@@ -22,10 +22,7 @@ HYBRID inline float rand(RandState& randState)
 #ifdef __CUDA_ARCH__
     if (randState.sampleIdx < 1)
     {
-        //randState.blueNoiseOffset += make_float2(rand(randState.seed), rand(randState.seed));
-        randState.blueNoiseOffset += make_float2(0.1f, 0.1f);
-        const float2 uv = randState.kernelPos + randState.blueNoiseOffset;
-        return tex2D<float>(randState.blueNoise, uv.x, uv.y);
+        return fmodf(randState.blueNoiseSample + PI * randState.randIdx++ , 1.0f);
     }
 #endif
     return rand(randState.seed);
@@ -73,18 +70,10 @@ HYBRID inline uint binarySearch(const float* values, const uint& nrValues, const
     return m;
 }
 
-HYBRID inline Ray transformRay(const Ray& ray, const glm::mat4x4& transform)
+HYBRID inline Ray transformRay(const Ray& ray, const mat4x3& transform)
 {
-    glm::vec4 oldDir = glm::vec4(ray.direction.x, ray.direction.y, ray.direction.z, 0);
-    glm::vec4 oldOrigin = glm::vec4(ray.origin.x, ray.origin.y, ray.origin.z, 1);
-
-    float3 newDir = normalize(get3f(transform * oldDir));
-    float3 newOrigin = get3f(transform * oldOrigin);
-
-   // Ray transformedRay = ray;
-   // transformedRay.direction = newDir;
-    //transformedRay.origin = newOrigin;
-    //return transformedRay;
+    float3 newDir = normalize(transform.mul(ray.direction, 0.0f));
+    float3 newOrigin = transform.mul(ray.origin, 1.0f);
     return Ray(newOrigin, newDir, ray.pixeli);
 }
 
@@ -145,7 +134,7 @@ HYBRID bool rayPlaneIntersect(const Ray& ray, const Plane& plane, float& t)
     return t>0.0f;
 }
 
-HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
+HYBRID bool slabTest(const float3& rayOrigin, const float3& invRayDir, const Box& box, float& tmin)
 {
 #ifdef __CUDA_ARCH__
     float3 t0 = (box.vmin - rayOrigin) * invRayDir;
@@ -169,7 +158,7 @@ HYBRID inline bool slabTest(const float3& rayOrigin, const float3& invRayDir, co
 #endif
 }
 
-HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
+HYBRID bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangle, float& t, float& u, float& v)
 {
     float3 v0v1 = triangle.v1 - triangle.v0;
     float3 v0v2 = triangle.v2 - triangle.v0;
@@ -194,7 +183,7 @@ HYBRID inline bool rayTriangleIntersect(const Ray& ray, const TriangleV& triangl
 // hit info distance because intersecting the boundingBox does not guarantee intersection
 // any meshes. Therefore, the processLeaf function will keep track of the distance. BoxTest
 // does use HitInfo for an early exit.
-HYBRID inline bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, const HitInfo& hitInfo)
+HYBRID bool boxtest(const Box& box, const float3& rayOrigin, const float3& invRayDir, float& tmin, const HitInfo& hitInfo)
 {
     // Constrain that the closest point of the box must be closer than a known intersection.
     // Otherwise not triangle inside this box or it's children will ever change the intersection point
@@ -254,7 +243,7 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
             const bool bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
             if (bnear && bfar) {
-                bool rev = tnear > tfar;
+                const bool rev = tnear > tfar;
                 current = rev ? far : near;
                 *stackPtr++ = near_id + !rev;
             } else if (bnear) {
@@ -540,7 +529,8 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     }
 
     randState.seed = getSeed(x,y,randState.randIdx);
-    randState.kernelPos = make_float2((float)x, (float)y) / randState.blueNoiseSize;
+    float2 blueNoiseUv = make_float2((float)x, (float)y) * randState.invBlueNoiseSize;
+    randState.blueNoiseSample = tex2D<float>(randState.blueNoise, blueNoiseUv.x, blueNoiseUv.y);
 
     // Only triangles are always part of instances but that is the
     // responsibility of the code dereferencing the pointer.
@@ -553,7 +543,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     // invert the normal and position transformation back to world space
     if (hitInfo.primitive_type == TRIANGLE)
     {
-        originalNormal = normalize(make_float3(instance->transform * glm::vec4(originalNormal.x, originalNormal.y, originalNormal.z, 0.0f)));
+        originalNormal = normalize(instance->transform.mul(originalNormal, 0.0f));
     }
 
     bool inside = dot(ray.direction, originalNormal) > 0;
@@ -609,7 +599,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
             );
 
             // Transform the normal from model space to world space
-            texNormal = normalize(make_float3(instance->transform * glm::vec4(texNormal.x, texNormal.y, texNormal.z, 0.0f)));
+            texNormal = normalize(instance->transform.mul(texNormal, 0.0f));
             colliderNormal = dot(texNormal, colliderNormal) < 0.0f ? -texNormal : texNormal;
         }
     }
@@ -670,13 +660,13 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
                 const TriangleLight& light = DTriangleLights[lightSource];
                 const TriangleV& lightV = buffers.vertices[light.triangle_index];
                 const Instance& lightInstance = buffers.instances[light.instance_index];
-                const glm::mat4x4& lightTransform = lightInstance.transform;
+                const mat4x3& lightTransform = lightInstance.transform;
 
                 float3 centroid = (lightV.v0 + lightV.v1 + lightV.v2) / 3.0f;
-                centroid = get3f(lightTransform * glm::vec4(centroid.x, centroid.y, centroid.z, 1));
+                centroid = lightTransform.mul(centroid, 1.0f);
 
                 float3 lightNormal = buffers.vertexData[light.triangle_index].normal;
-                lightNormal = get3f(lightTransform * glm::vec4(lightNormal.x, lightNormal.y, lightNormal.z, 0));
+                lightNormal = normalize(lightTransform.mul(lightNormal, 0.0));
 
                 const float3 fromLight = normalize(intersectionPos - centroid);
 
@@ -694,12 +684,12 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
                 const TriangleV& lightV = buffers.vertices[light.triangle_index];
                 const TriangleD& lightD = buffers.vertexData[light.triangle_index];
                 const Instance& lightInstance = buffers.instances[light.instance_index];
-                const glm::mat4x4& lightTransform = lightInstance.transform;
+                const mat4x3& lightTransform = lightInstance.transform;
 
                 // transform the vertices to world space
-                const float3 v0 = get3f(lightTransform * glm::vec4(lightV.v0.x, lightV.v0.y, lightV.v0.z, 1));
-                const float3 v1 = get3f(lightTransform * glm::vec4(lightV.v1.x, lightV.v1.y, lightV.v1.z, 1));
-                const float3 v2 = get3f(lightTransform * glm::vec4(lightV.v2.x, lightV.v2.y, lightV.v2.z, 1));
+                const float3 v0 = lightTransform.mul(lightV.v0, 1.0f);
+                const float3 v1 = lightTransform.mul(lightV.v1, 1.0f);
+                const float3 v2 = lightTransform.mul(lightV.v2, 1.0f);
 
                 const float3 v0v1 = v1 - v0;
                 const float3 v0v2 = v2 - v0;
@@ -806,11 +796,7 @@ __global__ void kernel_add_to_screen(const TraceStateSOA stateBuf, cudaSurfaceOb
     const uint x = i % WINDOW_WIDTH;
     const uint y = i / WINDOW_WIDTH;
 
-//    const float xf = (float)x / randState.blueNoiseSize.x;
- //   const float yf = (float)y / randState.blueNoiseSize.y;
-
     float3 color = get3f(stateBuf.accucolors[i]);
-  //  color = make_float3(tex2D<float>(randState.blueNoise, xf, yf));
     float4 old_color_all;
     surf2Dread(&old_color_all, texRef, x*sizeof(float4), y);
     float3 old_color = fmaxf(make_float3(0.0f), get3f(old_color_all));

@@ -13,4 +13,6 @@
 #define MAX_RAY_DEPTH 32
 #define MAX_CACHE_DEPTH 3
 
+//#define CHAI
+
 #endif

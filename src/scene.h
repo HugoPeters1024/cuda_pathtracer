@@ -14,16 +14,17 @@ inline Instance ConvertToInstance(const GameObject& obj)
     transform = glm::rotate(transform, obj.rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
     transform = glm::rotate(transform, obj.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
     transform = glm::scale(transform, glm::vec3(obj.scale.x, obj.scale.y, obj.scale.z));
+
     return Instance
     {
         obj.model_id,
-        transform,
-        glm::inverse(transform),
+        mat4x3::fromGLM(transform),
+        mat4x3::fromGLM(glm::inverse(transform)),
         obj.materiald_id,
     };
 }
 
-inline Box transformBox(const Box& box, const glm::mat4x4& transform)
+inline Box transformBox(const Box& box, const mat4x3& transform)
 {
     float3 points[8];
     float3 minToMax = box.vmax - box.vmin;
@@ -39,8 +40,8 @@ inline Box transformBox(const Box& box, const glm::mat4x4& transform)
 
     Box ret = Box::insideOut();
     for(const float3& p : points) {
-        glm::vec4 wp = transform * glm::vec4(p.x, p.y, p.z, 1);
-        ret.consumePoint(make_float3(wp.x, wp.y, wp.z));
+        float3 wp = transform.mul(p, 1.0f);
+        ret.consumePoint(wp);
     }
     return ret;
 }

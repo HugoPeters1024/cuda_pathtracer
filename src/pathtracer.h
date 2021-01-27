@@ -38,8 +38,7 @@ void Pathtracer::Init()
     randState.sampleIdx = 0;
     int blueNoiseW, blueNoiseH;
     randState.blueNoise = loadTextureL("bluenoise.png", blueNoiseW, blueNoiseH);
-    randState.blueNoiseSize = make_float2((float)blueNoiseW, (float)blueNoiseH);
-    randState.blueNoiseOffset = make_float2(0);
+    randState.invBlueNoiseSize = make_float2(1.0f / (float)blueNoiseW, 1.0f / (float)blueNoiseH);
 
 
     float4* h_skydome;
@@ -220,6 +219,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 
         kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
         randState.sampleIdx = 0;
+        randState.randIdx = 0;
     }
 
 
@@ -245,8 +245,6 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             max_bounces = shouldClear ? scene.interactive_depth+1 : MAX_RAY_DEPTH;
 
         for(int bounce = 0; bounce < max_bounces; bounce++) {
-            randState.blueNoiseOffset = make_float2(rand(randState), rand(randState));
-
             // Test for intersections with each of the rays,
             uint kz = 64;
             kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(sceneBuffers, intersectionBuf, bounce);
