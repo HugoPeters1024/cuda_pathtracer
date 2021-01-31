@@ -93,9 +93,9 @@ void main()
 {
     ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
     float sum = 0.0f;
-    float spread = 0.3f;
+    float spread = max(0.7f, nrSamples / 200);
     vec3 colorSum = vec3(0);
-    for(int i=-4; i<5; i++)
+    for(int i=-3; i<4; i++)
     {
         if (storePos.x + i < 0 || storePos.x + i >= 640) continue;
         vec4 luminance = imageLoad(luminanceTex, storePos + ivec2(i, 0));
@@ -124,9 +124,9 @@ void main()
 {
     ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
     float sum = 0.0f;
-    float spread = 0.3f;
+    float spread = max(0.7f, nrSamples / 200);
     vec3 colorSum = vec3(0);
-    for(int i=-4; i<5; i++)
+    for(int i=-4; i<4; i++)
     {
         if (storePos.y + i < 0 || storePos.y + i >= 480) continue;
         vec4 luminance = imageLoad(luminanceTex, storePos + ivec2(0, i));
