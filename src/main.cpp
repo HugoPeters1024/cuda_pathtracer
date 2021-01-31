@@ -39,7 +39,7 @@ void main()
     gl_Position = vec4(pos, 0, 1);
     // slightly zoom in to hide artificats
     // from chrommatic abberation at the edges
-    uv = (pos * 0.97 + vec2(1)) * 0.5;
+    uv = (pos + vec2(1)) * 0.5;
 }
 )";
 
@@ -49,21 +49,94 @@ static const char* quad_fs = R"(
 in vec2 uv;
 out vec4 color;
 
-uniform sampler2D tex;
+layout(binding=0) uniform sampler2D luminaceTex;
+layout(binding=1) uniform sampler2D albedoTex;
 layout (location = 0) uniform float time;
 
 void main() { 
-    vec2 fromCenter = uv - vec2(0.5);
-    vec4 sampleR = texture(tex, uv + 0.011 * fromCenter);
-    vec4 sampleG = texture(tex, uv + 0.007 * fromCenter);
-    vec4 sampleB = texture(tex, uv + 0.003 * fromCenter);
-    float gamma = 2.0f;
-    color.x = pow(sampleR.x / sampleR.w, 1.0f/gamma);
-    color.y = pow(sampleG.y / sampleG.w, 1.0f/gamma);
-    color.z = pow(sampleB.z / sampleB.w, 1.0f/gamma);
+    vec2 fromCenter = uv - vec2(0.5f);
+    vec4 luminance = texture(luminaceTex, uv);
+    vec3 luminanceC = vec3(
+        luminance.x / luminance.w,
+        luminance.y / luminance.w,
+        luminance.z / luminance.w);
 
+    vec4 albedo = texture(albedoTex, uv);
+    vec3 albedoC = vec3(
+        albedo.x / albedo.w,
+        albedo.y / albedo.w,
+        albedo.z / albedo.w);
+
+    float gamma = 2.0f;
+
+    color = vec4(luminanceC * albedoC, 1.0f);
+    color.x = pow(color.x, 1.0f / gamma);
+    color.y = pow(color.y, 1.0f / gamma);
+    color.z = pow(color.z, 1.0f / gamma);
     // vignetting
     color *= 1 - dot(fromCenter, fromCenter);
+}
+)";
+
+static const char* gauss_horz = R"(
+#version 460
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout (location = 0) uniform float nrSamples;
+
+layout(binding = 0, rgba32f) uniform image2D luminanceTex;
+layout(binding = 1, rgba32f) uniform image2D albedoTex;
+layout(binding = 2, rgba32f) uniform image2D destTex;
+
+void main()
+{
+    ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
+    float sum = 0.0f;
+    float spread = 0.3f;
+    vec3 colorSum = vec3(0);
+    for(int i=-4; i<5; i++)
+    {
+        if (storePos.x + i < 0 || storePos.x + i >= 640) continue;
+        vec4 luminance = imageLoad(luminanceTex, storePos + ivec2(i, 0));
+        vec4 albedo = imageLoad(albedoTex, storePos + ivec2(i, 0));
+        vec3 c = (luminance.xyz / max(albedo.xyz, 0.001f)) * nrSamples;
+        float gaussian = exp(-(i*i)*0.5f*spread) / sqrt(2 * 3.1415926f);
+        colorSum += c * gaussian;
+        sum += gaussian;
+    }
+
+    imageStore(destTex, storePos, vec4(colorSum / sum, nrSamples));
+}
+)";
+
+static const char* gauss_vert = R"(
+#version 460
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout (location = 0) uniform float nrSamples;
+
+layout(binding = 0, rgba32f) uniform image2D luminanceTex;
+layout(binding = 1, rgba32f) uniform image2D destTex;
+
+void main()
+{
+    ivec2 storePos = ivec2(gl_GlobalInvocationID.xy);
+    float sum = 0.0f;
+    float spread = 0.3f;
+    vec3 colorSum = vec3(0);
+    for(int i=-4; i<5; i++)
+    {
+        if (storePos.y + i < 0 || storePos.y + i >= 480) continue;
+        vec4 luminance = imageLoad(luminanceTex, storePos + ivec2(0, i));
+        vec3 c = luminance.xyz;
+        float gaussian = exp(-(i*i)*0.5f*spread) / sqrt(2 * 3.1415926f);
+        colorSum += c * gaussian;
+        sum += gaussian;
+    }
+
+    imageStore(destTex, storePos, vec4(colorSum / sum, nrSamples));
 }
 )";
 
@@ -95,6 +168,9 @@ int main(int argc, char** argv) {
 
     // Compile the quad shader to display a texture
     GLuint quad_shader = GenerateProgram(CompileShader(GL_VERTEX_SHADER, quad_vs), CompileShader(GL_FRAGMENT_SHADER, quad_fs));
+    GLuint gauss_horz_shader = GenerateProgram(CompileShader(GL_COMPUTE_SHADER, gauss_horz));
+    GLuint gauss_vert_shader = GenerateProgram(CompileShader(GL_COMPUTE_SHADER, gauss_vert));
+
     float quad_vertices[12] = {
             -1.0, -1.0,
            1.0, -1.0,
@@ -119,9 +195,33 @@ int main(int argc, char** argv) {
     // Generate screen texture
     // list of GL formats that cuda supports: https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__OPENGL.html#group__CUDART__OPENGL_1gd7be3ca8a7a739d57f0b558562c5706e
     //float* screenBuf = (float*)malloc(NR_PIXELS * 4 * sizeof(float));
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    GLuint luminanceTexture;
+    glGenTextures(1, &luminanceTexture);
+    glBindTexture(GL_TEXTURE_2D, luminanceTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint luminanceTextureHorz;
+    glGenTextures(1, &luminanceTextureHorz);
+    glBindTexture(GL_TEXTURE_2D, luminanceTextureHorz);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint luminanceTextureVert;
+    glGenTextures(1, &luminanceTextureVert);
+    glBindTexture(GL_TEXTURE_2D, luminanceTextureVert);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint albedoTexture;
+    glGenTextures(1, &albedoTexture);
+    glBindTexture(GL_TEXTURE_2D, albedoTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, WINDOW_WIDTH, WINDOW_HEIGHT, 0, GL_RGBA, GL_FLOAT, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -138,8 +238,8 @@ int main(int argc, char** argv) {
 
 
     // Create the applications
-    Pathtracer pathtracerApp = Pathtracer(scene, texture);
-    Raytracer raytracerApp = Raytracer(scene, texture);
+    Pathtracer pathtracerApp = Pathtracer(scene, luminanceTexture, albedoTexture);
+    Raytracer raytracerApp = Raytracer(scene, luminanceTexture, albedoTexture);
 
 
     // Set the initial camera values;
@@ -183,14 +283,31 @@ int main(int argc, char** argv) {
         if (!CONVERGE) scene.invalidate();
 
         if (PATHRACER)
+        {
             pathtracerApp.Finish();
+
+            glUseProgram(gauss_horz_shader);
+            glUniform1f(0, (float)samples);
+
+            glBindImageTexture(0, luminanceTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+            glBindImageTexture(1, albedoTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+            glBindImageTexture(2, luminanceTextureHorz, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+            glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
+
+            glUseProgram(gauss_vert_shader);
+            glUniform1f(0, (float)samples);
+
+            glBindImageTexture(0, luminanceTextureHorz, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+            glBindImageTexture(1, luminanceTextureVert, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+            glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
+        }
         else
             raytracerApp.Finish();
 
 #ifdef DEBUG_ENERGY
         if (tick % 10 == 0)
         {
-            glBindTexture(GL_TEXTURE_2D, texture);
+            glBindTexture(GL_TEXTURE_2D, luminanceTexture);
             glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, screenBuf);
             glBindTexture(GL_TEXTURE_2D, 0);
             float sum = 0;
@@ -213,15 +330,18 @@ int main(int argc, char** argv) {
         }
 #endif
 
-
         // Draw the texture
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(quad_shader);
         glUniform1f(0, glfwGetTime());
-        glBindTexture(GL_TEXTURE_2D, texture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, PATHRACER ? luminanceTextureVert : luminanceTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, albedoTexture);
+
+        glActiveTexture(GL_TEXTURE0);
         glBindVertexArray(quad_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindTexture(GL_TEXTURE_2D, 0);
 
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {

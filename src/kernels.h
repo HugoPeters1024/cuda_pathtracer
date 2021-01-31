@@ -53,6 +53,14 @@ HYBRID inline float luminance(const float3& v)
     return 0.299f*v.x + 0.587f*v.y + 0.114f*v.z;
 }
 
+__device__ void updateAlbedo(const cudaSurfaceObject_t& albedoTexture, const float3& newValue, const uint x, const uint y)
+{
+    float4 old_color_all;
+    surf2Dread(&old_color_all, albedoTexture, x*sizeof(float4), y);
+    float3 old_color = fmaxf(make_float3(0.0f), get3f(old_color_all));
+    surf2Dwrite(make_float4(old_color + newValue, old_color_all.w+1.0f), albedoTexture, x*sizeof(float4), y);
+}
+
 
 HYBRID inline uint binarySearch(const float* values, const uint& nrValues, const float& target)
 {
@@ -205,7 +213,6 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
 
     const float3 invRayDir = 1.0f / ray.direction;
     BVHNode current = bvh[0];
-    if (!boxtest(current.getBox(), ray.origin, invRayDir, tnear, hitInfo)) return false;
 
     bool needPop = false;
     bool intersected = false;
@@ -242,7 +249,7 @@ HYBRID bool traverseBVHStack(const SceneBuffers& buffers, const Ray& ray, HitInf
             const bool bnear = boxtest(near.getBox(), ray.origin, invRayDir, tnear, hitInfo);
             const bool bfar = boxtest(far.getBox(), ray.origin, invRayDir, tfar, hitInfo);
 
-            if (bnear && bfar) {
+            if (bnear & bfar) {
                 const bool rev = tnear > tfar;
                 current = rev ? far : near;
                 *stackPtr++ = near_id + !rev;
@@ -479,7 +486,7 @@ __global__ void kernel_clear_state(TraceStateSOA state)
 {
     const unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= NR_PIXELS) return;
-    state.accucolors[i] = make_float4(0.0f);
+    state.accucolors[i] = make_float4(0.0f, 0.0f, 0.0f, __int_as_float(false));
     state.masks[i] = make_float4(1.0f,1.0f,1.0f,__int_as_float(1));
 }
 
@@ -503,7 +510,7 @@ __global__ void kernel_extend(const SceneBuffers buffers, HitInfoPacked* interse
 }
 
 
-__global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF, SampleCache* sampleCache)
+__global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* intersections, TraceStateSOA stateBuf, RandState randState, int bounce, CudaTexture skydome, CDF d_skydomeCDF, SampleCache* sampleCache, cudaSurfaceObject_t albedoTexture)
 {
     const uint i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= DRayQueue.size) return;
@@ -517,14 +524,16 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     const uint y = ray.pixeli / WINDOW_WIDTH;
     const HitInfo hitInfo = intersections[i].getHitInfo();
     if (!hitInfo.intersected()) {
-        // We consider the skydome a lightsource in the set of random bounces
-        //if (!_NEE || state.fromSpecular) {
-            float2 uvCoords = normalToUv(ray.direction);
-            float3 sk = get3f(tex2D<float4>(skydome.texture_id, uvCoords.x, uvCoords.y));
-            state.accucolor += state.mask * sk;
-            stateBuf.setState(ray.pixeli, state);
-            if (bounce < MAX_CACHE_DEPTH) sampleCache[cache_id] = cache;
-       // }
+        float2 uvCoords = normalToUv(ray.direction);
+        float3 sk = get3f(tex2D<float4>(skydome.texture_id, uvCoords.x, uvCoords.y));
+        if (!state.albedoSet)
+        {
+            updateAlbedo(albedoTexture, state.mask * sk, x, y);
+            state.albedoSet = true;
+        }
+        state.accucolor += state.mask * sk;
+        stateBuf.setState(ray.pixeli, state);
+        if (bounce < MAX_CACHE_DEPTH) sampleCache[cache_id] = cache;
         return;
     }
 
@@ -556,6 +565,11 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         if (!_NEE || state.fromSpecular)
         {
             state.accucolor += state.mask * material.emission;
+            if (!state.albedoSet)
+            {
+                updateAlbedo(albedoTexture, state.mask * material.emission, x,y);
+                state.albedoSet = true;
+            }
             stateBuf.setState(ray.pixeli, state);
         }
         return;
@@ -604,10 +618,11 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
         }
     }
 
+
     // Create a secondary ray either diffuse or reflected
     Ray secondary;
     float random = rand(randState);
-    const float3 BRDF = material.diffuse_color / PI;
+    float3 BRDF = material.diffuse_color / PI;
 
     // Ignore the cache by default
     cache.sample_type = SAMPLE_IGNORE;
@@ -646,12 +661,17 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
     }
     else 
     {
+        if (!state.albedoSet)
+        {
+            updateAlbedo(albedoTexture, state.mask * material.diffuse_color, x, y);
+            state.albedoSet = true;
+        }
         state.fromSpecular = false;
 
         // Create a shadow ray for diffuse objects
         if (_NEE)
         {
-            uint successIdx = 0;
+            uint successIdx;
             float valid = 0.0f;
             for(uint i=0; i<4; i++)
             {
@@ -666,7 +686,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
                 centroid = lightTransform.mul(centroid, 1.0f);
 
                 float3 lightNormal = buffers.vertexData[light.triangle_index].normal;
-                lightNormal = normalize(lightTransform.mul(lightNormal, 0.0));
+                lightNormal = normalize(lightTransform.mul(lightNormal, 0.0f));
 
                 const float3 fromLight = normalize(intersectionPos - centroid);
 
@@ -724,7 +744,7 @@ __global__ void kernel_shade(const SceneBuffers buffers, const HitInfoPacked* in
 
 
                     // We invert the shadowrays to get coherent origins.
-                    float f = LNL * LNL * LNL;
+                    const float f = LNL * LNL * LNL;
                     Ray shadowRay(samplePoint + f * EPS * shadowDir + (1-f) * EPS * lightNormal, shadowDir, ray.pixeli);
                     shadowRay.length = shadowLength - 2 * EPS;
                     DShadowRayQueue.push(RayPacked(shadowRay));

@@ -8,10 +8,12 @@ class Application
 {
 protected:
     Scene& scene;
-    GLuint texture;
+    GLuint luminanceTexture;
+    GLuint albedoTexture;
 
 public:
-    Application(Scene& scene, GLuint texture) : scene(scene), texture(texture) {}
+    Application(Scene& scene, GLuint luminanceTexture, GLuint albedoTexture) 
+        : scene(scene), luminanceTexture(luminanceTexture), albedoTexture(albedoTexture)  {}
     virtual void Init() = 0;
     virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) = 0;
     virtual void Finish() = 0;

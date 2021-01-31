@@ -23,7 +23,8 @@ private:
 
 public:
     SceneBuffers sceneBuffers;
-    Raytracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
+    Raytracer(Scene& scene, GLuint luminanceTexture, GLuint albedoTexture) 
+        : Application(scene, luminanceTexture, albedoTexture) {}
     virtual void Init() override;
     virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
     virtual void Finish() override {}
@@ -46,6 +47,16 @@ void Raytracer::Init()
 #ifdef _OPENMP
     omp_set_num_threads(8);
 #endif
+
+    // Initialize the albedo texture to white because we won't use it anyway.
+    for(uint i=0; i<NR_PIXELS*4; i++)
+    {
+        screenBuffer[i] = 1.0f;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, albedoTexture);
+    glTextureSubImage2D(luminanceTexture, 0, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_FLOAT, screenBuffer);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Raytracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
@@ -66,8 +77,8 @@ void Raytracer::Render(const Camera& camera, float currentTime, float frameTime,
         screenBuffer[x * 4 + y * 4 * WINDOW_WIDTH + 3] = 1;
     }
 
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTextureSubImage2D(texture, 0, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_FLOAT, screenBuffer);
+    glBindTexture(GL_TEXTURE_2D, luminanceTexture);
+    glTextureSubImage2D(luminanceTexture, 0, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_FLOAT, screenBuffer);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 

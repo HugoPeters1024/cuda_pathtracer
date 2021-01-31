@@ -6,11 +6,48 @@
 #include "kernels.h"
 #include <driver_types.h>
 
+struct InteropTex
+{
+    cudaGraphicsResource* cudaResource;
+    cudaArray* cudaArrayPtr;
+    GLuint glTex;
+
+    void init(const GLuint _glTex)
+    {
+        glTex = _glTex;
+        cudaSafe( cudaGraphicsGLRegisterImage(&cudaResource, glTex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
+    }
+
+    cudaSurfaceObject_t bind()
+    {
+        // Map the screen texture resource.
+        cudaSafe ( cudaGraphicsMapResources(1, &cudaResource) );
+
+        // Get a pointer to the memory
+        cudaSafe ( cudaGraphicsSubResourceGetMappedArray(&cudaArrayPtr, cudaResource, 0, 0) );
+
+        // Wrap the cudaArray in a surface object
+        cudaResourceDesc resDesc;
+        memset(&resDesc, 0, sizeof(resDesc));
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = cudaArrayPtr;
+        cudaSurfaceObject_t inputSurfObj = 0;
+        cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
+        return inputSurfObj;
+    }
+
+    void unbind()
+    {
+        // Unmap the resource from cuda
+        cudaSafe ( cudaGraphicsUnmapResources(1, &cudaResource) );
+    }
+};
+
 class Pathtracer : public Application
 {
 private:
-    cudaGraphicsResource* pGraphicsResource;
-    cudaArray *arrayPtr;
+    InteropTex luminanceBuffer;
+    InteropTex albedoBuffer;
     AtomicQueue<RayPacked> rayQueue;
     AtomicQueue<RayPacked> shadowRayQueue;
     AtomicQueue<RayPacked> rayQueueNew;
@@ -25,7 +62,8 @@ private:
 public:
     SceneBuffers sceneBuffers;
     RandState randState;
-    Pathtracer(Scene& scene, GLuint texture) : Application(scene, texture) {}
+    Pathtracer(Scene& scene, GLuint luminanceTexture, GLuint albedoTexture) 
+        : Application(scene, luminanceTexture, albedoTexture) {}
 
     virtual void Init() override;
     virtual void Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear) override;
@@ -85,7 +123,8 @@ void Pathtracer::Init()
 
 
     // Register the texture with cuda as preperation for interop.
-    cudaSafe( cudaGraphicsGLRegisterImage(&pGraphicsResource, texture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore) );
+    luminanceBuffer.init(luminanceTexture);
+    albedoBuffer.init(albedoTexture);
 
     sceneBuffers.num_spheres = scene.spheres.size();
     cudaSafe( cudaMalloc(&sceneBuffers.spheres, sceneBuffers.num_spheres * sizeof(Sphere)) );
@@ -184,19 +223,8 @@ void Pathtracer::Init()
 
 void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime, bool shouldClear)
 {
-    // Map the screen texture resource.
-    cudaSafe ( cudaGraphicsMapResources(1, &pGraphicsResource) );
-
-    // Get a pointer to the memory
-    cudaSafe ( cudaGraphicsSubResourceGetMappedArray(&arrayPtr, pGraphicsResource, 0, 0) );
-
-    // Wrap the cudaArray in a surface object
-    cudaResourceDesc resDesc;
-    memset(&resDesc, 0, sizeof(resDesc));
-    resDesc.resType = cudaResourceTypeArray;
-    resDesc.res.array.array = arrayPtr;
-    cudaSurfaceObject_t inputSurfObj = 0;
-    cudaSafe ( cudaCreateSurfaceObject(&inputSurfObj, &resDesc) );
+    auto luminanceSurface = luminanceBuffer.bind();
+    auto albedoSurface = albedoBuffer.bind();
 
     // Calculate the thread size and warp size
     // These are used by simply kernels only, so we max
@@ -217,7 +245,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         cudaSafe( cudaMemcpyAsync(sceneBuffers.instances, scene.instances, scene.objects.size() * sizeof(Instance), cudaMemcpyHostToDevice) );
         cudaSafe( cudaMemcpyAsync(sceneBuffers.topBvh, scene.topLevelBVH.data(), scene.topLevelBVH.size() * sizeof(TopLevelBVH), cudaMemcpyHostToDevice) );
 
-        kernel_clear_screen<<<dimBlock, dimThreads>>>(inputSurfObj);
+        kernel_clear_screen<<<dimBlock, dimThreads>>>(luminanceSurface);
+        kernel_clear_screen<<<dimBlock, dimThreads>>>(albedoSurface);
         randState.sampleIdx = 0;
         randState.randIdx = 0;
     }
@@ -250,7 +279,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
             kernel_extend<<<NR_PIXELS / kz + 1, kz>>>(sceneBuffers, intersectionBuf, bounce);
 
             // Foreach intersection, possibly create shadow rays and secondary rays.
-            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(sceneBuffers, intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF, d_sampleCache);
+            kernel_shade<<<NR_PIXELS / 64 + 1, 64>>>(sceneBuffers, intersectionBuf, traceBufSOA, randState, bounce, dSkydomeTex, d_skydomeCDF, d_sampleCache, albedoSurface);
             randState.randIdx++;
 
             // Sample the light source for every shadow ray
@@ -267,7 +296,7 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
         }
 
         // Write the final state accumulator into the texture
-        kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, inputSurfObj, randState);
+        kernel_add_to_screen<<<NR_PIXELS/1024 + 1, 1024>>>(traceBufSOA, luminanceSurface, randState);
         randState.sampleIdx++;
     }
 }
@@ -276,9 +305,8 @@ void Pathtracer::Render(const Camera& camera, float currentTime, float frameTime
 void Pathtracer::Finish()
 {
     cudaSafe ( cudaDeviceSynchronize() );
-
-    // Unmap the resource from cuda
-    cudaSafe ( cudaGraphicsUnmapResources(1, &pGraphicsResource) );
+    luminanceBuffer.unbind();
+    albedoBuffer.unbind();
 }
 
 #endif

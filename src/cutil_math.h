@@ -369,10 +369,18 @@ inline __host__ __device__ float3 operator/(float s, float3 a)
 }
 inline __host__ __device__ float3 safeDiv(float s, float3 a)
 {
-    bool x = fabs(a.x) < 0.001;
-    bool y = fabs(a.x) < 0.001;
-    bool z = fabs(a.x) < 0.001;
+    bool x = fabsf(a.x) < 0.001;
+    bool y = fabsf(a.y) < 0.001;
+    bool z = fabsf(a.z) < 0.001;
     return make_float3(x?0:s/a.x, y?0:s/a.y,z?0:s/a.z);
+}
+
+inline __host__ __device__ float3 safeDiv(float3 s, float3 a)
+{
+    bool x = fabsf(a.x) < 0.001;
+    bool y = fabsf(a.y) < 0.001;
+    bool z = fabsf(a.z) < 0.001;
+    return make_float3(x?0:s.x/a.x, y?0:s.y/a.y,z?0:s.z/a.z);
 }
 inline __host__ __device__ void operator/=(float3 &a, float s)
 {

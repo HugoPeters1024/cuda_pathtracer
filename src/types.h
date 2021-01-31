@@ -464,6 +464,7 @@ struct __align__(16) TraceState
     float3 accucolor;
     float3 light;
     bool fromSpecular;
+    bool albedoSet;
 };
 
 struct TraceStateSOA
@@ -485,13 +486,14 @@ struct TraceStateSOA
             get3f(accucolor),
             get3f(light),
             reinterpret_cast<bool&>(mask.w),
+            reinterpret_cast<bool&>(accucolor.w),
         };
     }
 
     __device__ void setState(uint i, const TraceState& state)
     {
         masks[i] = make_float4(state.mask, reinterpret_cast<const float&>(state.fromSpecular));
-        accucolors[i] = make_float4(state.accucolor, 0);
+        accucolors[i] = make_float4(state.accucolor, reinterpret_cast<const float&>(state.albedoSet));
         lights[i] = make_float4(state.light, 0);
     }
 };
