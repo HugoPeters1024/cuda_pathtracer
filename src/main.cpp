@@ -61,6 +61,36 @@ void main() {
         luminance.y / luminance.w,
         luminance.z / luminance.w);
 
+    float gamma = 2.0f;
+
+    color = vec4(luminanceC, 1.0f);
+    color.x = pow(color.x, 1.0f / gamma);
+    color.y = pow(color.y, 1.0f / gamma);
+    color.z = pow(color.z, 1.0f / gamma);
+    // vignetting
+    color *= 1 - dot(fromCenter, fromCenter);
+}
+
+)";
+
+static const char* quad_fs_blurred = R"(
+#version 460
+
+in vec2 uv;
+out vec4 color;
+
+layout(binding=0) uniform sampler2D luminaceTex;
+layout(binding=1) uniform sampler2D albedoTex;
+layout (location = 0) uniform float time;
+
+void main() { 
+    vec2 fromCenter = uv - vec2(0.5f);
+    vec4 luminance = texture(luminaceTex, uv);
+    vec3 luminanceC = vec3(
+        luminance.x / luminance.w,
+        luminance.y / luminance.w,
+        luminance.z / luminance.w);
+
     vec4 albedo = texture(albedoTex, uv);
     vec3 albedoC = vec3(
         albedo.x / albedo.w,
@@ -142,6 +172,7 @@ void main()
 
 bool PATHRACER = true;
 bool CONVERGE = true;
+bool BLUR = true;
 
 void error_callback(int error, const char* description) { fprintf(stderr, "ERROR: %s/n", description); }
 
@@ -168,6 +199,7 @@ int main(int argc, char** argv) {
 
     // Compile the quad shader to display a texture
     GLuint quad_shader = GenerateProgram(CompileShader(GL_VERTEX_SHADER, quad_vs), CompileShader(GL_FRAGMENT_SHADER, quad_fs));
+    GLuint quad_shader_blurred = GenerateProgram(CompileShader(GL_VERTEX_SHADER, quad_vs), CompileShader(GL_FRAGMENT_SHADER, quad_fs_blurred));
     GLuint gauss_horz_shader = GenerateProgram(CompileShader(GL_COMPUTE_SHADER, gauss_horz));
     GLuint gauss_vert_shader = GenerateProgram(CompileShader(GL_COMPUTE_SHADER, gauss_vert));
 
@@ -286,20 +318,23 @@ int main(int argc, char** argv) {
         {
             pathtracerApp.Finish();
 
-            glUseProgram(gauss_horz_shader);
-            glUniform1f(0, (float)samples);
+            if (BLUR)
+            {
+                glUseProgram(gauss_horz_shader);
+                glUniform1f(0, (float)samples);
 
-            glBindImageTexture(0, luminanceTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-            glBindImageTexture(1, albedoTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-            glBindImageTexture(2, luminanceTextureHorz, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-            glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
+                glBindImageTexture(0, luminanceTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+                glBindImageTexture(1, albedoTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+                glBindImageTexture(2, luminanceTextureHorz, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+                glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
 
-            glUseProgram(gauss_vert_shader);
-            glUniform1f(0, (float)samples);
+                glUseProgram(gauss_vert_shader);
+                glUniform1f(0, (float)samples);
 
-            glBindImageTexture(0, luminanceTextureHorz, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-            glBindImageTexture(1, luminanceTextureVert, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-            glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
+                glBindImageTexture(0, luminanceTextureHorz, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+                glBindImageTexture(1, luminanceTextureVert, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+                glDispatchCompute(WINDOW_WIDTH/32+1, WINDOW_HEIGHT/32+1, 1);
+            }
         }
         else
             raytracerApp.Finish();
@@ -332,10 +367,10 @@ int main(int argc, char** argv) {
 
         // Draw the texture
         glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(quad_shader);
+        glUseProgram(PATHRACER && BLUR ? quad_shader_blurred : quad_shader);
         glUniform1f(0, glfwGetTime());
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, PATHRACER ? luminanceTextureVert : luminanceTexture);
+        glBindTexture(GL_TEXTURE_2D, PATHRACER && BLUR ? luminanceTextureVert : luminanceTexture);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, albedoTexture);
 
@@ -373,6 +408,7 @@ int main(int argc, char** argv) {
         if (keyboard.isPressed(SWITCH_MODE)) { PATHRACER = !PATHRACER; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_NEE)) { HNEE = !HNEE; shouldClear = true; }
         if (keyboard.isPressed(SWITCH_CACHE)) { HCACHE = !HCACHE; shouldClear = true; }
+        if (keyboard.isPressed(SWITCH_BLUR)) { BLUR = !BLUR; }
         glfwPollEvents();
         glfwSwapBuffers(window);
         keyboard.swapBuffers();

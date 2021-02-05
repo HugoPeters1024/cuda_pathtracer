@@ -21,6 +21,7 @@ enum ACTION {
     SWITCH_NEE,
     SWITCH_CACHE,
     SWITCH_CONVERGE,
+    SWITCH_BLUR,
 
     ATTACH_0,
     ATTACH_1,
@@ -120,6 +121,7 @@ void Keyboard::generateActionMap()
     action_map[SWITCH_NEE]    = GLFW_KEY_N;
     action_map[SWITCH_CACHE]  = GLFW_KEY_C;
     action_map[SWITCH_CONVERGE]  = GLFW_KEY_CAPS_LOCK;
+    action_map[SWITCH_BLUR]  = GLFW_KEY_B;
 
     action_map[ATTACH_0] = GLFW_KEY_0;
     action_map[ATTACH_1] = GLFW_KEY_1;

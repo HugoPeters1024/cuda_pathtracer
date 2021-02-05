@@ -874,7 +874,7 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
 
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        const float energy = fminf(5.0f, luminance(totalEnergy / cache.cum_mask));
+        const float energy = fminf(100.0f, luminance(totalEnergy / cache.cum_mask));
         atomicAdd(&radianceCache.additionCache[cache.cache_bucket_id], energy);
         atomicAdd(&radianceCache.additionCacheCount[cache.cache_bucket_id], 1.0f);
     }
@@ -893,7 +893,7 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
         if (additionCount < EPS) continue;
         const float oldValue = rc.radianceCache[t];
         const float incomingEnergy = rc.additionCache[t] / additionCount;
-        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 1.5f);
+        const float newValue = clamp(alpha * oldValue + (1-alpha) * incomingEnergy, 0.1f, 2.0f);
         const float deltaValue = newValue - oldValue;
         rc.radianceCache[t] = newValue;
         rc.radianceTotal += deltaValue;

@@ -2,7 +2,7 @@
 ##### Hugo Peters (5927727)
 ##### December 2020
 
-This the small report accompanying the 1st delivery for the Advanced Graphics course 2020-2021. For this project I have not worked with a partner.
+This the small report accompanying the 3rd and final delivery for the Advanced Graphics course 2020-2021. For this project I have not worked with a partner.
 
 ## Dependencies
 
@@ -25,13 +25,14 @@ Then you can build with `cmake --build .` which creates the `pathtracer` executa
 - UI          - Grow and shrink the area light with index 0
 - N           - Toggle Next Event Estimation
 - C           - Toggle Path Guiding
+- B           - Toggle Luminance Blur Filter
+- CAPS LOCK   - Toggle Pathtracer Converging
 - Space       - Toggle Raytracer /  Pathtracer
 - Page UP     - Widen aperture
 - Page DOWN   - Close the aperture
 - Left Mouse Click - Set the focal distance to the object you click on (aka focus on that object)
 
 - Num Keys     - select an object to attach to. 0 is the camera (and the default). Object ids are given in the order of adding them to the scene.
-
 
 
 To select a scene pass a value to the `--scene` command line option. The following scenes are available:
@@ -44,16 +45,17 @@ To select a scene pass a value to the `--scene` command line option. The followi
 
 ## new in version 3
 
-- Move objects around by attach to them (see controls)
+- Move objects around by attaching to them (see controls)
 - Scriptable scenes using the chai library.
 - Bokeh by sampling the lens (offsetting the orgin and then refocussing on the focal plane)
 - Using blue noise in the first 100 samples before continuing fully randomized. Especially effective on materials with high albedo like
 the floor in the sibenik (see image blow)
 - Further improved performance by reducing stack traffic and branching, as well as using templating, in the traversal algorithm.
 - Actually correct results. Previous version had a temporal correlation in the seed.
-- A CDF over the skydome has been implemented but disabled for performance reasons. Furthermore is was beaten by the pathguiding implementation.
+- A CDF over the skydome has been implemented but disabled for performance reasons. Furthermore, it was beaten by the pathguiding implementation.
 - An attempt to sort the rays in eight buckets based the octant of their direction vector but this did not yield a netto performance increase. Quite a significant slowdown in fact.
-- Pathguiding using a 16 bucket hemisphere CDF that updates its weights by running an average with the incoming radiance each frame.
+- Pathguiding using an 8 bucket hemisphere CDF that updates its weights by running an average with the incoming radiance each frame.
+- Gaussian blur over the luminance texture as a simple filter. I've looked into SVGF but ran out of time.
 
 ### Pathguiding implementation
 
@@ -77,7 +79,7 @@ __global__ void kernel_update_buckets(SceneBuffers buffers, TraceStateSOA traceS
 
         if (cache.sample_type == SAMPLE_TERMINATE) return;
         if (cache.sample_type == SAMPLE_IGNORE) continue;
-        const float energy = fminf(100.0f, fmaxcompf(totalEnergy / cache.cum_mask));
+        const float energy = fminf(100.0f, luminance(totalEnergy / cache.cum_mask));
         atomicAdd(&radianceCache.additionCache[cache.cache_bucket_id], energy);
         atomicAdd(&radianceCache.additionCacheCount[cache.cache_bucket_id], 1.0f);
     }
@@ -96,8 +98,7 @@ __global__ void kernel_propagate_buckets(SceneBuffers buffers)
     if (i >= buffers.num_triangles) return;
     RadianceCache rc = buffers.radianceCaches[i];
     const float alpha = 0.95f;
-#pragma unroll
-    for(uint t=0; t<16; t++)
+    for(uint t=0; t<8; t++)
     {
         float additionCount = rc.additionCacheCount[t];
         if (additionCount < EPS) continue;
@@ -131,7 +132,7 @@ As you can see is only a total of 2.3% of computation time spend on the pathguid
 
 On the left you see the baseline result with just normal cosine weighted hemisphere sampling.
 
-On the right you see the result of sampling 1 of 16 buckets in the pathguiding CDF that has been
+On the right you see the result of sampling 1 of 8 buckets in the pathguiding CDF that has been
 trained beforehand for <5 seconds.
 
 Now another static example in a low light situation. Here both cases are the result of exactly 5 seconds
@@ -166,6 +167,29 @@ The following blue noise texture is used:
 Both images are 1spp (with NEE obviously) although the left uses a wang hash initially and then xor shifts
 while the right image samples random region of the blue noise texture. You can especially see the difference
 on the high contrast marmer floor.
+
+## A demo for the luminance filter
+
+The luminance filter is currently simply implemented as a seperable gaussian blur over the texture before being multiplied with the albedo. The result is of course not very impressive due to it's simplicity but the cool thing is, is that the overhead barely noticible. On a 640 by 480 window with a kernel size of 6x6 the impact is at most 2% longer frame times. It helps of course that an OpenGL compute shader was made
+for it.
+
+Below you see the comparison of the blur off (left) and on (right) after about 30 samples.
+
+<img src="./screenshots/no_filter.png" width="40%" />
+<img src="./screenshots/yes_filter.png" width="40%" />
+
+And similarly with the sibenik, but no only 1spp:
+
+<img src="./screenshots/no_filter_sibenik.png" width="40%" />
+<img src="./screenshots/yes_filter_sibenik.png" width="40%" />
+
+And finally 1spp in the newly added sponza scene:
+
+<img src="./screenshots/no_filter_sponza.png" width="40%" />
+<img src="./screenshots/yes_filter_sponza.png" width="40%" />
+
+Note that the width of the gaussian function decreases with the number of samples and converges to zero, resulting in the same ground truth image
+after enough samples.
 
 ## new in version 2
 
